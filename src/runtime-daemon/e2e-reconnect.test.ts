@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync, unlinkSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DaemonClient } from "./daemon-client";
+import { DaemonClient } from "@plugin/daemon-client/daemon-client";
 
 /**
  * E2E tests: daemon lifecycle + client reconnect

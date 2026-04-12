@@ -1,8 +1,8 @@
 import { spawn, execSync } from "node:child_process";
 import { openSync, writeSync, closeSync, writeFileSync, unlinkSync } from "node:fs";
-import { StateDirResolver } from "../state-dir";
-import { ConfigService } from "../config-service";
-import { DaemonLifecycle } from "../daemon-lifecycle";
+import { StateDirResolver } from "@shared/state-dir";
+import { ConfigService } from "@daemon/config-service";
+import { DaemonLifecycle } from "@plugin/daemon-client/daemon-lifecycle";
 import { checkOwnedFlagConflicts } from "./claude";
 
 /** Flags that A2aBridge owns for codex command. */

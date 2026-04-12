@@ -1,5 +1,5 @@
-import type { IPeerAdapter } from "./peer-adapter";
-import { CodexAdapter } from "./codex-adapter";
+import type { IPeerAdapter } from "@daemon/peers/peer-adapter";
+import { CodexAdapter } from "@daemon/peers/codex/codex-adapter";
 
 /** Identifier strings a user/config picks from. */
 export type PeerKind = "codex" | "openclaw" | "hermes";

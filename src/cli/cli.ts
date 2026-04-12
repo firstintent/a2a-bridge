@@ -22,23 +22,23 @@ export const PLUGIN_NAME = "a2a-bridge";
 async function main() {
   switch (command) {
     case "init":
-      const { runInit } = await import("./cli/init");
+      const { runInit } = await import("./init");
       await runInit();
       break;
     case "dev":
-      const { runDev } = await import("./cli/dev");
+      const { runDev } = await import("./dev");
       await runDev();
       break;
     case "claude":
-      const { runClaude } = await import("./cli/claude");
+      const { runClaude } = await import("./claude");
       await runClaude(restArgs);
       break;
     case "codex":
-      const { runCodex } = await import("./cli/codex");
+      const { runCodex } = await import("./codex");
       await runCodex(restArgs);
       break;
     case "kill":
-      const { runKill } = await import("./cli/kill");
+      const { runKill } = await import("./kill");
       await runKill();
       break;
     case "--help":

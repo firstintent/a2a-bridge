@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
-import type { BridgeMessage } from "./types";
-import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "./control-protocol";
+import type { BridgeMessage } from "@messages/types";
+import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "@transport/control-protocol";
 
 interface DaemonClientEvents {
   codexMessage: [BridgeMessage];

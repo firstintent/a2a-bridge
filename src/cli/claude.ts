@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { MARKETPLACE_NAME, PLUGIN_NAME } from "../cli";
-import { DaemonLifecycle } from "../daemon-lifecycle";
-import { StateDirResolver } from "../state-dir";
+import { MARKETPLACE_NAME, PLUGIN_NAME } from "./cli";
+import { DaemonLifecycle } from "@plugin/daemon-client/daemon-lifecycle";
+import { StateDirResolver } from "@shared/state-dir";
 
 /** Flags that A2aBridge owns and will inject automatically. */
 const OWNED_FLAGS = ["--channels", "--dangerously-load-development-channels"];

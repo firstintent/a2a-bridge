@@ -1,5 +1,5 @@
 import type { EventEmitter } from "node:events";
-import type { BridgeMessage } from "./types.ts";
+import type { BridgeMessage } from "@messages/types";
 
 /**
  * Contract every peer-side adapter must implement. One adapter per target

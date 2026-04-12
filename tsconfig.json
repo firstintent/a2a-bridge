@@ -8,6 +8,14 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["src/shared/*"],
+      "@messages/*": ["src/messages/*"],
+      "@transport/*": ["src/transport/*"],
+      "@plugin/*": ["src/runtime-plugin/*"],
+      "@daemon/*": ["src/runtime-daemon/*"]
+    },
     "types": ["bun-types"]
   },
   "include": ["src"]
