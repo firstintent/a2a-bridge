@@ -99,7 +99,7 @@ their queries end-to-end.
 
 ## A2A methods
 
-- [ ] **P2.11 — `message/stream` SSE handler (no-CC echo).**
+- [/] **P2.11 — `message/stream` SSE handler (no-CC echo).**
   Acceptance: `a2a-http/handlers/message-stream.ts` implements the
   method. Response is `text/event-stream`. Emits in order: one
   `task` event, one `status-update` `working`, one
