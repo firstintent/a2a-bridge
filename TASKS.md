@@ -35,7 +35,7 @@ their queries end-to-end.
   a typed `Connection` wrapper. No implementations yet. typecheck +
   lint:deps green.
 
-- [ ] **P2.2 — Implement `StdioListener` in
+- [/] **P2.2 — Implement `StdioListener` in
   `src/transport/stdio.ts`.**
   Acceptance: implements `Listener`; a connected stdio process emits
   exactly one `connection` event whose `Connection` reads/writes the
