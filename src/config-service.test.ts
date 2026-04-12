@@ -8,7 +8,7 @@ describe("ConfigService", () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), "agentbridge-config-test-"));
+    tempDir = mkdtempSync(join(tmpdir(), "cc-bridge-config-test-"));
   });
 
   afterEach(() => {
@@ -95,7 +95,7 @@ describe("ConfigService", () => {
 
   test("config file paths are correct", () => {
     const svc = new ConfigService(tempDir);
-    expect(svc.configFilePath).toBe(join(tempDir, ".agentbridge", "config.json"));
-    expect(svc.collaborationFilePath).toBe(join(tempDir, ".agentbridge", "collaboration.md"));
+    expect(svc.configFilePath).toBe(join(tempDir, ".cc-bridge", "config.json"));
+    expect(svc.collaborationFilePath).toBe(join(tempDir, ".cc-bridge", "collaboration.md"));
   });
 });

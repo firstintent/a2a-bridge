@@ -9,7 +9,7 @@
 # Solution: Save terminal state before launch, restore on exit regardless of
 # how the child process terminated.
 #
-# Usage: ./agentbridge-attach.sh [proxy-url]
+# Usage: ./cc-bridge-attach.sh [proxy-url]
 #   Default proxy URL: ws://127.0.0.1:4511
 
 set -uo pipefail
@@ -54,7 +54,7 @@ restore_terminal() {
 # Register cleanup on any exit
 trap restore_terminal EXIT INT TERM
 
-echo "Attaching Codex TUI to AgentBridge proxy at ${PROXY_URL}..."
+echo "Attaching Codex TUI to CcBridge proxy at ${PROXY_URL}..."
 echo "(Terminal state saved — will be restored on exit)"
 echo ""
 

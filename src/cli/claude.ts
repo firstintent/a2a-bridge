@@ -3,26 +3,26 @@ import { MARKETPLACE_NAME, PLUGIN_NAME } from "../cli";
 import { DaemonLifecycle } from "../daemon-lifecycle";
 import { StateDirResolver } from "../state-dir";
 
-/** Flags that AgentBridge owns and will inject automatically. */
+/** Flags that CcBridge owns and will inject automatically. */
 const OWNED_FLAGS = ["--channels", "--dangerously-load-development-channels"];
 
 export async function runClaude(args: string[]) {
   // Check for owned flag conflicts
-  checkOwnedFlagConflicts(args, "agentbridge claude", OWNED_FLAGS);
+  checkOwnedFlagConflicts(args, "cc-bridge claude", OWNED_FLAGS);
 
   const stateDir = new StateDirResolver();
-  const controlPort = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
+  const controlPort = parseInt(process.env.CC_BRIDGE_CONTROL_PORT ?? "4512", 10);
   const lifecycle = new DaemonLifecycle({
     stateDir,
     controlPort,
-    log: (msg) => console.error(`[agentbridge] ${msg}`),
+    log: (msg) => console.error(`[cc-bridge] ${msg}`),
   });
 
   lifecycle.clearKilled();
 
   // Channel entry format: "server:<mcp-server-name>" for MCP-based channels,
   // or "plugin:<plugin>@<marketplace>" for plugin-based channels.
-  // AgentBridge is installed as a plugin, so use the plugin channel format.
+  // CcBridge is installed as a plugin, so use the plugin channel format.
   const channelEntry = `plugin:${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
 
   // Only use --dangerously-load-development-channels for now.
@@ -55,7 +55,7 @@ export async function runClaude(args: string[]) {
 }
 
 /**
- * Check if user passed any AgentBridge-owned flags.
+ * Check if user passed any CcBridge-owned flags.
  * Hard error if they did — mixed flag state is unpredictable.
  */
 export function checkOwnedFlagConflicts(
@@ -67,7 +67,7 @@ export function checkOwnedFlagConflicts(
     if (args.some((a) => a === flag || a.startsWith(`${flag}=`))) {
       console.error(`Error: "${flag}" is automatically set by ${commandName}.`);
       console.error("");
-      console.error("AgentBridge automatically injects these flags:");
+      console.error("CcBridge automatically injects these flags:");
       for (const f of ownedFlags) {
         console.error(`  ${f}`);
       }

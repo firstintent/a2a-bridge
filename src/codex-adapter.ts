@@ -40,7 +40,7 @@ interface PendingServerRequest {
   timestamp: number;
 }
 
-const LOG_FILE = "/tmp/agentbridge.log";
+const LOG_FILE = "/tmp/cc-bridge.log";
 
 interface PendingRequest {
   method: AppServerTrackedRequestMethod;
@@ -288,7 +288,7 @@ export class CodexAdapter extends EventEmitter {
           return fetch(`http://127.0.0.1:${self.appPort}${url.pathname}`);
         }
         if (server.upgrade(req, { data: { connId: 0 } })) return undefined;
-        return new Response("AgentBridge Codex Proxy");
+        return new Response("CcBridge Codex Proxy");
       },
       websocket: {
         open: (ws: ServerWebSocket<TuiSocketData>) => self.onTuiConnect(ws),

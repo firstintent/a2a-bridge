@@ -16,7 +16,7 @@ import { DaemonClient } from "./daemon-client";
 const TEST_CONTROL_PORT = 14512;
 const TEST_APP_PORT = 14510;
 const TEST_PROXY_PORT = 14511;
-const TEST_STATE_DIR = `/tmp/agentbridge-e2e-test-${TEST_CONTROL_PORT}`;
+const TEST_STATE_DIR = `/tmp/cc-bridge-e2e-test-${TEST_CONTROL_PORT}`;
 const TEST_PID_FILE = join(TEST_STATE_DIR, "daemon.pid");
 const HEALTH_URL = `http://127.0.0.1:${TEST_CONTROL_PORT}/healthz`;
 const WS_URL = `ws://127.0.0.1:${TEST_CONTROL_PORT}/ws`;
@@ -29,11 +29,11 @@ function launchDaemon(): ChildProcess {
   const proc = spawn(process.execPath, ["run", DAEMON_PATH], {
     env: {
       ...process.env,
-      AGENTBRIDGE_CONTROL_PORT: String(TEST_CONTROL_PORT),
-      AGENTBRIDGE_STATE_DIR: TEST_STATE_DIR,
+      CC_BRIDGE_CONTROL_PORT: String(TEST_CONTROL_PORT),
+      CC_BRIDGE_STATE_DIR: TEST_STATE_DIR,
       CODEX_WS_PORT: String(TEST_APP_PORT),
       CODEX_PROXY_PORT: String(TEST_PROXY_PORT),
-      AGENTBRIDGE_IDLE_SHUTDOWN_MS: "60000", // don't auto-shutdown during tests
+      CC_BRIDGE_IDLE_SHUTDOWN_MS: "60000", // don't auto-shutdown during tests
     },
     stdio: "pipe",
   });

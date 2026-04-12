@@ -3,27 +3,27 @@ import { join } from "node:path";
 import { homedir, platform } from "node:os";
 
 /**
- * Resolves the shared runtime state directory for AgentBridge.
+ * Resolves the shared runtime state directory for CcBridge.
  *
- * macOS:  ~/Library/Application Support/AgentBridge
- * Linux:  ${XDG_STATE_HOME:-~/.local/state}/agentbridge
- * Override: AGENTBRIDGE_STATE_DIR env var
+ * macOS:  ~/Library/Application Support/CcBridge
+ * Linux:  ${XDG_STATE_HOME:-~/.local/state}/cc-bridge
+ * Override: CC_BRIDGE_STATE_DIR env var
  *
  * This directory stores daemon pid, managed TUI pid, lock, status, ports, and logs.
- * It is NOT for project-level config (that lives in .agentbridge/).
+ * It is NOT for project-level config (that lives in .cc-bridge/).
  */
 export class StateDirResolver {
   private readonly stateDir: string;
 
   constructor(envOverride?: string) {
-    const override = envOverride ?? process.env.AGENTBRIDGE_STATE_DIR;
+    const override = envOverride ?? process.env.CC_BRIDGE_STATE_DIR;
     if (override) {
       this.stateDir = override;
     } else if (platform() === "darwin") {
-      this.stateDir = join(homedir(), "Library", "Application Support", "AgentBridge");
+      this.stateDir = join(homedir(), "Library", "Application Support", "CcBridge");
     } else {
       const xdgState = process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state");
-      this.stateDir = join(xdgState, "agentbridge");
+      this.stateDir = join(xdgState, "cc-bridge");
     }
   }
 
@@ -59,7 +59,7 @@ export class StateDirResolver {
   }
 
   get logFile(): string {
-    return join(this.stateDir, "agentbridge.log");
+    return join(this.stateDir, "cc-bridge.log");
   }
 
   get killedFile(): string {

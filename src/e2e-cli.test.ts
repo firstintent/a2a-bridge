@@ -83,12 +83,12 @@ class CliE2EHarness {
   }
 
   static async create(options: HarnessOptions = {}): Promise<CliE2EHarness> {
-    const rootDir = mkdtempSync(join(tmpdir(), "agentbridge-cli-e2e-"));
+    const rootDir = mkdtempSync(join(tmpdir(), "cc-bridge-cli-e2e-"));
     const projectDir = join(rootDir, "project");
     const stateDir = join(rootDir, "state");
     const binDir = join(rootDir, "bin");
     const shimLogDir = join(rootDir, "shim-logs");
-    const fakeDaemonPath = join(rootDir, "agentbridge-fake-daemon.ts");
+    const fakeDaemonPath = join(rootDir, "cc-bridge-fake-daemon.ts");
     const fakeDaemonLaunchLog = join(rootDir, "fake-daemon-launches.jsonl");
     mkdirSync(projectDir, { recursive: true });
     mkdirSync(stateDir, { recursive: true });
@@ -111,9 +111,9 @@ class CliE2EHarness {
     writeExecutable(join(binDir, "codex"), buildShimScript("codex"));
 
     const configProxyPort = options.configProxyPort ?? 45991;
-    mkdirSync(join(projectDir, ".agentbridge"), { recursive: true });
+    mkdirSync(join(projectDir, ".cc-bridge"), { recursive: true });
     writeFileSync(
-      join(projectDir, ".agentbridge", "config.json"),
+      join(projectDir, ".cc-bridge", "config.json"),
       JSON.stringify(
         {
           version: "1.0",
@@ -146,13 +146,13 @@ class CliE2EHarness {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
-      AGENTBRIDGE_STATE_DIR: stateDir,
-      AGENTBRIDGE_CONTROL_PORT: String(controlPort),
-      AGENTBRIDGE_DAEMON_ENTRY: fakeDaemonPath,
-      AGENTBRIDGE_MODE: "pull",
-      AGENTBRIDGE_FAKE_DAEMON_LAUNCH_LOG: fakeDaemonLaunchLog,
-      AGENTBRIDGE_FAKE_DAEMON_DELAY_MS: String(options.daemonDelayMs ?? 0),
-      AGENTBRIDGE_SHIM_LOG_DIR: shimLogDir,
+      CC_BRIDGE_STATE_DIR: stateDir,
+      CC_BRIDGE_CONTROL_PORT: String(controlPort),
+      CC_BRIDGE_DAEMON_ENTRY: fakeDaemonPath,
+      CC_BRIDGE_MODE: "pull",
+      CC_BRIDGE_FAKE_DAEMON_LAUNCH_LOG: fakeDaemonLaunchLog,
+      CC_BRIDGE_FAKE_DAEMON_DELAY_MS: String(options.daemonDelayMs ?? 0),
+      CC_BRIDGE_SHIM_LOG_DIR: shimLogDir,
       CODEX_WS_PORT: String(appPort),
       CODEX_PROXY_PORT: String(proxyPort),
     };
@@ -366,24 +366,24 @@ class CliE2EHarness {
 }
 
 describe("E2E: CLI surface", () => {
-  test("agentbridge init creates project config and collaboration rules", async () => {
+  test("cc-bridge init creates project config and collaboration rules", async () => {
     await withHarness(async (harness) => {
-      rmSync(join(harness.projectDir, ".agentbridge"), { recursive: true, force: true });
+      rmSync(join(harness.projectDir, ".cc-bridge"), { recursive: true, force: true });
 
       const result = await harness.runCli(["init"]);
 
       expect(result.code).toBe(0);
-      expect(existsSync(join(harness.projectDir, ".agentbridge", "config.json"))).toBe(true);
-      expect(existsSync(join(harness.projectDir, ".agentbridge", "collaboration.md"))).toBe(true);
+      expect(existsSync(join(harness.projectDir, ".cc-bridge", "config.json"))).toBe(true);
+      expect(existsSync(join(harness.projectDir, ".cc-bridge", "collaboration.md"))).toBe(true);
 
       const config = JSON.parse(
-        readFileSync(join(harness.projectDir, ".agentbridge", "config.json"), "utf-8"),
+        readFileSync(join(harness.projectDir, ".cc-bridge", "config.json"), "utf-8"),
       ) as { daemon: { port: number; proxyPort: number } };
       expect(config.daemon.port).toBe(4510);
       expect(config.daemon.proxyPort).toBe(4511);
 
       const collaboration = readFileSync(
-        join(harness.projectDir, ".agentbridge", "collaboration.md"),
+        join(harness.projectDir, ".cc-bridge", "collaboration.md"),
         "utf-8",
       );
       expect(collaboration).toContain("# Collaboration Rules");
@@ -393,7 +393,7 @@ describe("E2E: CLI surface", () => {
     });
   }, 20000);
 
-  test("agentbridge claude injects channel flags", async () => {
+  test("cc-bridge claude injects channel flags", async () => {
     await withHarness(async (harness) => {
       const result = await harness.runCli(["claude", "--resume"]);
 
@@ -405,13 +405,13 @@ describe("E2E: CLI surface", () => {
       expect(invocations.length).toBe(1);
       expect(invocations[0]?.args).toEqual([
         "--dangerously-load-development-channels",
-        "plugin:agentbridge@agentbridge",
+        "plugin:cc-bridge@cc-bridge",
         "--resume",
       ]);
     });
   });
 
-  test("agentbridge claude clears killed sentinel before launching Claude Code", async () => {
+  test("cc-bridge claude clears killed sentinel before launching Claude Code", async () => {
     await withHarness(async (harness) => {
       writeFileSync(join(harness.stateDir, "killed"), `${Date.now()}\n`, "utf-8");
 
@@ -422,17 +422,17 @@ describe("E2E: CLI surface", () => {
     });
   });
 
-  test("agentbridge claude rejects owned flags", async () => {
+  test("cc-bridge claude rejects owned flags", async () => {
     await withHarness(async (harness) => {
       const result = await harness.runCli(["claude", "--channels", "manual"]);
 
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain("\"--channels\" is automatically set by agentbridge claude");
+      expect(result.stderr).toContain("\"--channels\" is automatically set by cc-bridge claude");
       expect(harness.readShimCalls("claude")).toHaveLength(0);
     });
   });
 
-  test("agentbridge codex ensures daemon is running and injects remote args", async () => {
+  test("cc-bridge codex ensures daemon is running and injects remote args", async () => {
     await withHarness(async (harness) => {
       const result = await harness.runCli(["codex", "--model", "o3"]);
 
@@ -459,11 +459,11 @@ describe("E2E: CLI surface", () => {
     });
   }, 20000);
 
-  test("agentbridge codex rejects owned flags", async () => {
+  test("cc-bridge codex rejects owned flags", async () => {
     await withHarness(async (harness) => {
       const remoteConflict = await harness.runCli(["codex", "--remote", "ws://127.0.0.1:7777"]);
       expect(remoteConflict.code).toBe(1);
-      expect(remoteConflict.stderr).toContain("\"--remote\" is automatically set by agentbridge codex");
+      expect(remoteConflict.stderr).toContain("\"--remote\" is automatically set by cc-bridge codex");
 
       const enableConflict = await harness.runCli(["codex", "--enable", "tui_app_server"]);
       expect(enableConflict.code).toBe(1);
@@ -474,7 +474,7 @@ describe("E2E: CLI surface", () => {
     });
   });
 
-  test("agentbridge codex reuses healthy daemon and prefers status.json proxyUrl", async () => {
+  test("cc-bridge codex reuses healthy daemon and prefers status.json proxyUrl", async () => {
     await withHarness({ configProxyPort: 49991 }, async (harness) => {
       const daemonProc = await harness.startManagedFakeDaemon();
       const pidBefore = harness.readPid();
@@ -527,11 +527,11 @@ describe("E2E: CLI surface", () => {
     });
   }, 30000);
 
-  test("agentbridge kill stops daemon, cleans state, and writes killed sentinel", async () => {
+  test("cc-bridge kill stops daemon, cleans state, and writes killed sentinel", async () => {
     await withHarness(async (harness) => {
       const codexProc = await harness.spawnCli(
         ["codex"],
-        { AGENTBRIDGE_CODEX_SHIM_HOLD_MS: "30000" },
+        { CC_BRIDGE_CODEX_SHIM_HOLD_MS: "30000" },
       );
       await harness.waitForHealth();
       await waitFor(() => harness.readTuiPid() !== null, 80, 50);
@@ -546,8 +546,8 @@ describe("E2E: CLI surface", () => {
       const result = await harness.runCli(["kill"]);
 
       expect(result.code).toBe(0);
-      expect(result.stdout).toContain("AgentBridge stopped.");
-      expect(result.stdout).toContain("Please restart Claude Code (`agentbridge claude`), switch to a new conversation, or run `/resume` to fully disconnect.");
+      expect(result.stdout).toContain("CcBridge stopped.");
+      expect(result.stdout).toContain("Please restart Claude Code (`cc-bridge claude`), switch to a new conversation, or run `/resume` to fully disconnect.");
       await waitFor(() => (pid ? !isProcessAlive(pid) : true), 60, 50);
       await waitFor(() => (tuiPid ? !isProcessAlive(tuiPid) : true), 60, 50);
       await waitFor(() => codexProc.child.exitCode !== null, 60, 50);
@@ -579,7 +579,7 @@ describe("E2E: CLI surface", () => {
 
   test("happy path: init -> claude -> codex -> kill", async () => {
     await withHarness(async (harness) => {
-      rmSync(join(harness.projectDir, ".agentbridge"), { recursive: true, force: true });
+      rmSync(join(harness.projectDir, ".cc-bridge"), { recursive: true, force: true });
 
       const initResult = await harness.runCli(["init"]);
       expect(initResult.code).toBe(0);
@@ -598,8 +598,8 @@ describe("E2E: CLI surface", () => {
       expect(killResult.code).toBe(0);
 
       await waitFor(() => (pid ? !isProcessAlive(pid) : true), 60, 50);
-      expect(existsSync(join(harness.projectDir, ".agentbridge", "config.json"))).toBe(true);
-      expect(existsSync(join(harness.projectDir, ".agentbridge", "collaboration.md"))).toBe(true);
+      expect(existsSync(join(harness.projectDir, ".cc-bridge", "config.json"))).toBe(true);
+      expect(existsSync(join(harness.projectDir, ".cc-bridge", "collaboration.md"))).toBe(true);
       expect(existsSync(join(harness.stateDir, "daemon.pid"))).toBe(false);
       expect(existsSync(join(harness.stateDir, "status.json"))).toBe(false);
       expect(existsSync(join(harness.stateDir, "killed"))).toBe(true);
@@ -607,7 +607,7 @@ describe("E2E: CLI surface", () => {
       const claudeRun = harness
         .readShimCalls("claude")
         .find((entry) => entry.args[0] === "--dangerously-load-development-channels");
-      expect(claudeRun?.args[1]).toBe("plugin:agentbridge@agentbridge");
+      expect(claudeRun?.args[1]).toBe("plugin:cc-bridge@cc-bridge");
 
       const codexRun = harness
         .readShimCalls("codex")
@@ -794,9 +794,9 @@ function buildShimScript(commandName: "claude" | "codex"): string {
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-const logDir = process.env.AGENTBRIDGE_SHIM_LOG_DIR;
+const logDir = process.env.CC_BRIDGE_SHIM_LOG_DIR;
 if (!logDir) {
-  console.error("AGENTBRIDGE_SHIM_LOG_DIR is required");
+  console.error("CC_BRIDGE_SHIM_LOG_DIR is required");
   process.exit(1);
 }
 
@@ -820,7 +820,7 @@ if ("${commandName}" === "claude" && args[0] === "plugin" && args[1] === "instal
 }
 
 if ("${commandName}" === "codex" && args[0] === "--enable" && args[1] === "tui_app_server") {
-  const holdMs = Number.parseInt(process.env.AGENTBRIDGE_CODEX_SHIM_HOLD_MS ?? "0", 10);
+  const holdMs = Number.parseInt(process.env.CC_BRIDGE_CODEX_SHIM_HOLD_MS ?? "0", 10);
   if (Number.isFinite(holdMs) && holdMs > 0) {
     await Bun.sleep(holdMs);
   }
@@ -835,15 +835,15 @@ function buildFakeDaemonScript(): string {
 import { appendFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const stateDir = process.env.AGENTBRIDGE_STATE_DIR;
-const controlPort = Number.parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
+const stateDir = process.env.CC_BRIDGE_STATE_DIR;
+const controlPort = Number.parseInt(process.env.CC_BRIDGE_CONTROL_PORT ?? "4512", 10);
 const appPort = Number.parseInt(process.env.CODEX_WS_PORT ?? "4510", 10);
 const proxyPort = Number.parseInt(process.env.CODEX_PROXY_PORT ?? "4511", 10);
-const launchLog = process.env.AGENTBRIDGE_FAKE_DAEMON_LAUNCH_LOG;
-const delayMs = Number.parseInt(process.env.AGENTBRIDGE_FAKE_DAEMON_DELAY_MS ?? "0", 10);
+const launchLog = process.env.CC_BRIDGE_FAKE_DAEMON_LAUNCH_LOG;
+const delayMs = Number.parseInt(process.env.CC_BRIDGE_FAKE_DAEMON_DELAY_MS ?? "0", 10);
 
 if (!stateDir || !launchLog) {
-  console.error("Fake daemon requires AGENTBRIDGE_STATE_DIR and AGENTBRIDGE_FAKE_DAEMON_LAUNCH_LOG");
+  console.error("Fake daemon requires CC_BRIDGE_STATE_DIR and CC_BRIDGE_FAKE_DAEMON_LAUNCH_LOG");
   process.exit(1);
 }
 
@@ -908,7 +908,7 @@ const server = Bun.serve({
       return undefined;
     }
 
-    return new Response("fake agentbridge daemon");
+    return new Response("fake cc-bridge daemon");
   },
   websocket: {
     message(ws, raw) {

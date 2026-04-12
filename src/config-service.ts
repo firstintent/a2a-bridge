@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 
 /** Machine-readable project config schema. */
-export interface AgentBridgeConfig {
+export interface CcBridgeConfig {
   version: string;
   daemon: {
     port: number;
@@ -23,7 +23,7 @@ export interface AgentBridgeConfig {
   idleShutdownSeconds: number;
 }
 
-const DEFAULT_CONFIG: AgentBridgeConfig = {
+const DEFAULT_CONFIG: CcBridgeConfig = {
   version: "1.0",
   daemon: {
     port: 4510,
@@ -70,7 +70,7 @@ const DEFAULT_COLLABORATION_MD = `# Collaboration Rules
 <!-- Add your project-specific collaboration rules here -->
 `;
 
-const CONFIG_DIR = ".agentbridge";
+const CONFIG_DIR = ".cc-bridge";
 const CONFIG_FILE = "config.json";
 const COLLABORATION_FILE = "collaboration.md";
 
@@ -92,22 +92,22 @@ export class ConfigService {
   }
 
   /** Load project config, returns null if not found. */
-  load(): AgentBridgeConfig | null {
+  load(): CcBridgeConfig | null {
     try {
       const raw = readFileSync(this.configPath, "utf-8");
-      return JSON.parse(raw) as AgentBridgeConfig;
+      return JSON.parse(raw) as CcBridgeConfig;
     } catch {
       return null;
     }
   }
 
   /** Load project config, falling back to defaults. */
-  loadOrDefault(): AgentBridgeConfig {
+  loadOrDefault(): CcBridgeConfig {
     return this.load() ?? structuredClone(DEFAULT_CONFIG);
   }
 
   /** Save project config. */
-  save(config: AgentBridgeConfig): void {
+  save(config: CcBridgeConfig): void {
     this.ensureConfigDir();
     writeFileSync(this.configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
   }

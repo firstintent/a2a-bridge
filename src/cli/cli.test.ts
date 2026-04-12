@@ -39,7 +39,7 @@ describe("CLI: owned flag conflict detection", () => {
       let exited = false;
       const origExit = process.exit;
       process.exit = (() => { exited = true; }) as any;
-      checkOwnedFlagConflicts(args, "agentbridge claude", ownedFlags);
+      checkOwnedFlagConflicts(args, "cc-bridge claude", ownedFlags);
       process.exit = origExit;
       expect(exited).toBe(false);
     }).not.toThrow();
@@ -51,7 +51,7 @@ describe("CLI: owned flag conflict detection", () => {
     let exited = false;
     const origExit = process.exit;
     process.exit = (() => { exited = true; }) as any;
-    checkOwnedFlagConflicts(args, "agentbridge claude", ownedFlags);
+    checkOwnedFlagConflicts(args, "cc-bridge claude", ownedFlags);
     process.exit = origExit;
     expect(exited).toBe(true);
   });
@@ -62,7 +62,7 @@ describe("CLI: owned flag conflict detection", () => {
     let exited = false;
     const origExit = process.exit;
     process.exit = (() => { exited = true; }) as any;
-    checkOwnedFlagConflicts(args, "agentbridge claude", ownedFlags);
+    checkOwnedFlagConflicts(args, "cc-bridge claude", ownedFlags);
     process.exit = origExit;
     expect(exited).toBe(true);
   });
@@ -73,7 +73,7 @@ describe("CLI: owned flag conflict detection", () => {
     let exited = false;
     const origExit = process.exit;
     process.exit = (() => { exited = true; }) as any;
-    checkOwnedFlagConflicts(args, "agentbridge codex", ownedFlags);
+    checkOwnedFlagConflicts(args, "cc-bridge codex", ownedFlags);
     process.exit = origExit;
     expect(exited).toBe(false);
   });
@@ -84,7 +84,7 @@ describe("CLI: owned flag conflict detection", () => {
     let exited = false;
     const origExit = process.exit;
     process.exit = (() => { exited = true; }) as any;
-    checkOwnedFlagConflicts(args, "agentbridge codex", ownedFlags);
+    checkOwnedFlagConflicts(args, "cc-bridge codex", ownedFlags);
     process.exit = origExit;
     expect(exited).toBe(false);
   });
@@ -97,7 +97,7 @@ describe("CLI: owned flag conflict detection", () => {
     const origError = console.error;
     process.exit = (() => {}) as any;
     console.error = (msg: string) => { output += msg + "\n"; };
-    checkOwnedFlagConflicts(args, "agentbridge codex", ownedFlags);
+    checkOwnedFlagConflicts(args, "cc-bridge codex", ownedFlags);
     process.exit = origExit;
     console.error = origError;
     expect(output).toContain("codex [your flags here]");

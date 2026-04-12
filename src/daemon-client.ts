@@ -58,13 +58,13 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
       ws.onerror = () => {
         if (settled) return;
         settled = true;
-        reject(new Error(`Failed to connect to AgentBridge daemon at ${this.url}`));
+        reject(new Error(`Failed to connect to CcBridge daemon at ${this.url}`));
       };
 
       ws.onclose = () => {
         if (settled) return;
         settled = true;
-        reject(new Error(`AgentBridge daemon closed the connection during startup (${this.url})`));
+        reject(new Error(`CcBridge daemon closed the connection during startup (${this.url})`));
       };
     });
   }
@@ -90,14 +90,14 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
 
   async sendReply(message: BridgeMessage, requireReply?: boolean): Promise<{ success: boolean; error?: string }> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return { success: false, error: "AgentBridge daemon is not connected." };
+      return { success: false, error: "CcBridge daemon is not connected." };
     }
 
     const requestId = `reply_${Date.now()}_${this.nextRequestId++}`;
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pendingReplies.delete(requestId);
-        resolve({ success: false, error: "Timed out waiting for AgentBridge daemon reply." });
+        resolve({ success: false, error: "Timed out waiting for CcBridge daemon reply." });
       }, 15000);
 
       this.pendingReplies.set(requestId, { resolve, timer });
@@ -144,7 +144,7 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
       this.log(`ws#${socketId} onclose (code=${event.code}, reason=${event.reason || "none"}, isCurrent=${isCurrent}, currentWsId=${this.wsId})`);
       if (isCurrent) {
         this.ws = null;
-        this.rejectPendingReplies("AgentBridge daemon disconnected.");
+        this.rejectPendingReplies("CcBridge daemon disconnected.");
         this.emit("disconnect");
       }
       // If this.ws !== ws, this socket was replaced by a newer connection —
@@ -166,7 +166,7 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
 
   private send(message: ControlClientMessage) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error("AgentBridge daemon socket is not open.");
+      throw new Error("CcBridge daemon socket is not open.");
     }
 
     this.ws.send(JSON.stringify(message));

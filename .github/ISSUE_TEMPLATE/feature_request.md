@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea for AgentBridge
+about: Suggest an idea for CcBridge
 title: "[Feature] "
 labels: enhancement
 ---

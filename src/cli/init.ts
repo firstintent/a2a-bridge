@@ -6,7 +6,7 @@ import { findPackageRoot, registerMarketplace } from "./pkg-root";
 const MIN_CLAUDE_VERSION = "2.1.80";
 
 export async function runInit() {
-  console.log("AgentBridge Init\n");
+  console.log("CcBridge Init\n");
 
   // Step 1: Check dependencies
   console.log("Checking dependencies...");
@@ -30,7 +30,7 @@ export async function runInit() {
   console.log("");
 
   // Step 3: Register marketplace + install plugin (best-effort)
-  console.log("Installing AgentBridge plugin...");
+  console.log("Installing CcBridge plugin...");
   try {
     registerMarketplace(findPackageRoot());
     execFileSync("claude", ["plugin", "install", `${PLUGIN_NAME}@${MARKETPLACE_NAME}`], {
@@ -48,8 +48,8 @@ export async function runInit() {
   console.log("Setup complete!\n");
   console.log("Next steps:");
   console.log("  1. If Claude Code is already running, execute /reload-plugins in your session");
-  console.log("  2. Start Claude Code:  agentbridge claude");
-  console.log("  3. Start Codex TUI:    agentbridge codex");
+  console.log("  2. Start Claude Code:  cc-bridge claude");
+  console.log("  3. Start Codex TUI:    cc-bridge codex");
 }
 
 function checkBun() {

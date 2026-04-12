@@ -5,9 +5,9 @@ set -uo pipefail
 INPUT="$(cat 2>/dev/null || true)"
 
 workspace="${CLAUDE_PROJECT_DIR:-${PWD}}"
-cooldown_seconds="${AGENTBRIDGE_HEALTH_HOOK_COOLDOWN_SECONDS:-120}"
-state_root="${AGENTBRIDGE_HOOK_STATE_DIR:-${TMPDIR:-/tmp}/agentbridge-hooks}"
-port="${AGENTBRIDGE_CONTROL_PORT:-4512}"
+cooldown_seconds="${CC_BRIDGE_HEALTH_HOOK_COOLDOWN_SECONDS:-120}"
+state_root="${CC_BRIDGE_HOOK_STATE_DIR:-${TMPDIR:-/tmp}/cc-bridge-hooks}"
+port="${CC_BRIDGE_CONTROL_PORT:-4512}"
 
 if ! command -v curl >/dev/null 2>&1; then
   exit 0
@@ -37,15 +37,15 @@ if [ -n "$health_json" ]; then
 
   if [ "$tui_connected" = "true" ]; then
     cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"AgentBridge is running. Daemon healthy, Codex TUI connected. Bridge is ready for communication."}}
+{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"CcBridge is running. Daemon healthy, Codex TUI connected. Bridge is ready for communication."}}
 EOF
   else
     cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"AgentBridge daemon is running but Codex TUI is not connected yet. Start Codex in another terminal with: agentbridge codex"}}
+{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"CcBridge daemon is running but Codex TUI is not connected yet. Start Codex in another terminal with: cc-bridge codex"}}
 EOF
   fi
 else
   cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"AgentBridge daemon is not reachable on http://127.0.0.1:${port}/healthz yet. Start the bridge with: agentbridge claude (this terminal) + agentbridge codex (another terminal). If you're already using agentbridge claude, the daemon may still be starting up."}}
+{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"CcBridge daemon is not reachable on http://127.0.0.1:${port}/healthz yet. Start the bridge with: cc-bridge claude (this terminal) + cc-bridge codex (another terminal). If you're already using cc-bridge claude, the daemon may still be starting up."}}
 EOF
 fi

@@ -32,7 +32,7 @@ describe("app-server protocol subset", () => {
     expect(isTrackedAppServerRequestMethod("turn/completed")).toBe(false);
   });
 
-  test("identifies app-server notifications used by AgentBridge", () => {
+  test("identifies app-server notifications used by CcBridge", () => {
     expect(isAppServerNotification({
       method: "turn/completed",
       params: { turn: { id: "turn-1" } },

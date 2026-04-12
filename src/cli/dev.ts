@@ -6,11 +6,11 @@ import { MARKETPLACE_NAME, PLUGIN_NAME } from "../cli";
 import { findPackageRoot, registerMarketplace } from "./pkg-root";
 
 export async function runDev() {
-  console.log("AgentBridge Dev Setup\n");
+  console.log("CcBridge Dev Setup\n");
 
   const projectRoot = findPackageRoot();
   const marketplacePath = resolve(projectRoot, ".claude-plugin", "marketplace.json");
-  const pluginDir = resolve(projectRoot, "plugins", "agentbridge");
+  const pluginDir = resolve(projectRoot, "plugins", "cc-bridge");
   const pluginManifest = resolve(pluginDir, ".claude-plugin", "plugin.json");
 
   // Step 1: Validate local plugin exists
@@ -68,8 +68,8 @@ export async function runDev() {
 
   console.log("\n✅ Dev setup complete!\n");
   console.log("Next steps:");
-  console.log("  agentbridge claude    # Start Claude Code (plugin auto-loaded)");
-  console.log("  agentbridge codex     # Start Codex TUI");
+  console.log("  cc-bridge claude    # Start Claude Code (plugin auto-loaded)");
+  console.log("  cc-bridge codex     # Start Codex TUI");
   console.log("");
-  console.log("Code changed? Run 'agentbridge dev' again, then restart Claude Code or /reload-plugins.");
+  console.log("Code changed? Run 'cc-bridge dev' again, then restart Claude Code or /reload-plugins.");
 }

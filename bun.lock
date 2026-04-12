@@ -3,11 +3,9 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "agentbridge",
-      "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.27.1",
-      },
+      "name": "@firstintent/cc-bridge",
       "devDependencies": {
+        "@modelcontextprotocol/sdk": "^1.27.1",
         "@types/bun": "^1.3.11",
         "typescript": "^5.8.0",
       },

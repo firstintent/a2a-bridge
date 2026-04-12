@@ -5,24 +5,24 @@ import { ConfigService } from "../config-service";
 import { DaemonLifecycle } from "../daemon-lifecycle";
 import { checkOwnedFlagConflicts } from "./claude";
 
-/** Flags that AgentBridge owns for codex command. */
+/** Flags that CcBridge owns for codex command. */
 const OWNED_FLAGS = ["--remote"];
 
 export async function runCodex(args: string[]) {
   // Check for owned flag conflicts
-  checkOwnedFlagConflicts(args, "agentbridge codex", OWNED_FLAGS);
+  checkOwnedFlagConflicts(args, "cc-bridge codex", OWNED_FLAGS);
 
   // Specifically check for --enable tui_app_server (not all --enable values)
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--enable" && args[i + 1] === "tui_app_server") {
-      console.error(`Error: "--enable tui_app_server" is automatically set by agentbridge codex.`);
+      console.error(`Error: "--enable tui_app_server" is automatically set by cc-bridge codex.`);
       console.error("");
       console.error("If you need full control over these flags, use the native command directly:");
       console.error("  codex [your flags here]");
       process.exit(1);
     }
     if (args[i] === "--enable=tui_app_server") {
-      console.error(`Error: "--enable=tui_app_server" is automatically set by agentbridge codex.`);
+      console.error(`Error: "--enable=tui_app_server" is automatically set by cc-bridge codex.`);
       console.error("");
       console.error("If you need full control over these flags, use the native command directly:");
       console.error("  codex [your flags here]");
@@ -33,23 +33,23 @@ export async function runCodex(args: string[]) {
   const stateDir = new StateDirResolver();
   const configService = new ConfigService();
   const config = configService.loadOrDefault();
-  const controlPort = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
+  const controlPort = parseInt(process.env.CC_BRIDGE_CONTROL_PORT ?? "4512", 10);
 
   const lifecycle = new DaemonLifecycle({
     stateDir,
     controlPort,
-    log: (msg) => console.error(`[agentbridge] ${msg}`),
+    log: (msg) => console.error(`[cc-bridge] ${msg}`),
   });
 
   // Ensure daemon is running
-  console.error("[agentbridge] Ensuring daemon is running...");
+  console.error("[cc-bridge] Ensuring daemon is running...");
   try {
     lifecycle.clearKilled();
     await lifecycle.ensureRunning();
-    console.error("[agentbridge] Daemon is ready.");
+    console.error("[cc-bridge] Daemon is ready.");
   } catch (err: any) {
-    console.error(`[agentbridge] Failed to start daemon: ${err.message}`);
-    console.error("[agentbridge] Try: agentbridge kill && agentbridge claude");
+    console.error(`[cc-bridge] Failed to start daemon: ${err.message}`);
+    console.error("[cc-bridge] Try: cc-bridge kill && cc-bridge claude");
     process.exit(1);
   }
 
@@ -60,18 +60,18 @@ export async function runCodex(args: string[]) {
     proxyUrl = status.proxyUrl;
   } else {
     proxyUrl = `ws://127.0.0.1:${config.daemon.proxyPort}`;
-    console.error(`[agentbridge] No daemon status found, using config default: ${proxyUrl}`);
+    console.error(`[cc-bridge] No daemon status found, using config default: ${proxyUrl}`);
   }
 
   try {
     await waitForProxyReady(proxyUrl);
   } catch (err: any) {
-    console.error(`[agentbridge] ${err.message}`);
+    console.error(`[cc-bridge] ${err.message}`);
     process.exit(1);
   }
 
   // Save terminal state and launch Codex with protection
-  console.log(`Connecting Codex TUI to AgentBridge at ${proxyUrl}...`);
+  console.log(`Connecting Codex TUI to CcBridge at ${proxyUrl}...`);
 
   // Save terminal state
   let savedStty: string | null = null;

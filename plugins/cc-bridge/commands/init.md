@@ -1,19 +1,19 @@
 ---
-description: Create or update the AgentBridge project config files in the current workspace
+description: Create or update the CcBridge project config files in the current workspace
 allowed-tools: Read,Write,Edit,MultiEdit,LS
 ---
 
-Bootstrap or update AgentBridge's project-local configuration in this workspace.
+Bootstrap or update CcBridge's project-local configuration in this workspace.
 
 Follow these rules:
 
-1. Work only inside `.agentbridge/`.
-2. Do not install plugins or modify `.claude/settings.json` here. Plugin setup belongs to terminal workflows: `agentbridge init` attempts best-effort plugin installation, and `agentbridge dev` handles local marketplace registration/sync.
+1. Work only inside `.cc-bridge/`.
+2. Do not install plugins or modify `.claude/settings.json` here. Plugin setup belongs to terminal workflows: `cc-bridge init` attempts best-effort plugin installation, and `cc-bridge dev` handles local marketplace registration/sync.
 3. Preserve user edits when the files already exist. Update only the fields the user asked to change.
-4. Keep `.agentbridge/config.json` valid JSON.
-5. Keep `.agentbridge/collaboration.md` human-editable and concise.
+4. Keep `.cc-bridge/config.json` valid JSON.
+5. Keep `.cc-bridge/collaboration.md` human-editable and concise.
 
-If `.agentbridge/config.json` is missing, create it with this default template:
+If `.cc-bridge/config.json` is missing, create it with this default template:
 
 ```json
 {
@@ -40,7 +40,7 @@ If `.agentbridge/config.json` is missing, create it with this default template:
 }
 ```
 
-If `.agentbridge/collaboration.md` is missing, create it with this default template:
+If `.cc-bridge/collaboration.md` is missing, create it with this default template:
 
 ```markdown
 # Collaboration Rules

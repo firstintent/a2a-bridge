@@ -29,14 +29,14 @@ const config = configService.loadOrDefault();
 
 const CODEX_APP_PORT = parseInt(process.env.CODEX_WS_PORT ?? String(config.daemon.port), 10);
 const CODEX_PROXY_PORT = parseInt(process.env.CODEX_PROXY_PORT ?? String(config.daemon.proxyPort), 10);
-const CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
+const CONTROL_PORT = parseInt(process.env.CC_BRIDGE_CONTROL_PORT ?? "4512", 10);
 const TUI_DISCONNECT_GRACE_MS = parseInt(process.env.TUI_DISCONNECT_GRACE_MS ?? "2500", 10);
 const CLAUDE_DISCONNECT_GRACE_MS = 5_000;
-const MAX_BUFFERED_MESSAGES = parseInt(process.env.AGENTBRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);
+const MAX_BUFFERED_MESSAGES = parseInt(process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);
 const FILTER_MODE: FilterMode =
-  (process.env.AGENTBRIDGE_FILTER_MODE as FilterMode) === "full" ? "full" : "filtered";
-const IDLE_SHUTDOWN_MS = parseInt(process.env.AGENTBRIDGE_IDLE_SHUTDOWN_MS ?? String(config.idleShutdownSeconds * 1000), 10);
-const ATTENTION_WINDOW_MS = parseInt(process.env.AGENTBRIDGE_ATTENTION_WINDOW_MS ?? String(config.turnCoordination.attentionWindowSeconds * 1000), 10);
+  (process.env.CC_BRIDGE_FILTER_MODE as FilterMode) === "full" ? "full" : "filtered";
+const IDLE_SHUTDOWN_MS = parseInt(process.env.CC_BRIDGE_IDLE_SHUTDOWN_MS ?? String(config.idleShutdownSeconds * 1000), 10);
+const ATTENTION_WINDOW_MS = parseInt(process.env.CC_BRIDGE_ATTENTION_WINDOW_MS ?? String(config.turnCoordination.attentionWindowSeconds * 1000), 10);
 
 const daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
 
@@ -209,7 +209,7 @@ codex.on("exit", (code: number | null) => {
   emitToClaude(
     systemMessage(
       "system_codex_exit",
-      `⚠️ Codex app-server exited (code ${code ?? "unknown"}). AgentBridge daemon is still running, but the Codex side needs to be restarted.`,
+      `⚠️ Codex app-server exited (code ${code ?? "unknown"}). CcBridge daemon is still running, but the Codex side needs to be restarted.`,
     ),
   );
   broadcastStatus();
@@ -234,7 +234,7 @@ function startControlServer() {
         return undefined;
       }
 
-      return new Response("AgentBridge daemon");
+      return new Response("CcBridge daemon");
     },
     websocket: {
       idleTimeout: 960, // 16 minutes — prevent premature idle disconnects
@@ -463,7 +463,7 @@ function scheduleClaudeDisconnectNotification(clientId: number) {
     }
 
     codex.injectMessage(
-      "⚠️ Claude Code went offline. AgentBridge is still running in the background; it will reconnect automatically when Claude reopens.",
+      "⚠️ Claude Code went offline. CcBridge is still running in the background; it will reconnect automatically when Claude reopens.",
     );
     claudeOnlineNoticeSent = false;
     claudeOfflineNoticeShown = true;
@@ -559,7 +559,7 @@ function currentReadyMessage() {
 function notifyCodexClaudeOnline() {
   claudeOnlineNoticeSent = true;
   claudeOfflineNoticeShown = false;
-  codex.injectMessage("✅ AgentBridge connected to Claude Code.");
+  codex.injectMessage("✅ CcBridge connected to Claude Code.");
 }
 
 function shouldNotifyCodexClaudeOnline() {
@@ -597,7 +597,7 @@ function removeStatusFile() {
 }
 
 async function bootCodex() {
-  log("Starting AgentBridge daemon...");
+  log("Starting CcBridge daemon...");
   log(`Codex app-server: ${codex.appServerUrl}`);
   log(`Codex proxy: ${codex.proxyUrl}`);
   log(`Control server: ws://127.0.0.1:${CONTROL_PORT}/ws`);
@@ -614,7 +614,7 @@ async function bootCodex() {
     emitToClaude(
       systemMessage(
         "system_codex_start_failed",
-        `❌ AgentBridge failed to start Codex app-server: ${err.message}`,
+        `❌ CcBridge failed to start Codex app-server: ${err.message}`,
       ),
     );
     broadcastStatus();
@@ -646,7 +646,7 @@ process.on("unhandledRejection", (reason: any) => {
 });
 
 function log(msg: string) {
-  const line = `[${new Date().toISOString()}] [AgentBridgeDaemon] ${msg}\n`;
+  const line = `[${new Date().toISOString()}] [CcBridgeDaemon] ${msg}\n`;
   process.stderr.write(line);
   try {
     appendFileSync(stateDir.logFile, line);
@@ -655,7 +655,7 @@ function log(msg: string) {
 
 // Refuse to start if user intentionally killed the daemon.
 // This prevents stale auto-reconnect loops from relaunching us.
-// Only `agentbridge codex` / `ensureRunning` clears the sentinel before launching.
+// Only `cc-bridge codex` / `ensureRunning` clears the sentinel before launching.
 if (daemonLifecycle.wasKilled()) {
   log("Killed sentinel found — daemon was intentionally stopped. Exiting immediately.");
   process.exit(0);

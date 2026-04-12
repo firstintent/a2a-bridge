@@ -13668,7 +13668,7 @@ var CLAUDE_INSTRUCTIONS = [
   "",
   "## Message delivery",
   "Messages from Codex may arrive in two ways depending on the connection mode:",
-  '- As <channel source="agentbridge" chat_id="..." user="Codex" ...> tags (push mode)',
+  '- As <channel source="cc-bridge" chat_id="..." user="Codex" ...> tags (push mode)',
   "- Via the get_messages tool (pull mode)",
   "",
   "## Collaboration roles",
@@ -13697,7 +13697,7 @@ var CLAUDE_INSTRUCTIONS = [
   "- If the reply tool returns a busy error, Codex is still executing \u2014 wait and try again later."
 ].join(`
 `);
-var LOG_FILE = "/tmp/agentbridge.log";
+var LOG_FILE = "/tmp/cc-bridge.log";
 
 class ClaudeAdapter extends EventEmitter {
   server;
@@ -13714,10 +13714,10 @@ class ClaudeAdapter extends EventEmitter {
     super();
     this.sessionId = `codex_${Date.now()}`;
     this.notificationIdPrefix = randomUUID().replace(/-/g, "").slice(0, 12);
-    const envMode = process.env.AGENTBRIDGE_MODE;
+    const envMode = process.env.CC_BRIDGE_MODE;
     this.configuredMode = envMode && ["push", "pull", "auto"].includes(envMode) ? envMode : "auto";
-    this.maxBufferedMessages = parseInt(process.env.AGENTBRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);
-    this.server = new Server({ name: "agentbridge", version: "0.1.0" }, {
+    this.maxBufferedMessages = parseInt(process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);
+    this.server = new Server({ name: "cc-bridge", version: "0.1.0" }, {
       capabilities: {
         experimental: { "claude/channel": {} },
         tools: {}
@@ -13747,10 +13747,10 @@ class ClaudeAdapter extends EventEmitter {
       return;
     if (this.configuredMode === "push" || this.configuredMode === "pull") {
       this.resolvedMode = this.configuredMode;
-      this.log(`Delivery mode set by AGENTBRIDGE_MODE: ${this.resolvedMode}`);
+      this.log(`Delivery mode set by CC_BRIDGE_MODE: ${this.resolvedMode}`);
     } else {
       this.resolvedMode = "push";
-      this.log("Delivery mode defaulting to push (set AGENTBRIDGE_MODE=pull for API key mode)");
+      this.log("Delivery mode defaulting to push (set CC_BRIDGE_MODE=pull for API key mode)");
     }
   }
   async pushNotification(message) {
@@ -13970,13 +13970,13 @@ class DaemonClient extends EventEmitter2 {
         if (settled)
           return;
         settled = true;
-        reject(new Error(`Failed to connect to AgentBridge daemon at ${this.url}`));
+        reject(new Error(`Failed to connect to CcBridge daemon at ${this.url}`));
       };
       ws.onclose = () => {
         if (settled)
           return;
         settled = true;
-        reject(new Error(`AgentBridge daemon closed the connection during startup (${this.url})`));
+        reject(new Error(`CcBridge daemon closed the connection during startup (${this.url})`));
       };
     });
   }
@@ -13997,13 +13997,13 @@ class DaemonClient extends EventEmitter2 {
   }
   async sendReply(message, requireReply) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return { success: false, error: "AgentBridge daemon is not connected." };
+      return { success: false, error: "CcBridge daemon is not connected." };
     }
     const requestId = `reply_${Date.now()}_${this.nextRequestId++}`;
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pendingReplies.delete(requestId);
-        resolve({ success: false, error: "Timed out waiting for AgentBridge daemon reply." });
+        resolve({ success: false, error: "Timed out waiting for CcBridge daemon reply." });
       }, 15000);
       this.pendingReplies.set(requestId, { resolve, timer });
       this.send({
@@ -14046,7 +14046,7 @@ class DaemonClient extends EventEmitter2 {
       this.log(`ws#${socketId} onclose (code=${event.code}, reason=${event.reason || "none"}, isCurrent=${isCurrent}, currentWsId=${this.wsId})`);
       if (isCurrent) {
         this.ws = null;
-        this.rejectPendingReplies("AgentBridge daemon disconnected.");
+        this.rejectPendingReplies("CcBridge daemon disconnected.");
         this.emit("disconnect");
       }
     };
@@ -14061,7 +14061,7 @@ class DaemonClient extends EventEmitter2 {
   }
   send(message) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error("AgentBridge daemon socket is not open.");
+      throw new Error("CcBridge daemon socket is not open.");
     }
     this.ws.send(JSON.stringify(message));
   }
@@ -14075,7 +14075,7 @@ class DaemonClient extends EventEmitter2 {
 import { spawn, execFileSync } from "child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync, openSync, closeSync, constants } from "fs";
 import { fileURLToPath } from "url";
-var DAEMON_ENTRY = process.env.AGENTBRIDGE_DAEMON_ENTRY ?? "./daemon.ts";
+var DAEMON_ENTRY = process.env.CC_BRIDGE_DAEMON_ENTRY ?? "./daemon.ts";
 var DAEMON_PATH = fileURLToPath(new URL(DAEMON_ENTRY, import.meta.url));
 
 class DaemonLifecycle {
@@ -14112,7 +14112,7 @@ class DaemonLifecycle {
             throw new Error(`Found existing daemon process ${existingPid}, but control port ${this.controlPort} never became ready.`);
           }
         }
-        this.log(`Pid ${existingPid} is alive but not an AgentBridge daemon, removing stale pid file`);
+        this.log(`Pid ${existingPid} is alive but not an CcBridge daemon, removing stale pid file`);
       }
       this.removeStalePidFile();
     }
@@ -14143,7 +14143,7 @@ class DaemonLifecycle {
         return;
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    throw new Error(`Timed out waiting for AgentBridge daemon health on ${this.healthUrl}`);
+    throw new Error(`Timed out waiting for CcBridge daemon health on ${this.healthUrl}`);
   }
   async isReady() {
     try {
@@ -14159,7 +14159,7 @@ class DaemonLifecycle {
         return;
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    throw new Error(`Timed out waiting for AgentBridge daemon readiness on ${this.readyUrl}`);
+    throw new Error(`Timed out waiting for CcBridge daemon readiness on ${this.readyUrl}`);
   }
   readStatus() {
     try {
@@ -14220,8 +14220,8 @@ class DaemonLifecycle {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        AGENTBRIDGE_CONTROL_PORT: String(this.controlPort),
-        AGENTBRIDGE_STATE_DIR: this.stateDir.dir
+        CC_BRIDGE_CONTROL_PORT: String(this.controlPort),
+        CC_BRIDGE_STATE_DIR: this.stateDir.dir
       },
       detached: true,
       stdio: "ignore"
@@ -14282,7 +14282,7 @@ class DaemonLifecycle {
       return false;
     }
     if (!this.isDaemonProcess(pid)) {
-      this.log(`Pid ${pid} is alive but is NOT an AgentBridge daemon \u2014 refusing to kill. Cleaning up stale pid file.`);
+      this.log(`Pid ${pid} is alive but is NOT an CcBridge daemon \u2014 refusing to kill. Cleaning up stale pid file.`);
       this.cleanup();
       return false;
     }
@@ -14312,7 +14312,7 @@ class DaemonLifecycle {
   isDaemonProcess(pid) {
     try {
       const cmd = execFileSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf-8" }).trim();
-      return cmd.includes("daemon") && (cmd.includes("agentbridge") || cmd.includes("agent_bridge"));
+      return cmd.includes("daemon") && (cmd.includes("cc-bridge") || cmd.includes("agent_bridge"));
     } catch {
       return false;
     }
@@ -14340,14 +14340,14 @@ import { homedir, platform } from "os";
 class StateDirResolver {
   stateDir;
   constructor(envOverride) {
-    const override = envOverride ?? process.env.AGENTBRIDGE_STATE_DIR;
+    const override = envOverride ?? process.env.CC_BRIDGE_STATE_DIR;
     if (override) {
       this.stateDir = override;
     } else if (platform() === "darwin") {
-      this.stateDir = join(homedir(), "Library", "Application Support", "AgentBridge");
+      this.stateDir = join(homedir(), "Library", "Application Support", "CcBridge");
     } else {
       const xdgState = process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state");
-      this.stateDir = join(xdgState, "agentbridge");
+      this.stateDir = join(xdgState, "cc-bridge");
     }
   }
   ensure() {
@@ -14374,7 +14374,7 @@ class StateDirResolver {
     return join(this.stateDir, "ports.json");
   }
   get logFile() {
-    return join(this.stateDir, "agentbridge.log");
+    return join(this.stateDir, "cc-bridge.log");
   }
   get killedFile() {
     return join(this.stateDir, "killed");
@@ -14429,7 +14429,7 @@ var DEFAULT_COLLABORATION_MD = `# Collaboration Rules
 ## Custom Rules
 <!-- Add your project-specific collaboration rules here -->
 `;
-var CONFIG_DIR = ".agentbridge";
+var CONFIG_DIR = ".cc-bridge";
 var CONFIG_FILE = "config.json";
 var COLLABORATION_FILE = "collaboration.md";
 
@@ -14503,7 +14503,7 @@ class ConfigService {
 var stateDir = new StateDirResolver;
 var configService = new ConfigService;
 var config2 = configService.loadOrDefault();
-var CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
+var CONTROL_PORT = parseInt(process.env.CC_BRIDGE_CONTROL_PORT ?? "4512", 10);
 var daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
 var CONTROL_WS_URL = daemonLifecycle.controlWsUrl;
 var claude = new ClaudeAdapter;
@@ -14523,7 +14523,7 @@ claude.setReplySender(async (msg, requireReply) => {
   if (daemonDisabled) {
     return {
       success: false,
-      error: "AgentBridge is disabled by `agentbridge kill`. Restart Claude Code (`agentbridge claude`), switch to a new conversation, or run `/resume` to reconnect."
+      error: "CcBridge is disabled by `cc-bridge kill`. Restart Claude Code (`cc-bridge claude`), switch to a new conversation, or run `/resume` to reconnect."
     };
   }
   return daemonClient.sendReply(msg, requireReply);
@@ -14542,16 +14542,16 @@ daemonClient.on("disconnect", () => {
   const now = Date.now();
   if (now - lastDisconnectNotifyTs >= RECONNECT_NOTIFY_COOLDOWN_MS) {
     lastDisconnectNotifyTs = now;
-    claude.pushNotification(systemMessage("system_daemon_disconnected", "\u26A0\uFE0F AgentBridge daemon control connection lost. Attempting to reconnect..."));
+    claude.pushNotification(systemMessage("system_daemon_disconnected", "\u26A0\uFE0F CcBridge daemon control connection lost. Attempting to reconnect..."));
   } else {
     log("Suppressing duplicate disconnect notification (within cooldown)");
   }
   reconnectToDaemon();
 });
 claude.on("ready", async () => {
-  log(`MCP server ready (delivery mode: ${claude.getDeliveryMode()}) \u2014 ensuring AgentBridge daemon...`);
+  log(`MCP server ready (delivery mode: ${claude.getDeliveryMode()}) \u2014 ensuring CcBridge daemon...`);
   if (daemonLifecycle.wasKilled()) {
-    await enterDisabledState("Killed sentinel found \u2014 bridge staying idle", "\u26D4 AgentBridge was stopped by `agentbridge kill`. Bridge is staying idle. Restart Claude Code (`agentbridge claude`), switch to a new conversation, or run `/resume` to reconnect.");
+    await enterDisabledState("Killed sentinel found \u2014 bridge staying idle", "\u26D4 CcBridge was stopped by `cc-bridge kill`. Bridge is staying idle. Restart Claude Code (`cc-bridge claude`), switch to a new conversation, or run `/resume` to reconnect.");
     return;
   }
   await connectToDaemon();
@@ -14566,11 +14566,11 @@ async function connectToDaemon(isReconnect = false) {
     await daemonClient.connect();
     daemonClient.attachClaude();
     if (!isReconnect) {
-      claude.pushNotification(systemMessage("system_bridge_ready", "\u2705 AgentBridge bridge is ready. Daemon connected. Start Codex in another terminal with: agentbridge codex"));
+      claude.pushNotification(systemMessage("system_bridge_ready", "\u2705 CcBridge bridge is ready. Daemon connected. Start Codex in another terminal with: cc-bridge codex"));
     }
   } catch (err) {
     log(`Failed to connect to daemon: ${err.message}`);
-    await claude.pushNotification(systemMessage("system_daemon_connect_failed", `\u274C AgentBridge daemon failed to start or is unreachable: ${err.message}`));
+    await claude.pushNotification(systemMessage("system_daemon_connect_failed", `\u274C CcBridge daemon failed to start or is unreachable: ${err.message}`));
     throw err;
   }
 }
@@ -14588,7 +14588,7 @@ var reconnectTask = null;
 async function notifyIfDaemonKilled(logMessage) {
   if (!daemonLifecycle.wasKilled())
     return false;
-  await enterDisabledState(logMessage, "\u26D4 AgentBridge was stopped by `agentbridge kill`. Bridge is staying idle. Restart Claude Code (`agentbridge claude`), switch to a new conversation, or run `/resume` to reconnect.");
+  await enterDisabledState(logMessage, "\u26D4 CcBridge was stopped by `cc-bridge kill`. Bridge is staying idle. Restart Claude Code (`cc-bridge claude`), switch to a new conversation, or run `/resume` to reconnect.");
   return true;
 }
 function reconnectToDaemon() {
@@ -14616,11 +14616,11 @@ function reconnectToDaemon() {
         }
         try {
           await connectToDaemon(true);
-          log("Reconnected to AgentBridge daemon successfully");
+          log("Reconnected to CcBridge daemon successfully");
           const now = Date.now();
           if (now - lastReconnectNotifyTs >= RECONNECT_NOTIFY_COOLDOWN_MS) {
             lastReconnectNotifyTs = now;
-            claude.pushNotification(systemMessage("system_daemon_reconnected", "\u2705 AgentBridge daemon reconnected successfully."));
+            claude.pushNotification(systemMessage("system_daemon_reconnected", "\u2705 CcBridge daemon reconnected successfully."));
           } else {
             log("Suppressing duplicate reconnect notification (within cooldown)");
           }
@@ -14667,7 +14667,7 @@ async function pollDisabledRecovery() {
       daemonClient.attachClaude();
       daemonDisabled = false;
       stopDisabledRecoveryPoller();
-      claude.pushNotification(systemMessage("system_bridge_recovered", "\u2705 AgentBridge recovered after the killed sentinel was cleared. Daemon reconnected."));
+      claude.pushNotification(systemMessage("system_bridge_recovered", "\u2705 CcBridge recovered after the killed sentinel was cleared. Daemon reconnected."));
     } catch (err) {
       log(`Disabled-state direct reconnect failed: ${err.message}`);
       daemonDisabled = false;
@@ -14717,14 +14717,14 @@ process.on("unhandledRejection", (reason) => {
   log(`UNHANDLED REJECTION: ${reason?.stack ?? reason}`);
 });
 function log(msg) {
-  const line = `[${new Date().toISOString()}] [AgentBridgeFrontend] ${msg}
+  const line = `[${new Date().toISOString()}] [CcBridgeFrontend] ${msg}
 `;
   process.stderr.write(line);
   try {
     appendFileSync2(stateDir.logFile, line);
   } catch {}
 }
-log(`Starting AgentBridge frontend (daemon ws ${CONTROL_WS_URL})`);
+log(`Starting CcBridge frontend (daemon ws ${CONTROL_WS_URL})`);
 (async () => {
   try {
     await claude.start();

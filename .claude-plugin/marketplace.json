@@ -1,23 +1,21 @@
 {
-  "name": "agentbridge",
+  "name": "cc-bridge",
   "owner": {
-    "name": "AgentBridge Contributors",
-    "email": "raysonmeng@qq.com",
-    "url": "https://github.com/raysonmeng/agent-bridge"
+    "name": "FirstIntent",
+    "url": "https://github.com/firstintent/cc-bridge"
   },
   "metadata": {
-    "description": "Marketplace for the AgentBridge Claude Code plugin and supporting runtime integration."
+    "description": "Marketplace for the cc-bridge Claude Code plugin and supporting runtime integration."
   },
   "plugins": [
     {
-      "name": "agentbridge",
-      "description": "Bridge Claude Code and Codex through a shared daemon, push channel delivery, and reply/get_messages tools.",
-      "version": "0.1.4",
+      "name": "cc-bridge",
+      "description": "Bridge Claude Code with other AI coding agents (Codex, OpenClaw, Hermes, ...) through a shared daemon and bidirectional channel tooling.",
+      "version": "0.0.1",
       "author": {
-        "name": "AgentBridge Contributors",
-        "email": "raysonmeng@qq.com"
+        "name": "FirstIntent"
       },
-      "source": "./plugins/agentbridge",
+      "source": "./plugins/cc-bridge",
       "category": "development"
     }
   ]

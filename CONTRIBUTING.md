@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for contributing to AgentBridge.
+Thanks for contributing to CcBridge.
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ Thanks for contributing to AgentBridge.
 
 ```bash
 bun install
-bun link    # Makes the 'agentbridge' command available globally
+bun link    # Makes the 'cc-bridge' command available globally
 ```
 
 ### For local development
@@ -20,11 +20,11 @@ bun link    # Makes the 'agentbridge' command available globally
 Use the `dev` command to register a local plugin marketplace and sync plugin files to the Claude Code cache:
 
 ```bash
-agentbridge dev     # Register local marketplace + sync plugin
-agentbridge claude  # Start Claude Code with plugin auto-loaded
+cc-bridge dev     # Register local marketplace + sync plugin
+cc-bridge claude  # Start Claude Code with plugin auto-loaded
 ```
 
-After changing plugin or runtime code, run `agentbridge dev` again and restart Claude Code (or `/reload-plugins` in an active session).
+After changing plugin or runtime code, run `cc-bridge dev` again and restart Claude Code (or `/reload-plugins` in an active session).
 
 ## Development Workflow
 

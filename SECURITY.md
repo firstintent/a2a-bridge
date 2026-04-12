@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in AgentBridge, please report it responsibly.
+If you discover a security vulnerability in CcBridge, please report it responsibly.
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
@@ -12,7 +12,7 @@ We will acknowledge your report within 48 hours and provide an estimated timelin
 
 ## Security Considerations
 
-AgentBridge runs locally on your machine and involves:
+CcBridge runs locally on your machine and involves:
 
 - **Local WebSocket connections** between Claude Code, the bridge daemon, and Codex app-server. All connections are on `127.0.0.1` — no external network exposure by default.
 - **MCP stdio communication** between Claude Code and the bridge process.
@@ -21,7 +21,7 @@ AgentBridge runs locally on your machine and involves:
 
 ## Trust Boundary
 
-This project uses Claude Code's **Channels** feature, which is currently a **Research Preview**. When launching with `--dangerously-load-development-channels`, you are granting the channel (AgentBridge) the ability to inject messages into your Claude Code session. Only use channels you trust.
+This project uses Claude Code's **Channels** feature, which is currently a **Research Preview**. When launching with `--dangerously-load-development-channels`, you are granting the channel (CcBridge) the ability to inject messages into your Claude Code session. Only use channels you trust.
 
 ## Supported Versions
 

@@ -11,7 +11,7 @@ describe("DaemonLifecycle", () => {
   let logs: string[];
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), "agentbridge-lifecycle-test-"));
+    tempDir = mkdtempSync(join(tmpdir(), "cc-bridge-lifecycle-test-"));
     stateDir = new StateDirResolver(tempDir);
     stateDir.ensure();
     logs = [];
@@ -104,7 +104,7 @@ describe("DaemonLifecycle", () => {
     expect(logs.some((l) => l.includes("not alive"))).toBe(true);
   });
 
-  test("kill refuses to signal a live process that is not an AgentBridge daemon", async () => {
+  test("kill refuses to signal a live process that is not an CcBridge daemon", async () => {
     const lc = createLifecycle();
     // Use current process pid — it's alive but NOT a daemon
     lc.writePid(process.pid);
@@ -112,7 +112,7 @@ describe("DaemonLifecycle", () => {
 
     const result = await lc.kill();
     expect(result).toBe(false);
-    expect(logs.some((l) => l.includes("NOT an AgentBridge daemon"))).toBe(true);
+    expect(logs.some((l) => l.includes("NOT an CcBridge daemon"))).toBe(true);
     // Pid file should be cleaned up
     expect(existsSync(stateDir.pidFile)).toBe(false);
   });

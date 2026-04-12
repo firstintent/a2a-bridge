@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 
 /**
- * AgentBridge CLI
+ * CcBridge CLI
  *
  * Commands:
- *   agentbridge init        — Install plugin, check deps, generate project config
- *   agentbridge dev         — Register local marketplace + install plugin for local dev
- *   agentbridge claude      — Start Claude Code with push channel flags
- *   agentbridge codex       — Start Codex TUI connected to daemon
- *   agentbridge kill        — Force kill all AgentBridge processes
+ *   cc-bridge init        — Install plugin, check deps, generate project config
+ *   cc-bridge dev         — Register local marketplace + install plugin for local dev
+ *   cc-bridge claude      — Start Claude Code with push channel flags
+ *   cc-bridge codex       — Start Codex TUI connected to daemon
+ *   cc-bridge kill        — Force kill all CcBridge processes
  */
 
 const args = process.argv.slice(2);
@@ -16,8 +16,8 @@ const command = args[0];
 const restArgs = args.slice(1);
 
 // Marketplace name constant (shared with plugin)
-export const MARKETPLACE_NAME = "agentbridge";
-export const PLUGIN_NAME = "agentbridge";
+export const MARKETPLACE_NAME = "cc-bridge";
+export const PLUGIN_NAME = "cc-bridge";
 
 async function main() {
   switch (command) {
@@ -52,25 +52,25 @@ async function main() {
       break;
     default:
       console.error(`Unknown command: ${command}`);
-      console.error(`Run "agentbridge --help" (or "abg --help") for usage.`);
+      console.error(`Run "cc-bridge --help" (or "abg --help") for usage.`);
       process.exit(1);
   }
 }
 
 function printHelp() {
   console.log(`
-AgentBridge — Multi-agent collaboration bridge
+CcBridge — Multi-agent collaboration bridge
 
 Usage:
-  agentbridge <command> [args...]
+  cc-bridge <command> [args...]
   abg <command> [args...]
 
 Commands:
   init              Install plugin, check dependencies, generate project config
   dev               Register local marketplace + install plugin (for local dev)
   claude [args...]  Start Claude Code with push channel enabled
-  codex [args...]   Start Codex TUI connected to AgentBridge daemon
-  kill              Force kill all AgentBridge processes
+  codex [args...]   Start Codex TUI connected to CcBridge daemon
+  kill              Force kill all CcBridge processes
 
 Options:
   --help, -h        Show this help message
@@ -89,9 +89,9 @@ Examples:
 function printVersion() {
   try {
     const pkg = require("../package.json");
-    console.log(`agentbridge v${pkg.version}`);
+    console.log(`cc-bridge v${pkg.version}`);
   } catch {
-    console.log("agentbridge (version unknown)");
+    console.log("cc-bridge (version unknown)");
   }
 }
 

@@ -1,5 +1,5 @@
 {
-  "description": "Hint-only health checks for AgentBridge startup. These hooks never orchestrate the daemon.",
+  "description": "Hint-only health checks for CcBridge startup. These hooks never orchestrate the daemon.",
   "hooks": {
     "SessionStart": [
       {
