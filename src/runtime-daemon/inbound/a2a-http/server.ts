@@ -1,11 +1,17 @@
 import { createLogger, type Logger } from "@shared/logger";
+import { AGENT_CARD_PATH } from "@daemon/inbound/a2a-http/auth";
+import {
+  buildAgentCard,
+  type AgentCard,
+  type AgentCardConfig,
+} from "@daemon/inbound/a2a-http/agent-card";
 
 /**
  * A2A-over-HTTP server skeleton.
  *
- * This is the bind layer only — health endpoint, request logging, and a
- * graceful shutdown handle. Agent-card, auth, JSON-RPC dispatch, and the
- * `message/stream` SSE handler land in subsequent P2.8–P2.14 tasks.
+ * Auth, JSON-RPC dispatch, and the `message/stream` SSE handler land in
+ * subsequent P2.10–P2.14 tasks. This commit wires the agent-card
+ * endpoint on top of the /healthz skeleton from P2.7.
  */
 
 export interface A2aServerConfig {
@@ -13,6 +19,11 @@ export interface A2aServerConfig {
   host?: string;
   /** TCP port to bind. */
   port: number;
+  /**
+   * Agent card config passed through to `buildAgentCard`. Required so
+   * the server can serve `/.well-known/agent-card.json`.
+   */
+  agentCard: AgentCardConfig;
   /** Optional log file path; when set, request log lines are tee'd there. */
   logFilePath?: string;
   /** Override the internal logger; mainly for tests. */
@@ -33,6 +44,8 @@ export async function startA2AServer(config: A2aServerConfig): Promise<A2aServer
   const log =
     config.logger ?? createLogger({ tag: "A2aHttpServer", filePath: config.logFilePath });
 
+  const card: AgentCard = buildAgentCard(config.agentCard);
+
   const server = Bun.serve({
     port: config.port,
     hostname: host,
@@ -42,6 +55,13 @@ export async function startA2AServer(config: A2aServerConfig): Promise<A2aServer
 
       if (url.pathname === "/healthz") {
         return new Response("ok", { status: 200, headers: { "content-type": "text/plain" } });
+      }
+
+      if (url.pathname === AGENT_CARD_PATH) {
+        return new Response(JSON.stringify(card), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       }
 
       return new Response("Not Found", { status: 404 });

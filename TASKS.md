@@ -85,7 +85,7 @@ their queries end-to-end.
   tokens with 401; the agent-card endpoint is exempt if
   `config.publicAgentCard === true`. Unit tests cover both paths.
 
-- [ ] **P2.9 — Agent-card endpoint.**
+- [/] **P2.9 — Agent-card endpoint.**
   Acceptance: `GET /.well-known/agent-card.json` returns the output
   of `buildAgentCard(config)` with `Content-Type: application/json`.
   Integration test verifies status 200 and schema.
