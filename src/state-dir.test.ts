@@ -8,7 +8,7 @@ describe("StateDirResolver", () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), "cc-bridge-test-"));
+    tempDir = mkdtempSync(join(tmpdir(), "a2a-bridge-test-"));
   });
 
   afterEach(() => {
@@ -27,7 +27,7 @@ describe("StateDirResolver", () => {
     expect(resolver.lockFile).toBe(join(tempDir, "daemon.lock"));
     expect(resolver.statusFile).toBe(join(tempDir, "status.json"));
     expect(resolver.portsFile).toBe(join(tempDir, "ports.json"));
-    expect(resolver.logFile).toBe(join(tempDir, "cc-bridge.log"));
+    expect(resolver.logFile).toBe(join(tempDir, "a2a-bridge.log"));
   });
 
   test("ensure() creates directory if it does not exist", () => {

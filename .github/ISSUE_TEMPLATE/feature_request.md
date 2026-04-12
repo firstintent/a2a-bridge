@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea for CcBridge
+about: Suggest an idea for A2aBridge
 title: "[Feature] "
 labels: enhancement
 ---

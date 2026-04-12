@@ -9,7 +9,7 @@ import { spawn, execSync } from "child_process";
 import { createInterface } from "readline";
 import { EventEmitter } from "events";
 import { appendFileSync } from "fs";
-var LOG_FILE = "/tmp/cc-bridge.log";
+var LOG_FILE = "/tmp/a2a-bridge.log";
 var TRACKED_REQUEST_METHODS = new Set(["thread/start", "thread/resume", "turn/start"]);
 
 class CodexAdapter extends EventEmitter {
@@ -210,7 +210,7 @@ class CodexAdapter extends EventEmitter {
         }
         if (server.upgrade(req, { data: { connId: 0 } }))
           return;
-        return new Response("CcBridge Codex Proxy");
+        return new Response("A2aBridge Codex Proxy");
       },
       websocket: {
         open: (ws) => self.onTuiConnect(ws),
@@ -819,7 +819,7 @@ class TuiConnectionState {
 import { spawn as spawn2, execFileSync } from "child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync, openSync, closeSync, constants } from "fs";
 import { fileURLToPath } from "url";
-var DAEMON_ENTRY = process.env.CC_BRIDGE_DAEMON_ENTRY ?? "./daemon.ts";
+var DAEMON_ENTRY = process.env.A2A_BRIDGE_DAEMON_ENTRY ?? "./daemon.ts";
 var DAEMON_PATH = fileURLToPath(new URL(DAEMON_ENTRY, import.meta.url));
 
 class DaemonLifecycle {
@@ -856,7 +856,7 @@ class DaemonLifecycle {
             throw new Error(`Found existing daemon process ${existingPid}, but control port ${this.controlPort} never became ready.`);
           }
         }
-        this.log(`Pid ${existingPid} is alive but not an CcBridge daemon, removing stale pid file`);
+        this.log(`Pid ${existingPid} is alive but not an A2aBridge daemon, removing stale pid file`);
       }
       this.removeStalePidFile();
     }
@@ -887,7 +887,7 @@ class DaemonLifecycle {
         return;
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    throw new Error(`Timed out waiting for CcBridge daemon health on ${this.healthUrl}`);
+    throw new Error(`Timed out waiting for A2aBridge daemon health on ${this.healthUrl}`);
   }
   async isReady() {
     try {
@@ -903,7 +903,7 @@ class DaemonLifecycle {
         return;
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    throw new Error(`Timed out waiting for CcBridge daemon readiness on ${this.readyUrl}`);
+    throw new Error(`Timed out waiting for A2aBridge daemon readiness on ${this.readyUrl}`);
   }
   readStatus() {
     try {
@@ -964,8 +964,8 @@ class DaemonLifecycle {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        CC_BRIDGE_CONTROL_PORT: String(this.controlPort),
-        CC_BRIDGE_STATE_DIR: this.stateDir.dir
+        A2A_BRIDGE_CONTROL_PORT: String(this.controlPort),
+        A2A_BRIDGE_STATE_DIR: this.stateDir.dir
       },
       detached: true,
       stdio: "ignore"
@@ -1026,7 +1026,7 @@ class DaemonLifecycle {
       return false;
     }
     if (!this.isDaemonProcess(pid)) {
-      this.log(`Pid ${pid} is alive but is NOT an CcBridge daemon \u2014 refusing to kill. Cleaning up stale pid file.`);
+      this.log(`Pid ${pid} is alive but is NOT an A2aBridge daemon \u2014 refusing to kill. Cleaning up stale pid file.`);
       this.cleanup();
       return false;
     }
@@ -1056,7 +1056,7 @@ class DaemonLifecycle {
   isDaemonProcess(pid) {
     try {
       const cmd = execFileSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf-8" }).trim();
-      return cmd.includes("daemon") && (cmd.includes("cc-bridge") || cmd.includes("agent_bridge"));
+      return cmd.includes("daemon") && (cmd.includes("a2a-bridge") || cmd.includes("agent_bridge"));
     } catch {
       return false;
     }
@@ -1084,14 +1084,14 @@ import { homedir, platform } from "os";
 class StateDirResolver {
   stateDir;
   constructor(envOverride) {
-    const override = envOverride ?? process.env.CC_BRIDGE_STATE_DIR;
+    const override = envOverride ?? process.env.A2A_BRIDGE_STATE_DIR;
     if (override) {
       this.stateDir = override;
     } else if (platform() === "darwin") {
-      this.stateDir = join(homedir(), "Library", "Application Support", "CcBridge");
+      this.stateDir = join(homedir(), "Library", "Application Support", "A2aBridge");
     } else {
       const xdgState = process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state");
-      this.stateDir = join(xdgState, "cc-bridge");
+      this.stateDir = join(xdgState, "a2a-bridge");
     }
   }
   ensure() {
@@ -1118,7 +1118,7 @@ class StateDirResolver {
     return join(this.stateDir, "ports.json");
   }
   get logFile() {
-    return join(this.stateDir, "cc-bridge.log");
+    return join(this.stateDir, "a2a-bridge.log");
   }
   get killedFile() {
     return join(this.stateDir, "killed");
@@ -1173,7 +1173,7 @@ var DEFAULT_COLLABORATION_MD = `# Collaboration Rules
 ## Custom Rules
 <!-- Add your project-specific collaboration rules here -->
 `;
-var CONFIG_DIR = ".cc-bridge";
+var CONFIG_DIR = ".a2a-bridge";
 var CONFIG_FILE = "config.json";
 var COLLABORATION_FILE = "collaboration.md";
 
@@ -1250,13 +1250,13 @@ var configService = new ConfigService;
 var config = configService.loadOrDefault();
 var CODEX_APP_PORT = parseInt(process.env.CODEX_WS_PORT ?? String(config.daemon.port), 10);
 var CODEX_PROXY_PORT = parseInt(process.env.CODEX_PROXY_PORT ?? String(config.daemon.proxyPort), 10);
-var CONTROL_PORT = parseInt(process.env.CC_BRIDGE_CONTROL_PORT ?? "4512", 10);
+var CONTROL_PORT = parseInt(process.env.A2A_BRIDGE_CONTROL_PORT ?? "4512", 10);
 var TUI_DISCONNECT_GRACE_MS = parseInt(process.env.TUI_DISCONNECT_GRACE_MS ?? "2500", 10);
 var CLAUDE_DISCONNECT_GRACE_MS = 5000;
-var MAX_BUFFERED_MESSAGES = parseInt(process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);
-var FILTER_MODE = process.env.CC_BRIDGE_FILTER_MODE === "full" ? "full" : "filtered";
-var IDLE_SHUTDOWN_MS = parseInt(process.env.CC_BRIDGE_IDLE_SHUTDOWN_MS ?? String(config.idleShutdownSeconds * 1000), 10);
-var ATTENTION_WINDOW_MS = parseInt(process.env.CC_BRIDGE_ATTENTION_WINDOW_MS ?? String(config.turnCoordination.attentionWindowSeconds * 1000), 10);
+var MAX_BUFFERED_MESSAGES = parseInt(process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);
+var FILTER_MODE = process.env.A2A_BRIDGE_FILTER_MODE === "full" ? "full" : "filtered";
+var IDLE_SHUTDOWN_MS = parseInt(process.env.A2A_BRIDGE_IDLE_SHUTDOWN_MS ?? String(config.idleShutdownSeconds * 1000), 10);
+var ATTENTION_WINDOW_MS = parseInt(process.env.A2A_BRIDGE_ATTENTION_WINDOW_MS ?? String(config.turnCoordination.attentionWindowSeconds * 1000), 10);
 var daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
 var codex = new CodexAdapter(CODEX_APP_PORT, CODEX_PROXY_PORT);
 var attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
@@ -1373,7 +1373,7 @@ codex.on("exit", (code) => {
   clearPendingClaudeDisconnect("Codex process exited");
   claudeOnlineNoticeSent = false;
   claudeOfflineNoticeShown = false;
-  emitToClaude(systemMessage("system_codex_exit", `\u26A0\uFE0F Codex app-server exited (code ${code ?? "unknown"}). CcBridge daemon is still running, but the Codex side needs to be restarted.`));
+  emitToClaude(systemMessage("system_codex_exit", `\u26A0\uFE0F Codex app-server exited (code ${code ?? "unknown"}). A2aBridge daemon is still running, but the Codex side needs to be restarted.`));
   broadcastStatus();
 });
 function startControlServer() {
@@ -1391,7 +1391,7 @@ function startControlServer() {
       if (url.pathname === "/ws" && server.upgrade(req, { data: { clientId: 0, attached: false } })) {
         return;
       }
-      return new Response("CcBridge daemon");
+      return new Response("A2aBridge daemon");
     },
     websocket: {
       idleTimeout: 960,
@@ -1588,7 +1588,7 @@ function scheduleClaudeDisconnectNotification(clientId) {
       log(`Suppressing Claude disconnect notification for client #${clientId} because Claude was never announced online`);
       return;
     }
-    codex.injectMessage("\u26A0\uFE0F Claude Code went offline. CcBridge is still running in the background; it will reconnect automatically when Claude reopens.");
+    codex.injectMessage("\u26A0\uFE0F Claude Code went offline. A2aBridge is still running in the background; it will reconnect automatically when Claude reopens.");
     claudeOnlineNoticeSent = false;
     claudeOfflineNoticeShown = true;
     log(`Claude disconnect persisted past grace window (client #${clientId})`);
@@ -1672,7 +1672,7 @@ function currentReadyMessage() {
 function notifyCodexClaudeOnline() {
   claudeOnlineNoticeSent = true;
   claudeOfflineNoticeShown = false;
-  codex.injectMessage("\u2705 CcBridge connected to Claude Code.");
+  codex.injectMessage("\u2705 A2aBridge connected to Claude Code.");
 }
 function shouldNotifyCodexClaudeOnline() {
   return !claudeOnlineNoticeSent || claudeOfflineNoticeShown;
@@ -1703,7 +1703,7 @@ function removeStatusFile() {
   daemonLifecycle.removeStatusFile();
 }
 async function bootCodex() {
-  log("Starting CcBridge daemon...");
+  log("Starting A2aBridge daemon...");
   log(`Codex app-server: ${codex.appServerUrl}`);
   log(`Codex proxy: ${codex.proxyUrl}`);
   log(`Control server: ws://127.0.0.1:${CONTROL_PORT}/ws`);
@@ -1715,7 +1715,7 @@ async function bootCodex() {
     broadcastStatus();
   } catch (err) {
     log(`Failed to start Codex: ${err.message}`);
-    emitToClaude(systemMessage("system_codex_start_failed", `\u274C CcBridge failed to start Codex app-server: ${err.message}`));
+    emitToClaude(systemMessage("system_codex_start_failed", `\u274C A2aBridge failed to start Codex app-server: ${err.message}`));
     broadcastStatus();
   }
 }
@@ -1746,7 +1746,7 @@ process.on("unhandledRejection", (reason) => {
   log(`UNHANDLED REJECTION: ${reason?.stack ?? reason}`);
 });
 function log(msg) {
-  const line = `[${new Date().toISOString()}] [CcBridgeDaemon] ${msg}
+  const line = `[${new Date().toISOString()}] [A2aBridgeDaemon] ${msg}
 `;
   process.stderr.write(line);
   try {

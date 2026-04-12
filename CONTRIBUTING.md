@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for contributing to CcBridge.
+Thanks for contributing to A2aBridge.
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ Thanks for contributing to CcBridge.
 
 ```bash
 bun install
-bun link    # Makes the 'cc-bridge' command available globally
+bun link    # Makes the 'a2a-bridge' command available globally
 ```
 
 ### For local development
@@ -20,11 +20,11 @@ bun link    # Makes the 'cc-bridge' command available globally
 Use the `dev` command to register a local plugin marketplace and sync plugin files to the Claude Code cache:
 
 ```bash
-cc-bridge dev     # Register local marketplace + sync plugin
-cc-bridge claude  # Start Claude Code with plugin auto-loaded
+a2a-bridge dev     # Register local marketplace + sync plugin
+a2a-bridge claude  # Start Claude Code with plugin auto-loaded
 ```
 
-After changing plugin or runtime code, run `cc-bridge dev` again and restart Claude Code (or `/reload-plugins` in an active session).
+After changing plugin or runtime code, run `a2a-bridge dev` again and restart Claude Code (or `/reload-plugins` in an active session).
 
 ## Development Workflow
 

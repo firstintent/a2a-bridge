@@ -5,7 +5,7 @@
  *   - Push mode (OAuth): real-time via notifications/claude/channel
  *   - Pull mode (API key): message queue + get_messages tool
  *
- * Mode defaults to push in auto mode, or set explicitly via CC_BRIDGE_MODE env var.
+ * Mode defaults to push in auto mode, or set explicitly via A2A_BRIDGE_MODE env var.
  *
  * Emits:
  *   - "ready"   ()                   — MCP connected, mode resolved
@@ -31,7 +31,7 @@ export const CLAUDE_INSTRUCTIONS = [
   "",
   "## Message delivery",
   "Messages from Codex may arrive in two ways depending on the connection mode:",
-  "- As <channel source=\"cc-bridge\" chat_id=\"...\" user=\"Codex\" ...> tags (push mode)",
+  "- As <channel source=\"a2a-bridge\" chat_id=\"...\" user=\"Codex\" ...> tags (push mode)",
   "- Via the get_messages tool (pull mode)",
   "",
   "## Collaboration roles",
@@ -60,7 +60,7 @@ export const CLAUDE_INSTRUCTIONS = [
   "- If the reply tool returns a busy error, Codex is still executing — wait and try again later.",
 ].join("\n");
 
-const LOG_FILE = "/tmp/cc-bridge.log";
+const LOG_FILE = "/tmp/a2a-bridge.log";
 
 export class ClaudeAdapter extends EventEmitter {
   private server: Server;
@@ -81,12 +81,12 @@ export class ClaudeAdapter extends EventEmitter {
     this.sessionId = `codex_${Date.now()}`;
     this.notificationIdPrefix = randomUUID().replace(/-/g, "").slice(0, 12);
 
-    const envMode = process.env.CC_BRIDGE_MODE as DeliveryMode | undefined;
+    const envMode = process.env.A2A_BRIDGE_MODE as DeliveryMode | undefined;
     this.configuredMode = envMode && ["push", "pull", "auto"].includes(envMode) ? envMode : "auto";
-    this.maxBufferedMessages = parseInt(process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);
+    this.maxBufferedMessages = parseInt(process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);
 
     this.server = new Server(
-      { name: "cc-bridge", version: "0.1.0" },
+      { name: "a2a-bridge", version: "0.1.0" },
       {
         capabilities: {
           experimental: { "claude/channel": {} },
@@ -131,15 +131,15 @@ export class ClaudeAdapter extends EventEmitter {
 
     if (this.configuredMode === "push" || this.configuredMode === "pull") {
       this.resolvedMode = this.configuredMode;
-      this.log(`Delivery mode set by CC_BRIDGE_MODE: ${this.resolvedMode}`);
+      this.log(`Delivery mode set by A2A_BRIDGE_MODE: ${this.resolvedMode}`);
     } else {
       // Default to push — Claude Code doesn't declare channel support in
       // client capabilities, so we can't detect it. Push is the better default
       // because it's real-time; if channels aren't available, notifications
-      // are silently ignored (no error), and users can set CC_BRIDGE_MODE=pull
+      // are silently ignored (no error), and users can set A2A_BRIDGE_MODE=pull
       // explicitly for API key setups.
       this.resolvedMode = "push";
-      this.log("Delivery mode defaulting to push (set CC_BRIDGE_MODE=pull for API key mode)");
+      this.log("Delivery mode defaulting to push (set A2A_BRIDGE_MODE=pull for API key mode)");
     }
   }
 

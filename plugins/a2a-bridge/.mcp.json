@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "cc-bridge": {
+    "a2a-bridge": {
       "command": "bun",
       "args": ["run", "${CLAUDE_PLUGIN_ROOT}/server/bridge-server.js"],
       "env": {
-        "CC_BRIDGE_DAEMON_ENTRY": "./daemon.js"
+        "A2A_BRIDGE_DAEMON_ENTRY": "./daemon.js"
       }
     }
   }

@@ -3,27 +3,27 @@ import { ClaudeAdapter } from "./claude-adapter";
 
 // Access internals for testing
 function createAdapter(envMode?: string): any {
-  const origMode = process.env.CC_BRIDGE_MODE;
-  const origMax = process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES;
+  const origMode = process.env.A2A_BRIDGE_MODE;
+  const origMax = process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES;
 
   if (envMode !== undefined) {
-    process.env.CC_BRIDGE_MODE = envMode;
+    process.env.A2A_BRIDGE_MODE = envMode;
   } else {
-    delete process.env.CC_BRIDGE_MODE;
+    delete process.env.A2A_BRIDGE_MODE;
   }
 
   const adapter = new ClaudeAdapter() as any;
 
   // Restore env immediately after construction reads it
   if (origMode !== undefined) {
-    process.env.CC_BRIDGE_MODE = origMode;
+    process.env.A2A_BRIDGE_MODE = origMode;
   } else {
-    delete process.env.CC_BRIDGE_MODE;
+    delete process.env.A2A_BRIDGE_MODE;
   }
   if (origMax !== undefined) {
-    process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES = origMax;
+    process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES = origMax;
   } else {
-    delete process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES;
+    delete process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES;
   }
 
   return adapter;
@@ -39,22 +39,22 @@ function makeBridgeMessage(content: string, ts?: number) {
 }
 
 describe("Dual-mode transport: mode resolution", () => {
-  test("configuredMode defaults to 'auto' when CC_BRIDGE_MODE is not set", () => {
+  test("configuredMode defaults to 'auto' when A2A_BRIDGE_MODE is not set", () => {
     const adapter = createAdapter();
     expect(adapter.configuredMode).toBe("auto");
   });
 
-  test("configuredMode respects CC_BRIDGE_MODE=push", () => {
+  test("configuredMode respects A2A_BRIDGE_MODE=push", () => {
     const adapter = createAdapter("push");
     expect(adapter.configuredMode).toBe("push");
   });
 
-  test("configuredMode respects CC_BRIDGE_MODE=pull", () => {
+  test("configuredMode respects A2A_BRIDGE_MODE=pull", () => {
     const adapter = createAdapter("pull");
     expect(adapter.configuredMode).toBe("pull");
   });
 
-  test("invalid CC_BRIDGE_MODE falls back to 'auto'", () => {
+  test("invalid A2A_BRIDGE_MODE falls back to 'auto'", () => {
     const adapter = createAdapter("invalid");
     expect(adapter.configuredMode).toBe("auto");
   });
@@ -95,10 +95,10 @@ describe("Dual-mode transport: pull mode message queue", () => {
   });
 
   test("queueForPull drops oldest when queue is full", () => {
-    const orig = process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES;
-    process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES = "3";
+    const orig = process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES;
+    process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES = "3";
     const adapter = createAdapter("pull");
-    process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES = orig;
+    process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES = orig;
 
     adapter.resolveMode();
 
@@ -180,10 +180,10 @@ describe("Dual-mode transport: drainMessages (get_messages)", () => {
   });
 
   test("includes dropped count when messages were lost", () => {
-    const orig = process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES;
-    process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES = "2";
+    const orig = process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES;
+    process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES = "2";
     const adapter = createAdapter("pull");
-    process.env.CC_BRIDGE_MAX_BUFFERED_MESSAGES = orig;
+    process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES = orig;
     adapter.resolveMode();
 
     adapter.queueForPull(makeBridgeMessage("a"));

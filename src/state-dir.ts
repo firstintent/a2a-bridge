@@ -3,27 +3,27 @@ import { join } from "node:path";
 import { homedir, platform } from "node:os";
 
 /**
- * Resolves the shared runtime state directory for CcBridge.
+ * Resolves the shared runtime state directory for A2aBridge.
  *
- * macOS:  ~/Library/Application Support/CcBridge
- * Linux:  ${XDG_STATE_HOME:-~/.local/state}/cc-bridge
- * Override: CC_BRIDGE_STATE_DIR env var
+ * macOS:  ~/Library/Application Support/A2aBridge
+ * Linux:  ${XDG_STATE_HOME:-~/.local/state}/a2a-bridge
+ * Override: A2A_BRIDGE_STATE_DIR env var
  *
  * This directory stores daemon pid, managed TUI pid, lock, status, ports, and logs.
- * It is NOT for project-level config (that lives in .cc-bridge/).
+ * It is NOT for project-level config (that lives in .a2a-bridge/).
  */
 export class StateDirResolver {
   private readonly stateDir: string;
 
   constructor(envOverride?: string) {
-    const override = envOverride ?? process.env.CC_BRIDGE_STATE_DIR;
+    const override = envOverride ?? process.env.A2A_BRIDGE_STATE_DIR;
     if (override) {
       this.stateDir = override;
     } else if (platform() === "darwin") {
-      this.stateDir = join(homedir(), "Library", "Application Support", "CcBridge");
+      this.stateDir = join(homedir(), "Library", "Application Support", "A2aBridge");
     } else {
       const xdgState = process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state");
-      this.stateDir = join(xdgState, "cc-bridge");
+      this.stateDir = join(xdgState, "a2a-bridge");
     }
   }
 
@@ -59,7 +59,7 @@ export class StateDirResolver {
   }
 
   get logFile(): string {
-    return join(this.stateDir, "cc-bridge.log");
+    return join(this.stateDir, "a2a-bridge.log");
   }
 
   get killedFile(): string {

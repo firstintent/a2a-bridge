@@ -3,26 +3,26 @@ import { MARKETPLACE_NAME, PLUGIN_NAME } from "../cli";
 import { DaemonLifecycle } from "../daemon-lifecycle";
 import { StateDirResolver } from "../state-dir";
 
-/** Flags that CcBridge owns and will inject automatically. */
+/** Flags that A2aBridge owns and will inject automatically. */
 const OWNED_FLAGS = ["--channels", "--dangerously-load-development-channels"];
 
 export async function runClaude(args: string[]) {
   // Check for owned flag conflicts
-  checkOwnedFlagConflicts(args, "cc-bridge claude", OWNED_FLAGS);
+  checkOwnedFlagConflicts(args, "a2a-bridge claude", OWNED_FLAGS);
 
   const stateDir = new StateDirResolver();
-  const controlPort = parseInt(process.env.CC_BRIDGE_CONTROL_PORT ?? "4512", 10);
+  const controlPort = parseInt(process.env.A2A_BRIDGE_CONTROL_PORT ?? "4512", 10);
   const lifecycle = new DaemonLifecycle({
     stateDir,
     controlPort,
-    log: (msg) => console.error(`[cc-bridge] ${msg}`),
+    log: (msg) => console.error(`[a2a-bridge] ${msg}`),
   });
 
   lifecycle.clearKilled();
 
   // Channel entry format: "server:<mcp-server-name>" for MCP-based channels,
   // or "plugin:<plugin>@<marketplace>" for plugin-based channels.
-  // CcBridge is installed as a plugin, so use the plugin channel format.
+  // A2aBridge is installed as a plugin, so use the plugin channel format.
   const channelEntry = `plugin:${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
 
   // Only use --dangerously-load-development-channels for now.
@@ -55,7 +55,7 @@ export async function runClaude(args: string[]) {
 }
 
 /**
- * Check if user passed any CcBridge-owned flags.
+ * Check if user passed any A2aBridge-owned flags.
  * Hard error if they did — mixed flag state is unpredictable.
  */
 export function checkOwnedFlagConflicts(
@@ -67,7 +67,7 @@ export function checkOwnedFlagConflicts(
     if (args.some((a) => a === flag || a.startsWith(`${flag}=`))) {
       console.error(`Error: "${flag}" is automatically set by ${commandName}.`);
       console.error("");
-      console.error("CcBridge automatically injects these flags:");
+      console.error("A2aBridge automatically injects these flags:");
       for (const f of ownedFlags) {
         console.error(`  ${f}`);
       }

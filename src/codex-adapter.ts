@@ -41,7 +41,7 @@ interface PendingServerRequest {
   timestamp: number;
 }
 
-const LOG_FILE = "/tmp/cc-bridge.log";
+const LOG_FILE = "/tmp/a2a-bridge.log";
 
 interface PendingRequest {
   method: AppServerTrackedRequestMethod;
@@ -306,7 +306,7 @@ export class CodexAdapter extends EventEmitter implements IPeerAdapter {
           return fetch(`http://127.0.0.1:${self.appPort}${url.pathname}`);
         }
         if (server.upgrade(req, { data: { connId: 0 } })) return undefined;
-        return new Response("CcBridge Codex Proxy");
+        return new Response("A2aBridge Codex Proxy");
       },
       websocket: {
         open: (ws: ServerWebSocket<TuiSocketData>) => self.onTuiConnect(ws),

@@ -6,11 +6,11 @@ import { MARKETPLACE_NAME, PLUGIN_NAME } from "../cli";
 import { findPackageRoot, registerMarketplace } from "./pkg-root";
 
 export async function runDev() {
-  console.log("CcBridge Dev Setup\n");
+  console.log("A2aBridge Dev Setup\n");
 
   const projectRoot = findPackageRoot();
   const marketplacePath = resolve(projectRoot, ".claude-plugin", "marketplace.json");
-  const pluginDir = resolve(projectRoot, "plugins", "cc-bridge");
+  const pluginDir = resolve(projectRoot, "plugins", "a2a-bridge");
   const pluginManifest = resolve(pluginDir, ".claude-plugin", "plugin.json");
 
   // Step 1: Validate local plugin exists
@@ -68,8 +68,8 @@ export async function runDev() {
 
   console.log("\n✅ Dev setup complete!\n");
   console.log("Next steps:");
-  console.log("  cc-bridge claude    # Start Claude Code (plugin auto-loaded)");
-  console.log("  cc-bridge codex     # Start Codex TUI");
+  console.log("  a2a-bridge claude    # Start Claude Code (plugin auto-loaded)");
+  console.log("  a2a-bridge codex     # Start Codex TUI");
   console.log("");
-  console.log("Code changed? Run 'cc-bridge dev' again, then restart Claude Code or /reload-plugins.");
+  console.log("Code changed? Run 'a2a-bridge dev' again, then restart Claude Code or /reload-plugins.");
 }
