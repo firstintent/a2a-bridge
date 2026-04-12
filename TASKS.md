@@ -90,7 +90,7 @@ their queries end-to-end.
   of `buildAgentCard(config)` with `Content-Type: application/json`.
   Integration test verifies status 200 and schema.
 
-- [ ] **P2.10 — JSON-RPC dispatcher.**
+- [/] **P2.10 — JSON-RPC dispatcher.**
   Acceptance: `a2a-http/jsonrpc.ts` exports a `dispatch(request,
   handlers)` function that validates JSON-RPC 2.0 framing, routes
   by method, and returns `{code: -32601}` for unknown methods.
