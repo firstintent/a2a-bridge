@@ -1,0 +1,13 @@
+cc-bridge
+Copyright (c) 2026 FirstIntent
+
+This project includes code vendored from:
+
+  agent-bridge
+  Copyright (c) 2026 AgentBridge Contributors
+  https://github.com/raysonmeng/agent-bridge
+  Licensed under the MIT License
+
+The initial TypeScript source tree, plugin skeleton, and build configuration
+were imported from agent-bridge at commit
+7e5ef22e14aeb61e8ec5f6b4a1d83243e5082a8f and subsequently modified.

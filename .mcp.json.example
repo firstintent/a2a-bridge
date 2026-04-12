@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agentbridge": {
+      "command": "bun",
+      "args": ["run", "/absolute/path/to/agent_bridge/src/bridge.ts"]
+    }
+  }
+}
