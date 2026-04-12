@@ -114,7 +114,7 @@ their queries end-to-end.
   in-memory task registry lands in the next task; unit test covers
   the 404 path.
 
-- [/] **P2.13 — In-memory task registry.**
+- [x] **P2.13 — In-memory task registry.**
   Acceptance: `a2a-http/task-registry.ts` stores created tasks
   keyed by `id`; `message/stream` registers on task creation;
   `tasks/get` returns the task; `tasks/cancel` marks it canceled
