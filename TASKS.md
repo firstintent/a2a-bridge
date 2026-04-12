@@ -47,7 +47,7 @@ their queries end-to-end.
   connections over a unix socket path; unit test uses a temp path
   and verifies a client can connect and send a frame.
 
-- [ ] **P2.4 — Migrate the daemon control plane to the `Listener`
+- [/] **P2.4 — Migrate the daemon control plane to the `Listener`
   interface.**
   Acceptance: `src/runtime-daemon/daemon.ts` no longer calls
   `Bun.serve` / WebSocket directly for the plugin connection; it

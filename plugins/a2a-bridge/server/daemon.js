@@ -1406,6 +1406,109 @@ class ConfigService {
   }
 }
 
+// src/transport/websocket.ts
+import { EventEmitter as EventEmitter2 } from "events";
+
+class WebSocketConnection extends EventEmitter2 {
+  open = true;
+  ws;
+  constructor(ws) {
+    super();
+    this.ws = ws;
+  }
+  get isOpen() {
+    return this.open && this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+  }
+  send(frame) {
+    if (!this.open || !this.ws) {
+      throw new Error("WebSocketConnection: cannot send on a closed connection");
+    }
+    this.ws.send(frame);
+  }
+  close() {
+    if (!this.open)
+      return;
+    this.open = false;
+    const ws = this.ws;
+    this.ws = null;
+    try {
+      ws?.close();
+    } catch {}
+    this.emit("close");
+  }
+  handleUnderlyingClose() {
+    if (!this.open)
+      return;
+    this.open = false;
+    this.ws = null;
+    this.emit("close");
+  }
+  handleMessage(raw) {
+    if (!this.open)
+      return;
+    const text = typeof raw === "string" ? raw : raw.toString("utf8");
+    this.emit("message", text);
+  }
+}
+
+class WebSocketListener extends EventEmitter2 {
+  opts;
+  server = null;
+  path;
+  constructor(opts) {
+    super();
+    this.opts = opts;
+    this.path = opts.path ?? "/ws";
+  }
+  async listen() {
+    if (this.server) {
+      throw new Error(`WebSocketListener: already listening on ${this.opts.hostname ?? "127.0.0.1"}:${this.opts.port}`);
+    }
+    const self = this;
+    this.server = Bun.serve({
+      port: this.opts.port,
+      hostname: this.opts.hostname ?? "127.0.0.1",
+      async fetch(req, server) {
+        const url = new URL(req.url);
+        if (url.pathname === self.path) {
+          if (server.upgrade(req, { data: { conn: null } })) {
+            return;
+          }
+          return new Response("Upgrade failed", { status: 400 });
+        }
+        if (self.opts.httpHandler) {
+          const custom = await self.opts.httpHandler(req);
+          if (custom !== undefined)
+            return custom;
+        }
+        return new Response("a2a-bridge daemon", { status: 404 });
+      },
+      websocket: {
+        idleTimeout: self.opts.idleTimeoutSec,
+        sendPings: self.opts.sendPings,
+        open(ws) {
+          const conn = new WebSocketConnection(ws);
+          ws.data.conn = conn;
+          self.emit("connection", conn);
+        },
+        message(ws, raw) {
+          ws.data.conn?.handleMessage(raw);
+        },
+        close(ws) {
+          ws.data.conn?.handleUnderlyingClose();
+        }
+      }
+    });
+  }
+  async close() {
+    const server = this.server;
+    if (!server)
+      return;
+    this.server = null;
+    server.stop(true);
+  }
+}
+
 // src/runtime-daemon/daemon.ts
 var stateDir = new StateDirResolver;
 stateDir.ensure();
@@ -1423,8 +1526,9 @@ var ATTENTION_WINDOW_MS = parseInt(process.env.A2A_BRIDGE_ATTENTION_WINDOW_MS ??
 var daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
 var codex = new CodexAdapter(CODEX_APP_PORT, CODEX_PROXY_PORT);
 var attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
-var controlServer = null;
+var controlListener = null;
 var attachedClaude = null;
+var controlClientMeta = new WeakMap;
 var nextControlClientId = 0;
 var nextSystemMessageId = 0;
 var codexBootstrapped = false;
@@ -1539,11 +1643,14 @@ codex.on("exit", (code) => {
   emitToClaude(systemMessage("system_codex_exit", `\u26A0\uFE0F Codex app-server exited (code ${code ?? "unknown"}). A2aBridge daemon is still running, but the Codex side needs to be restarted.`));
   broadcastStatus();
 });
-function startControlServer() {
-  controlServer = Bun.serve({
+async function startControlServer() {
+  const listener = new WebSocketListener({
     port: CONTROL_PORT,
     hostname: "127.0.0.1",
-    fetch(req, server) {
+    path: "/ws",
+    idleTimeoutSec: 960,
+    sendPings: true,
+    httpHandler: (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/healthz") {
         return Response.json(currentStatus());
@@ -1551,52 +1658,55 @@ function startControlServer() {
       if (url.pathname === "/readyz") {
         return Response.json(currentStatus(), { status: codexBootstrapped ? 200 : 503 });
       }
-      if (url.pathname === "/ws" && server.upgrade(req, { data: { clientId: 0, attached: false } })) {
-        return;
-      }
-      return new Response("A2aBridge daemon");
-    },
-    websocket: {
-      idleTimeout: 960,
-      sendPings: true,
-      open: (ws) => {
-        ws.data.clientId = ++nextControlClientId;
-        log(`Frontend socket opened (#${ws.data.clientId})`);
-      },
-      close: (ws, code, reason) => {
-        log(`Frontend socket closed (#${ws.data.clientId}, code=${code}, reason=${reason || "none"}, wasAttached=${attachedClaude === ws})`);
-        if (attachedClaude === ws) {
-          detachClaude(ws, "frontend socket closed");
-        }
-      },
-      message: (ws, raw) => {
-        handleControlMessage(ws, raw);
-      }
+      return;
     }
   });
+  listener.on("connection", (conn) => {
+    const clientId = ++nextControlClientId;
+    controlClientMeta.set(conn, { clientId, attached: false });
+    log(`Frontend socket opened (#${clientId})`);
+    conn.on("message", (raw) => {
+      handleControlMessage(conn, raw);
+    });
+    conn.on("close", () => {
+      const meta = controlClientMeta.get(conn);
+      const wasAttached = attachedClaude === conn;
+      log(`Frontend socket closed (#${meta?.clientId ?? "?"}, wasAttached=${wasAttached})`);
+      if (wasAttached) {
+        detachClaude(conn, "frontend socket closed");
+      }
+    });
+    conn.on("error", (err) => {
+      log(`Frontend socket error (#${clientId}): ${err.message}`);
+    });
+  });
+  listener.on("error", (err) => {
+    log(`Control listener error: ${err.message}`);
+  });
+  controlListener = listener;
+  await listener.listen();
 }
-function handleControlMessage(ws, raw) {
+function handleControlMessage(conn, raw) {
   let message;
   try {
-    const text = typeof raw === "string" ? raw : raw.toString();
-    message = JSON.parse(text);
+    message = JSON.parse(raw);
   } catch (e) {
     log(`Failed to parse control message: ${e.message}`);
     return;
   }
   switch (message.type) {
     case "claude_connect":
-      attachClaude(ws);
+      attachClaude(conn);
       return;
     case "claude_disconnect":
-      detachClaude(ws, "frontend requested disconnect");
+      detachClaude(conn, "frontend requested disconnect");
       return;
     case "status":
-      sendStatus(ws);
+      sendStatus(conn);
       return;
     case "claude_to_codex": {
       if (message.message.source !== "claude") {
-        sendProtocolMessage(ws, {
+        sendProtocolMessage(conn, {
           type: "claude_to_codex_result",
           requestId: message.requestId,
           success: false,
@@ -1605,7 +1715,7 @@ function handleControlMessage(ws, raw) {
         return;
       }
       if (!tuiConnectionState.canReply()) {
-        sendProtocolMessage(ws, {
+        sendProtocolMessage(conn, {
           type: "claude_to_codex_result",
           requestId: message.requestId,
           success: false,
@@ -1628,7 +1738,7 @@ function handleControlMessage(ws, raw) {
       if (!injected) {
         const reason = codex.turnInProgress ? "Codex is busy executing a turn. Wait for it to finish before sending another message." : "Injection failed: no active thread or WebSocket not connected.";
         log(`Injection rejected: ${reason}`);
-        sendProtocolMessage(ws, {
+        sendProtocolMessage(conn, {
           type: "claude_to_codex_result",
           requestId: message.requestId,
           success: false,
@@ -1637,7 +1747,7 @@ function handleControlMessage(ws, raw) {
         return;
       }
       clearAttentionWindow();
-      sendProtocolMessage(ws, {
+      sendProtocolMessage(conn, {
         type: "claude_to_codex_result",
         requestId: message.requestId,
         success: true
@@ -1646,26 +1756,28 @@ function handleControlMessage(ws, raw) {
     }
   }
 }
-function attachClaude(ws) {
-  if (attachedClaude && attachedClaude !== ws) {
-    attachedClaude.close(4001, "replaced by a newer Claude session");
+function attachClaude(conn) {
+  if (attachedClaude && attachedClaude !== conn) {
+    attachedClaude.close();
   }
+  const meta = controlClientMeta.get(conn);
   clearPendingClaudeDisconnect("Claude frontend attached");
-  attachedClaude = ws;
-  ws.data.attached = true;
+  attachedClaude = conn;
+  if (meta)
+    meta.attached = true;
   cancelIdleShutdown();
-  log(`Claude frontend attached (#${ws.data.clientId})`);
+  log(`Claude frontend attached (#${meta?.clientId ?? "?"})`);
   statusBuffer.flush("claude reconnected");
-  sendStatus(ws);
+  sendStatus(conn);
   const now = Date.now();
   const isRapidReattach = now - lastAttachStatusSentTs < ATTACH_STATUS_COOLDOWN_MS;
   if (bufferedMessages.length > 0) {
-    flushBufferedMessages(ws);
+    flushBufferedMessages(conn);
   } else if (!isRapidReattach) {
     if (tuiConnectionState.canReply()) {
-      sendBridgeMessage(ws, systemMessage("system_ready", currentReadyMessage()));
+      sendBridgeMessage(conn, systemMessage("system_ready", currentReadyMessage()));
     } else if (codexBootstrapped) {
-      sendBridgeMessage(ws, systemMessage("system_waiting", currentWaitingMessage()));
+      sendBridgeMessage(conn, systemMessage("system_waiting", currentWaitingMessage()));
     }
   }
   lastAttachStatusSentTs = now;
@@ -1673,13 +1785,15 @@ function attachClaude(ws) {
     notifyCodexClaudeOnline();
   }
 }
-function detachClaude(ws, reason) {
-  if (attachedClaude !== ws)
+function detachClaude(conn, reason) {
+  if (attachedClaude !== conn)
     return;
+  const meta = controlClientMeta.get(conn);
   attachedClaude = null;
-  ws.data.attached = false;
-  log(`Claude frontend detached (#${ws.data.clientId}, ${reason})`);
-  scheduleClaudeDisconnectNotification(ws.data.clientId);
+  if (meta)
+    meta.attached = false;
+  log(`Claude frontend detached (#${meta?.clientId ?? "?"}, ${reason})`);
+  scheduleClaudeDisconnectNotification(meta?.clientId ?? -1);
   scheduleIdleShutdown();
 }
 function startAttentionWindow() {
@@ -1758,7 +1872,7 @@ function scheduleClaudeDisconnectNotification(clientId) {
   }, CLAUDE_DISCONNECT_GRACE_MS);
 }
 function emitToClaude(message) {
-  if (attachedClaude && attachedClaude.readyState === WebSocket.OPEN) {
+  if (attachedClaude && attachedClaude.isOpen) {
     if (trySendBridgeMessage(attachedClaude, message))
       return;
     log("Send to Claude failed, buffering message for retry on reconnect");
@@ -1770,45 +1884,41 @@ function emitToClaude(message) {
     log(`Message buffer overflow: dropped ${dropped} oldest message(s), ${MAX_BUFFERED_MESSAGES} remaining`);
   }
 }
-function trySendBridgeMessage(ws, message) {
+function trySendBridgeMessage(conn, message) {
   try {
-    const result = ws.send(JSON.stringify({ type: "codex_to_claude", message }));
-    if (typeof result === "number" && result <= 0) {
-      log(`Bridge message send returned ${result} (0=dropped, -1=backpressure)`);
-      return false;
-    }
+    conn.send(JSON.stringify({ type: "codex_to_claude", message }));
     return true;
   } catch (err) {
     log(`Failed to send bridge message: ${err.message}`);
     return false;
   }
 }
-function flushBufferedMessages(ws) {
+function flushBufferedMessages(conn) {
   const messages = bufferedMessages.splice(0, bufferedMessages.length);
-  for (const message of messages) {
-    if (!trySendBridgeMessage(ws, message)) {
-      const failedIndex = messages.indexOf(message);
-      const remaining = messages.slice(failedIndex);
+  for (let i = 0;i < messages.length; i++) {
+    const message = messages[i];
+    if (!trySendBridgeMessage(conn, message)) {
+      const remaining = messages.slice(i);
       bufferedMessages.unshift(...remaining);
       log(`Flush interrupted: re-buffered ${remaining.length} message(s) after send failure`);
       return;
     }
   }
 }
-function sendBridgeMessage(ws, message) {
-  trySendBridgeMessage(ws, message);
+function sendBridgeMessage(conn, message) {
+  trySendBridgeMessage(conn, message);
 }
-function sendStatus(ws) {
-  sendProtocolMessage(ws, { type: "status", status: currentStatus() });
+function sendStatus(conn) {
+  sendProtocolMessage(conn, { type: "status", status: currentStatus() });
 }
 function broadcastStatus() {
   if (!attachedClaude)
     return;
   sendStatus(attachedClaude);
 }
-function sendProtocolMessage(ws, message) {
+function sendProtocolMessage(conn, message) {
   try {
-    ws.send(JSON.stringify(message));
+    conn.send(JSON.stringify(message));
   } catch (err) {
     log(`Failed to send control message: ${err.message}`);
   }
@@ -1889,8 +1999,8 @@ function shutdown(reason) {
   log(`Shutting down daemon (${reason})...`);
   tuiConnectionState.dispose(`daemon shutdown (${reason})`);
   clearPendingClaudeDisconnect(`daemon shutdown (${reason})`);
-  controlServer?.stop();
-  controlServer = null;
+  controlListener?.close();
+  controlListener = null;
   codex.stop();
   removePidFile();
   removeStatusFile();
