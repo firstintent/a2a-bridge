@@ -57,7 +57,7 @@ their queries end-to-end.
 
 ## InboundService scaffold
 
-- [ ] **P2.5 — Create `src/runtime-daemon/inbound/` layout.**
+- [/] **P2.5 — Create `src/runtime-daemon/inbound/` layout.**
   Acceptance: new files `inbound-service.ts` (interface
   `IInboundService`), `inbound-factory.ts` (dispatch by `kind:
   "a2a-http"`), and `a2a-http/` subdir with an `index.ts` stub.
