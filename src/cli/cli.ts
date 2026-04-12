@@ -15,9 +15,8 @@ const args = process.argv.slice(2);
 const command = args[0];
 const restArgs = args.slice(1);
 
-// Marketplace name constant (shared with plugin)
-export const MARKETPLACE_NAME = "a2a-bridge";
-export const PLUGIN_NAME = "a2a-bridge";
+// Re-export for external callers; the canonical source is ./constants.
+export { MARKETPLACE_NAME, PLUGIN_NAME } from "./constants";
 
 async function main() {
   switch (command) {

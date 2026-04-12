@@ -1,6 +1,6 @@
 import { execSync, execFileSync } from "node:child_process";
-import { ConfigService } from "@daemon/config-service";
-import { MARKETPLACE_NAME, PLUGIN_NAME } from "./cli";
+import { ConfigService } from "@shared/config-service";
+import { MARKETPLACE_NAME, PLUGIN_NAME } from "./constants";
 import { findPackageRoot, registerMarketplace } from "./pkg-root";
 
 const MIN_CLAUDE_VERSION = "2.1.80";

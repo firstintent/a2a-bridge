@@ -11,9 +11,9 @@ import {
   type FilterMode,
 } from "@daemon/message-filter";
 import { TuiConnectionState } from "@daemon/peers/codex/tui-connection-state";
-import { DaemonLifecycle } from "@plugin/daemon-client/daemon-lifecycle";
+import { DaemonLifecycle } from "@shared/daemon-lifecycle";
 import { StateDirResolver } from "@shared/state-dir";
-import { ConfigService } from "@daemon/config-service";
+import { ConfigService } from "@shared/config-service";
 import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "@transport/control-protocol";
 import type { BridgeMessage } from "@messages/types";
 

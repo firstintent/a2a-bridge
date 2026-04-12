@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, unlinkSync } from "node:fs";
 import { StateDirResolver } from "@shared/state-dir";
-import { DaemonLifecycle, isProcessAlive } from "@plugin/daemon-client/daemon-lifecycle";
+import { DaemonLifecycle, isProcessAlive } from "@shared/daemon-lifecycle";
 
 export async function runKill() {
   console.log("A2aBridge Kill — stopping daemon and managed Codex TUI\n");

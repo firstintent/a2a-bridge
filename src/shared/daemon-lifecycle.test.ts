@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "no
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { StateDirResolver } from "@shared/state-dir";
-import { DaemonLifecycle, isProcessAlive } from "@plugin/daemon-client/daemon-lifecycle";
+import { DaemonLifecycle, isProcessAlive } from "@shared/daemon-lifecycle";
 
 describe("DaemonLifecycle", () => {
   let tempDir: string;
