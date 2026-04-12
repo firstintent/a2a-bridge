@@ -79,7 +79,7 @@ their queries end-to-end.
   `config.host`/`config.port`; logs requests through
   `@shared/logger`. Integration test: GET /healthz returns 200.
 
-- [/] **P2.8 — Bearer auth middleware.**
+- [x] **P2.8 — Bearer auth middleware.**
   Acceptance: `a2a-http/auth.ts` exports a request guard that
   accepts `Authorization: Bearer <token>` and rejects missing/bad
   tokens with 401; the agent-card endpoint is exempt if
