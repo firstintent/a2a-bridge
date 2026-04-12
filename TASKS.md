@@ -122,7 +122,7 @@ their queries end-to-end.
 
 ## CC integration
 
-- [/] **P2.14 — Wire inbound to the existing Codex-backed Room.**
+- [x] **P2.14 — Wire inbound to the existing Codex-backed Room.**
   Acceptance: replace the `message/stream` executor stub with one
   that forwards the user text into the single active daemon room
   (reuses the path already consumed by the plugin's `reply` tool
