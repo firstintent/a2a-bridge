@@ -5,7 +5,7 @@ import { StateDirResolver } from "./state-dir";
 
 // When bundled into a Claude Code plugin, the frontend runs from the plugin
 // cache directory and must launch the sibling daemon bundle from there.
-const DAEMON_ENTRY = process.env.CC_BRIDGE_DAEMON_ENTRY ?? "./daemon.ts";
+const DAEMON_ENTRY = process.env.A2A_BRIDGE_DAEMON_ENTRY ?? "./daemon.ts";
 const DAEMON_PATH = fileURLToPath(new URL(DAEMON_ENTRY, import.meta.url));
 
 export interface DaemonLifecycleOptions {
@@ -16,7 +16,7 @@ export interface DaemonLifecycleOptions {
 
 /**
  * Shared daemon lifecycle management.
- * Used by both CLI (cc-bridge codex) and plugin frontend (bridge.ts).
+ * Used by both CLI (a2a-bridge codex) and plugin frontend (bridge.ts).
  */
 export class DaemonLifecycle {
   private readonly stateDir: StateDirResolver;
@@ -63,7 +63,7 @@ export class DaemonLifecycle {
           }
         }
         // Live process but NOT our daemon — stale PID reused by OS
-        this.log(`Pid ${existingPid} is alive but not an CcBridge daemon, removing stale pid file`);
+        this.log(`Pid ${existingPid} is alive but not an A2aBridge daemon, removing stale pid file`);
       }
       this.removeStalePidFile();
     }
@@ -101,7 +101,7 @@ export class DaemonLifecycle {
       if (await this.isHealthy()) return;
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    throw new Error(`Timed out waiting for CcBridge daemon health on ${this.healthUrl}`);
+    throw new Error(`Timed out waiting for A2aBridge daemon health on ${this.healthUrl}`);
   }
 
   /** Check if daemon is ready to accept Codex TUI connections. */
@@ -120,7 +120,7 @@ export class DaemonLifecycle {
       if (await this.isReady()) return;
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    throw new Error(`Timed out waiting for CcBridge daemon readiness on ${this.readyUrl}`);
+    throw new Error(`Timed out waiting for A2aBridge daemon readiness on ${this.readyUrl}`);
   }
 
   /** Read daemon status from status.json. */
@@ -198,8 +198,8 @@ export class DaemonLifecycle {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        CC_BRIDGE_CONTROL_PORT: String(this.controlPort),
-        CC_BRIDGE_STATE_DIR: this.stateDir.dir,
+        A2A_BRIDGE_CONTROL_PORT: String(this.controlPort),
+        A2A_BRIDGE_STATE_DIR: this.stateDir.dir,
       },
       detached: true,
       stdio: "ignore",
@@ -277,11 +277,11 @@ export class DaemonLifecycle {
       return false;
     }
 
-    // Verify the PID actually belongs to an CcBridge daemon.
+    // Verify the PID actually belongs to an A2aBridge daemon.
     // If the PID file is stale and the OS has reused the PID,
     // we must NOT kill an unrelated process.
     if (!this.isDaemonProcess(pid)) {
-      this.log(`Pid ${pid} is alive but is NOT an CcBridge daemon — refusing to kill. Cleaning up stale pid file.`);
+      this.log(`Pid ${pid} is alive but is NOT an A2aBridge daemon — refusing to kill. Cleaning up stale pid file.`);
       this.cleanup();
       return false;
     }
@@ -317,17 +317,17 @@ export class DaemonLifecycle {
   }
 
   /**
-   * Verify that a live PID actually belongs to an CcBridge daemon
+   * Verify that a live PID actually belongs to an A2aBridge daemon
    * by checking the process command line. Prevents killing an unrelated
    * process when the OS has reused a stale PID.
    */
   private isDaemonProcess(pid: number): boolean {
     // Always verify via process command line — status.json/pid files can be
     // stale and matching PIDs only proves two local files agree, not that
-    // the live process is actually CcBridge.
+    // the live process is actually A2aBridge.
     try {
       const cmd = execFileSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf-8" }).trim();
-      return cmd.includes("daemon") && (cmd.includes("cc-bridge") || cmd.includes("agent_bridge"));
+      return cmd.includes("daemon") && (cmd.includes("a2a-bridge") || cmd.includes("agent_bridge"));
     } catch {
       // ps failed — process may have exited between our check and the ps call
       return false;

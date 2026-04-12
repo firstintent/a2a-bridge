@@ -2,7 +2,7 @@
 
 /**
  * postinstall check: verify that Bun is available.
- * This runs after `npm install -g cc-bridge` to warn users early
+ * This runs after `npm install -g a2a-bridge` to warn users early
  * rather than letting them hit a cryptic "bun: No such file or directory".
  */
 
@@ -10,10 +10,10 @@ const { execFileSync } = require("child_process");
 
 try {
   const version = execFileSync("bun", ["--version"], { encoding: "utf-8" }).trim();
-  console.log(`\x1b[32m✔\x1b[0m CcBridge: Bun ${version} detected.`);
+  console.log(`\x1b[32m✔\x1b[0m A2aBridge: Bun ${version} detected.`);
 } catch {
   console.warn(`
-\x1b[33m⚠ CcBridge requires Bun (v1.0+) as its runtime.\x1b[0m
+\x1b[33m⚠ A2aBridge requires Bun (v1.0+) as its runtime.\x1b[0m
 
 The CLI was installed, but it won't work without Bun.
 Install Bun with:

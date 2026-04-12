@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 
 /** Machine-readable project config schema. */
-export interface CcBridgeConfig {
+export interface A2aBridgeConfig {
   version: string;
   daemon: {
     port: number;
@@ -23,7 +23,7 @@ export interface CcBridgeConfig {
   idleShutdownSeconds: number;
 }
 
-const DEFAULT_CONFIG: CcBridgeConfig = {
+const DEFAULT_CONFIG: A2aBridgeConfig = {
   version: "1.0",
   daemon: {
     port: 4510,
@@ -70,7 +70,7 @@ const DEFAULT_COLLABORATION_MD = `# Collaboration Rules
 <!-- Add your project-specific collaboration rules here -->
 `;
 
-const CONFIG_DIR = ".cc-bridge";
+const CONFIG_DIR = ".a2a-bridge";
 const CONFIG_FILE = "config.json";
 const COLLABORATION_FILE = "collaboration.md";
 
@@ -92,22 +92,22 @@ export class ConfigService {
   }
 
   /** Load project config, returns null if not found. */
-  load(): CcBridgeConfig | null {
+  load(): A2aBridgeConfig | null {
     try {
       const raw = readFileSync(this.configPath, "utf-8");
-      return JSON.parse(raw) as CcBridgeConfig;
+      return JSON.parse(raw) as A2aBridgeConfig;
     } catch {
       return null;
     }
   }
 
   /** Load project config, falling back to defaults. */
-  loadOrDefault(): CcBridgeConfig {
+  loadOrDefault(): A2aBridgeConfig {
     return this.load() ?? structuredClone(DEFAULT_CONFIG);
   }
 
   /** Save project config. */
-  save(config: CcBridgeConfig): void {
+  save(config: A2aBridgeConfig): void {
     this.ensureConfigDir();
     writeFileSync(this.configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
   }

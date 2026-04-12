@@ -7,7 +7,7 @@ function readJson(path) {
 }
 
 const packageJson = readJson(new URL("../package.json", import.meta.url));
-const pluginJson = readJson(new URL("../plugins/cc-bridge/.claude-plugin/plugin.json", import.meta.url));
+const pluginJson = readJson(new URL("../plugins/a2a-bridge/.claude-plugin/plugin.json", import.meta.url));
 const marketplaceJson = readJson(new URL("../.claude-plugin/marketplace.json", import.meta.url));
 
 const expectedVersion = packageJson.version;
@@ -21,7 +21,7 @@ const errors = [];
 
 if (pluginVersion !== expectedVersion) {
   errors.push(
-    `plugins/cc-bridge/.claude-plugin/plugin.json version ${pluginVersion} does not match package.json version ${expectedVersion}.`,
+    `plugins/a2a-bridge/.claude-plugin/plugin.json version ${pluginVersion} does not match package.json version ${expectedVersion}.`,
   );
 }
 

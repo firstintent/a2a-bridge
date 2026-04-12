@@ -1,11 +1,11 @@
 {
-  "name": "cc-bridge",
+  "name": "a2a-bridge",
   "version": "0.0.1",
   "description": "Bridge Claude Code with other AI coding agents (Codex, OpenClaw, Hermes, ...) through a shared daemon, push channel delivery, and bidirectional reply tooling.",
   "author": {
     "name": "FirstIntent"
   },
-  "homepage": "https://github.com/firstintent/cc-bridge#readme",
-  "repository": "https://github.com/firstintent/cc-bridge",
+  "homepage": "https://github.com/firstintent/a2a-bridge#readme",
+  "repository": "https://github.com/firstintent/a2a-bridge",
   "license": "MIT"
 }

@@ -1,19 +1,19 @@
 ---
-description: Create or update the CcBridge project config files in the current workspace
+description: Create or update the A2aBridge project config files in the current workspace
 allowed-tools: Read,Write,Edit,MultiEdit,LS
 ---
 
-Bootstrap or update CcBridge's project-local configuration in this workspace.
+Bootstrap or update A2aBridge's project-local configuration in this workspace.
 
 Follow these rules:
 
-1. Work only inside `.cc-bridge/`.
-2. Do not install plugins or modify `.claude/settings.json` here. Plugin setup belongs to terminal workflows: `cc-bridge init` attempts best-effort plugin installation, and `cc-bridge dev` handles local marketplace registration/sync.
+1. Work only inside `.a2a-bridge/`.
+2. Do not install plugins or modify `.claude/settings.json` here. Plugin setup belongs to terminal workflows: `a2a-bridge init` attempts best-effort plugin installation, and `a2a-bridge dev` handles local marketplace registration/sync.
 3. Preserve user edits when the files already exist. Update only the fields the user asked to change.
-4. Keep `.cc-bridge/config.json` valid JSON.
-5. Keep `.cc-bridge/collaboration.md` human-editable and concise.
+4. Keep `.a2a-bridge/config.json` valid JSON.
+5. Keep `.a2a-bridge/collaboration.md` human-editable and concise.
 
-If `.cc-bridge/config.json` is missing, create it with this default template:
+If `.a2a-bridge/config.json` is missing, create it with this default template:
 
 ```json
 {
@@ -40,7 +40,7 @@ If `.cc-bridge/config.json` is missing, create it with this default template:
 }
 ```
 
-If `.cc-bridge/collaboration.md` is missing, create it with this default template:
+If `.a2a-bridge/collaboration.md` is missing, create it with this default template:
 
 ```markdown
 # Collaboration Rules

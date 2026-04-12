@@ -4,10 +4,10 @@ import { StateDirResolver } from "../state-dir";
 import { DaemonLifecycle, isProcessAlive } from "../daemon-lifecycle";
 
 export async function runKill() {
-  console.log("CcBridge Kill — stopping daemon and managed Codex TUI\n");
+  console.log("A2aBridge Kill — stopping daemon and managed Codex TUI\n");
 
   const stateDir = new StateDirResolver();
-  const controlPort = parseInt(process.env.CC_BRIDGE_CONTROL_PORT ?? "4512", 10);
+  const controlPort = parseInt(process.env.A2A_BRIDGE_CONTROL_PORT ?? "4512", 10);
 
   const lifecycle = new DaemonLifecycle({
     stateDir,
@@ -23,10 +23,10 @@ export async function runKill() {
   const killed = await lifecycle.kill();
 
   if (killed || tuiKilled) {
-    console.log("\nCcBridge stopped.");
-    console.log("Please restart Claude Code (`cc-bridge claude`), switch to a new conversation, or run `/resume` to fully disconnect.");
+    console.log("\nA2aBridge stopped.");
+    console.log("Please restart Claude Code (`a2a-bridge claude`), switch to a new conversation, or run `/resume` to fully disconnect.");
   } else {
-    console.log("\nNo running CcBridge daemon or managed Codex TUI found.");
+    console.log("\nNo running A2aBridge daemon or managed Codex TUI found.");
     console.log("Stale state files cleaned up (if any).");
   }
 }
@@ -50,7 +50,7 @@ async function killManagedCodexTui(
   }
 
   if (!isManagedCodexTuiProcess(pid)) {
-    log(`Pid ${pid} is alive but is NOT a managed CcBridge Codex TUI — refusing to kill. Cleaning up stale pid file.`);
+    log(`Pid ${pid} is alive but is NOT a managed A2aBridge Codex TUI — refusing to kill. Cleaning up stale pid file.`);
     removeTuiPidFile(stateDir);
     return false;
   }

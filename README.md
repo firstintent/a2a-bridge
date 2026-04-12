@@ -1,4 +1,4 @@
-# cc-bridge
+# a2a-bridge
 
 A bidirectional bridge that lets Claude Code talk to other AI coding agents — **Codex**, **OpenClaw**, **Hermes**, and more — inside the same live session.
 
@@ -19,7 +19,7 @@ Early development. See `ROADMAP.md` (TBD) for phased plan.
 
 ```
 ┌──────────────┐   MCP stdio (channel)   ┌──────────────────┐   control WS (TLS)   ┌──────────────┐
-│ Claude Code  │ ◀────────────────────▶  │ cc-bridge plugin │ ◀──────────────────▶ │   daemon     │
+│ Claude Code  │ ◀────────────────────▶  │ a2a-bridge plugin │ ◀──────────────────▶ │   daemon     │
 └──────────────┘                         └──────────────────┘                      └──────┬───────┘
                                                                                           │
                                                                        ┌──────────────────┼──────────────────┐

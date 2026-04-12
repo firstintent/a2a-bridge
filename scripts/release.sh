@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# CcBridge Release Script
+# A2aBridge Release Script
 # Usage: ./scripts/release.sh <patch|minor|major> [--dry-run]
 #
 # Steps:
@@ -11,7 +11,7 @@ set -euo pipefail
 #   4. Commit on release branch, push, create PR, merge
 #   5. Create GitHub Release (triggers npm publish via Actions)
 
-REPO="firstintent/cc-bridge"
+REPO="firstintent/a2a-bridge"
 DRY_RUN=false
 
 # ── Parse args ────────────────────────────────────────────
@@ -148,7 +148,7 @@ fi
 git checkout -b "$BRANCH_NAME"
 
 bump_version_in_file "package.json" "$CURRENT_VERSION" "$NEW_VERSION"
-bump_version_in_file "plugins/cc-bridge/.claude-plugin/plugin.json" "$CURRENT_VERSION" "$NEW_VERSION"
+bump_version_in_file "plugins/a2a-bridge/.claude-plugin/plugin.json" "$CURRENT_VERSION" "$NEW_VERSION"
 bump_version_in_file ".claude-plugin/marketplace.json" "$CURRENT_VERSION" "$NEW_VERSION"
 
 echo "Updated package.json, plugin.json, marketplace.json → $NEW_VERSION"
@@ -171,7 +171,7 @@ echo "All checks passed."
 echo ""
 echo "=== Step 3: Commit + PR + merge ==="
 
-git add package.json plugins/cc-bridge/.claude-plugin/plugin.json .claude-plugin/marketplace.json
+git add package.json plugins/a2a-bridge/.claude-plugin/plugin.json .claude-plugin/marketplace.json
 git commit -m "chore: bump version to $NEW_VERSION"
 git push -u origin "$BRANCH_NAME"
 
@@ -229,7 +229,7 @@ append_section "Other" "其他" "$OTHERS"
 
 NOTES+=$'\n'"### Installation / 安装"$'\n'
 NOTES+='```bash'$'\n'
-NOTES+="npm install -g @firstintent/cc-bridge"$'\n'
+NOTES+="npm install -g @firstintent/a2a-bridge"$'\n'
 NOTES+='```'$'\n'
 NOTES+=$'\n'"**Full Changelog / 完整变更记录:** https://github.com/$REPO/compare/$COMPARE_BASE...v$NEW_VERSION"
 

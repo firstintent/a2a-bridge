@@ -1,8 +1,8 @@
-# CLAUDE.md — cc-bridge
+# CLAUDE.md — a2a-bridge
 
 ## Project
 
-**cc-bridge** is a bidirectional bridge between Claude Code and other AI coding agents (Codex, OpenClaw, Hermes, ...) built on the Claude Code Channels protocol. Modelled after `raysonmeng/agent-bridge` but designed from day one for:
+**a2a-bridge** is a bidirectional bridge between Claude Code and other AI coding agents (Codex, OpenClaw, Hermes, ...) built on the Claude Code Channels protocol. Modelled after `raysonmeng/agent-bridge` but designed from day one for:
 
 - Pluggable peer adapters (one adapter per target agent)
 - Multi-machine deployment (daemon on one host, CC on another)

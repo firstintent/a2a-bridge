@@ -2,16 +2,16 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in cc-bridge, please report it
+If you discover a security vulnerability in a2a-bridge, please report it
 responsibly.
 
 **Do not open a public GitHub issue for security vulnerabilities.** Instead,
 open a private advisory through GitHub Security Advisories on
-<https://github.com/firstintent/cc-bridge/security/advisories>.
+<https://github.com/firstintent/a2a-bridge/security/advisories>.
 
 ## Security Considerations
 
-cc-bridge can run in two deployment shapes:
+a2a-bridge can run in two deployment shapes:
 
 - **Local only**: the daemon and Claude Code run on the same host. All
   traffic stays on loopback.
@@ -31,7 +31,7 @@ Regardless of shape, the bridge involves:
 
 ## Trust Boundary
 
-cc-bridge uses Claude Code's **Channels** feature (currently a Research
+a2a-bridge uses Claude Code's **Channels** feature (currently a Research
 Preview). Launching with `--dangerously-load-development-channels` grants
 the channel the ability to inject messages into your Claude Code session.
 Only enable channels and peers you trust.
