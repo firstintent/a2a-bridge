@@ -14,6 +14,7 @@ import { createInterface } from "node:readline";
 import { EventEmitter } from "node:events";
 import { appendFileSync } from "node:fs";
 import type { BridgeMessage } from "./types";
+import type { IPeerAdapter, PeerAdapterStartOptions } from "./peer-adapter";
 import type { ServerWebSocket } from "bun";
 import {
   isAppServerNotification,
@@ -47,7 +48,9 @@ interface PendingRequest {
   threadId?: string;
 }
 
-export class CodexAdapter extends EventEmitter {
+export class CodexAdapter extends EventEmitter implements IPeerAdapter {
+  readonly peerName = "codex" as const;
+
   private static readonly RESPONSE_TRACKING_TTL_MS = 30000;
 
   private proc: ChildProcess | null = null;
@@ -89,7 +92,7 @@ export class CodexAdapter extends EventEmitter {
 
   // ── Lifecycle ──────────────────────────────────────────────
 
-  async start() {
+  async start(_opts: PeerAdapterStartOptions = {}) {
     this.intentionalDisconnect = false;
     await this.checkPorts();
     this.log(`Spawning codex app-server on ${this.appServerUrl}`);
@@ -129,6 +132,21 @@ export class CodexAdapter extends EventEmitter {
     this.proxyServer?.stop();
     this.proxyServer = null;
     this.clearResponseTrackingState();
+  }
+
+  /** IPeerAdapter.close — alias of stop(). */
+  async close(): Promise<void> {
+    this.stop();
+  }
+
+  /**
+   * IPeerAdapter.cancel — Codex's app-server currently has no first-class
+   * turn-abort verb that survives the bridge proxy; closest safe action is
+   * a no-op that logs the intent. Left as TODO for when we wire a concrete
+   * cancel path (e.g. sending turn/abort).
+   */
+  async cancel(): Promise<void> {
+    this.log("cancel() not yet implemented for CodexAdapter");
   }
 
   /** Fully stop: disconnect bridge AND kill the Codex process. */
