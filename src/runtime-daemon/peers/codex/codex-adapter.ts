@@ -13,8 +13,8 @@ import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import { EventEmitter } from "node:events";
 import { appendFileSync } from "node:fs";
-import type { BridgeMessage } from "./types";
-import type { IPeerAdapter, PeerAdapterStartOptions } from "./peer-adapter";
+import type { BridgeMessage } from "@messages/types";
+import type { IPeerAdapter, PeerAdapterStartOptions } from "@daemon/peers/peer-adapter";
 import type { ServerWebSocket } from "bun";
 import {
   isAppServerNotification,
@@ -28,7 +28,7 @@ import {
   type AppServerServerRequestMethod,
   type AppServerTrackedRequestMethod,
   type TurnStartParams,
-} from "./app-server-protocol";
+} from "@daemon/peers/codex/app-server-protocol";
 
 interface TuiSocketData {
   connId: number;

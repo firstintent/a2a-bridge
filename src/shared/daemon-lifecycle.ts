@@ -1,7 +1,7 @@
 import { spawn, execFileSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync, openSync, closeSync, constants } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { StateDirResolver } from "./state-dir";
+import { StateDirResolver } from "@shared/state-dir";
 
 // When bundled into a Claude Code plugin, the frontend runs from the plugin
 // cache directory and must launch the sibling daemon bundle from there.

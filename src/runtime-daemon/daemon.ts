@@ -2,20 +2,20 @@
 
 import { appendFileSync } from "node:fs";
 import type { ServerWebSocket } from "bun";
-import { CodexAdapter } from "./codex-adapter";
+import { CodexAdapter } from "@daemon/peers/codex/codex-adapter";
 import {
   BRIDGE_CONTRACT_REMINDER,
   REPLY_REQUIRED_INSTRUCTION,
   StatusBuffer,
   classifyMessage,
   type FilterMode,
-} from "./message-filter";
-import { TuiConnectionState } from "./tui-connection-state";
-import { DaemonLifecycle } from "./daemon-lifecycle";
-import { StateDirResolver } from "./state-dir";
-import { ConfigService } from "./config-service";
-import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "./control-protocol";
-import type { BridgeMessage } from "./types";
+} from "@daemon/message-filter";
+import { TuiConnectionState } from "@daemon/peers/codex/tui-connection-state";
+import { DaemonLifecycle } from "@shared/daemon-lifecycle";
+import { StateDirResolver } from "@shared/state-dir";
+import { ConfigService } from "@shared/config-service";
+import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "@transport/control-protocol";
+import type { BridgeMessage } from "@messages/types";
 
 interface ControlSocketData {
   clientId: number;

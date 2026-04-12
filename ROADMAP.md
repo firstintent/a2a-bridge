@@ -1,103 +1,157 @@
 # Roadmap
 
-Phase ordering reflects risk and dependency. Phase 1 is complete.
+Phases are ordered by **value × breadth**. The earliest phases unlock
+the use cases that benefit the most users with the least per-peer
+work. Specialized peer adapters wait until the general surface is
+proven.
+
+Design principles that drive this ordering live in
+[`POSITIONING.md`](./POSITIONING.md). The baseline assumption is that
+most tasks should still run on a single well-prompted Claude Code
+session — a2a-bridge ships capability for the cases where that is
+genuinely insufficient.
 
 ## Phase 1 — Foundation (done)
 
-- Vendor import from `raysonmeng/agent-bridge` with MIT attribution in
-  `NOTICE`.
-- Deep rename to `a2a-bridge`: package, plugin dir, env vars, CLI
+- Vendor import from `raysonmeng/agent-bridge` with MIT attribution
+  in `NOTICE`.
+- Rename to `a2a-bridge`; package, plugin directory, env vars, CLI
   binaries, ports bumped to avoid clashing with upstream.
-- `IPeerAdapter` interface and `peer-factory.ts` dispatch scaffold.
-- `CodexAdapter` declares `implements IPeerAdapter` with a peer-name
-  and interface-compatible method shapes.
-- Typecheck clean, 145 unit tests passing (the 15 e2e failures require
-  `codex` CLI in the environment and are not regressions).
+- Introduced runtime-split layout (`runtime-plugin/`,
+  `runtime-daemon/`, `shared/`, `messages/`, `transport/`, `cli/`)
+  with tsconfig path aliases.
+- `IPeerAdapter` interface and `peer-factory` dispatch scaffold.
+- `CodexAdapter` conforms to `IPeerAdapter` without behavior change.
+- Architecture boundaries enforced by dependency-cruiser via
+  `bun run lint:deps`.
 
-## Phase 2 — InboundService v0 and the abstraction daemon
+## Phase 2 — InboundService v0 (A2A server)
 
-Goal: make Claude Code reachable by any A2A client over HTTP.
+**Why first.** One feature unlocks the broadest audience: any A2A
+client (Gemini CLI today, every A2A peer that follows) can drive
+Claude Code through a2a-bridge with no per-peer work on our side.
+This is the biggest breadth-per-effort ratio in the roadmap.
 
-- Abstract the daemon's listener layer: stdio + unix-socket listener
-  behind a single `Listener` interface. Add optional TLS TCP listener
-  guarded by config.
-- Implement a minimal A2A server (JSON-RPC + SSE + agent card) per
-  the `InboundService: minimum A2A server surface` section of
-  `ARCHITECTURE.md`. Methods: `message/stream`, `tasks/get`,
+- Abstract the daemon's listener layer into a single `Listener`
+  interface with stdio and unix-socket implementations (TLS TCP
+  deferred until we need it).
+- Implement the minimum A2A server surface documented in
+  `ARCHITECTURE.md` — `GET /.well-known/agent-card.json`, JSON-RPC
+  endpoint handling `message/stream` (SSE), `tasks/get`,
   `tasks/cancel`. Bearer auth.
-- Wire InboundService through the existing `CodexAdapter` room so that
-  a Gemini CLI remote-subagent call ends in a Claude Code turn and
-  the answer streams back.
-- End-to-end test: point a minimal A2A client (from `@a2a-js/sdk`) at
-  the daemon and verify a `message/stream` call gets terminal output.
+- Wire InboundService through the existing CodexAdapter-backed
+  single-room path: A2A message in → daemon → plugin → Claude Code;
+  reply streams back on the same SSE connection as A2A
+  `status-update` events.
+- Minimum E2E: a `@a2a-js/sdk` client (the same Gemini CLI uses)
+  sends a `message/stream` call and receives terminal assistant text.
 
-Deliverable: a Gemini CLI user adds one `remote_agent` entry and can
-drive Claude Code. No multi-room yet; a single Claude Code session
-handles all inbound tasks serially.
+**Ship criterion:** a Gemini CLI user configures one remote_agent
+entry pointing at the daemon and has Claude Code answering their
+queries.
 
-## Phase 3 — RoomRouter and TaskLog
+## Phase 3 — Verification and delegation patterns
 
-Goal: multiple concurrent Claude Code sessions share one daemon
-cleanly.
+**Why next.** The article's validated pattern is the verification
+subagent. Phase 2 makes inbound connectivity exist; Phase 3 makes
+the most-valuable use of it ergonomic. This is where a2a-bridge
+differentiates from "just another MCP server."
 
-- Introduce `RoomId` derived from CC session id or an explicit
-  `--room` argument forwarded via `A2A_BRIDGE_ROOM`.
-- `RoomRouter` owns `Map<RoomId, Room>`; every inbound A2A task is
-  routed to the room identified by `contextId` (minting a new one on
-  first contact) or by an explicit card-level routing rule.
-- `TaskLog` on SQLite: persistent per-room task history so plugin
-  restarts don't lose in-flight state. `tasks/get` reads from here.
-- Migrate Codex adapter state from daemon-singleton to per-Room.
+- Define a structured return schema for verification and
+  delegation: an A2A artifact carrying `{verdict: pass|fail|needs-info,
+  reasoning, evidence[]}`. Expose as first-class `A2A` artifact type;
+  parsed back into a structured return on the caller side.
+- Ship a skill template (`skills/verify/SKILL.md`) that teaches
+  Claude Code how to delegate a check: "here is the artifact, here
+  are the criteria, return pass/fail + reasoning, not a rewrite."
+- Document three canonical patterns with end-to-end examples:
+  1. **Verification** — CC produces code; peer evaluates against
+     criteria; CC acts on the verdict.
+  2. **Context protection** — CC delegates a long log dig to a peer
+     with an explicit `return_format: summary`; peer summarizes so
+     CC's context stays clean.
+  3. **Parallel independent work** — CC spawns N peer tasks on
+     genuinely independent subproblems; results merge.
+- Token-cost reporting: emit per-turn token usage on the A2A
+  response so callers can see the 3–10× overhead up front.
 
-Deliverable: two independent Claude Code sessions driven from the
-same daemon without cross-talk; a task survives a plugin reconnect.
+**Ship criterion:** a verification workflow end-to-end with a
+documented skill, from a single Claude Code session, targeting the
+CodexAdapter, returning structured pass/fail.
 
-## Phase 4 — OpenClawAdapter
+## Phase 4 — RoomRouter and TaskLog
 
-Goal: Claude Code can call an OpenClaw peer, including across a
-network.
+**Why here.** Phase 3's context-protection and parallel patterns
+expose scale needs: multiple concurrent Claude Code sessions per
+daemon, task history that survives plugin restarts.
 
-- Implement the Ed25519 device-identity handshake against the
-  OpenClaw gateway protocol.
-- Implement `OpenClawAdapter` against `IPeerAdapter`, synthesizing
-  `turnStarted` / `turnCompleted` since the gateway has no explicit
-  events (debounce + `sessions.changed` + tool-progress signals).
+- `RoomId` derived from CC session id or passed via
+  `A2A_BRIDGE_ROOM`; `RoomRouter` owns `Map<RoomId, Room>`.
+- Every inbound A2A task routes to the room identified by
+  `contextId` (minted on first contact) or by a card-level rule.
+- SQLite-backed `TaskLog` per room; `tasks/get` reads from it.
+- Migrate adapter state (currently daemon-singleton) into per-Room.
+
+**Ship criterion:** two independent Claude Code sessions on one
+daemon run in parallel without cross-talk; a task survives a plugin
+reconnect.
+
+## Phase 5 — OpenClawAdapter (cross-machine peer)
+
+**Why after the patterns layer.** OpenClaw brings real multi-machine
+value and a non-trivial handshake (Ed25519 device identity, synthesized
+turn events). Until the patterns layer exists, adding this peer is
+premature; once Phase 3 is in, OpenClaw unlocks the
+context-protection and parallel patterns at datacenter scale.
+
+- Ed25519 device handshake against the OpenClaw gateway protocol.
+- `OpenClawAdapter` implementing `IPeerAdapter`, with synthesized
+  `turnStarted` / `turnCompleted` (debounce + `sessions.changed` +
+  tool signals).
 - Persist the device keypair in the daemon state directory.
-- Bring up a multi-machine test: daemon on one host, OpenClaw
-  gateway on another.
+- Cross-host integration test: daemon on host A, OpenClaw gateway on
+  host B.
 
-Deliverable: Claude Code sends a task to a remote OpenClaw and
-receives the assistant messages back.
+**Ship criterion:** Claude Code delegates a task to a remote
+OpenClaw and receives assistant messages back.
 
-## Phase 5 — HermesAdapter (optional, deprioritized)
+## Phase 6 — HermesAdapter (local ACP)
 
-Goal: Claude Code can call a local Hermes ACP subprocess as a peer.
+**Why last.** Hermes is a narrower fit — its built-in support for
+calling Claude Code is the primary pairing direction, so CC →
+Hermes is a secondary use case. Hermes also ships no inbound bridge,
+so cross-host Hermes requires an external ACP proxy we do not
+control. Valuable for local demos and as an ACP reference
+implementation, but not on the critical path.
 
-- Use `@zed-industries/agent-client-protocol` npm package for wire
-  framing.
-- Implement `HermesAdapter` emitting synthetic `turnStarted`
-  (request-send time) and recognizing `PromptResponse.stopReason` as
-  the `turnCompleted` signal.
+- Use `@zed-industries/agent-client-protocol` for stdio framing.
+- `HermesAdapter` against `IPeerAdapter`; synthesize `turnStarted`
+  at `session/prompt` send time; treat the `PromptResponse.stopReason`
+  as `turnCompleted`.
 - Surface `agent_thought_chunk` as `agentThought` events.
 
-Deliverable: a Claude Code user can delegate a task to a local
-Hermes and receive streamed output. Cross-machine Hermes remains a
-future exercise unless demand appears.
+**Ship criterion:** a user can delegate a task to a local Hermes
+subprocess and receive streamed output.
 
-## Phase 6 — Hardening and release
+## Phase 7 — Hardening and release
 
-- Shut down the assumed-Codex path: the daemon goes through
-  `peer-factory` end to end. Delete any remaining Codex-specific
-  coupling from the daemon module.
-- CI: matrix of peers in mocked mode (no external agent required).
-- Publish `@firstintent/a2a-bridge` to npm and the plugin to the
+- Daemon routes every peer through `peer-factory`; delete remaining
+  Codex-specific coupling from daemon orchestration code.
+- CI matrix: each peer tested in mocked mode (no external CLI
+  required) plus one live test per peer gated on credentials.
+- Publish `@firstintent/a2a-bridge` to npm; submit plugin to the
   Claude Code marketplace.
 - Documentation sweep: install paths, auth setup, deployment shapes,
-  peer adapter authoring guide.
+  peer adapter authoring guide, pattern cookbook.
 
-## Out of scope (for now)
+## Explicitly deferred
 
-- Orchestration (DAGs, human approval gates, retry policies).
-- Non-Claude-Code backends behind InboundService.
-- Push-notification variants of the A2A protocol.
-- gRPC transport on A2A (JSON-RPC + SSE covers the field today).
+- TLS TCP listener. Only needed when cross-machine daemon deployment
+  ships; unix-socket covers same-host cleanly until then.
+- Push-notification variants of A2A. Not used by today's A2A
+  clients.
+- gRPC transport for A2A. JSON-RPC + SSE covers the field.
+- Multi-protocol inbound (e.g. MCP-over-HTTP inbound). Only add when
+  a concrete caller needs it.
+- Per-peer prompt templates for roles beyond verification.
+  Orchestration framework territory; see `POSITIONING.md`.

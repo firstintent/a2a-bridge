@@ -5,43 +5,25 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 
@@ -6517,7 +6499,7 @@ var require_dist = __commonJS((exports, module) => {
   exports.default = formatsPlugin;
 });
 
-// src/bridge.ts
+// src/runtime-plugin/bridge.ts
 import { appendFileSync as appendFileSync2 } from "fs";
 
 // node_modules/zod/v4/core/core.js
@@ -13659,7 +13641,7 @@ class StdioServerTransport {
   }
 }
 
-// src/claude-adapter.ts
+// src/runtime-plugin/claude-channel/claude-adapter.ts
 import { EventEmitter } from "events";
 import { randomUUID } from "crypto";
 import { appendFileSync } from "fs";
@@ -13927,7 +13909,7 @@ ${formatted}`
   }
 }
 
-// src/daemon-client.ts
+// src/runtime-plugin/daemon-client/daemon-client.ts
 import { EventEmitter as EventEmitter2 } from "events";
 var nextSocketId = 0;
 
@@ -14071,7 +14053,7 @@ class DaemonClient extends EventEmitter2 {
   }
 }
 
-// src/daemon-lifecycle.ts
+// src/runtime-plugin/daemon-client/daemon-lifecycle.ts
 import { spawn, execFileSync } from "child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync, openSync, closeSync, constants } from "fs";
 import { fileURLToPath } from "url";
@@ -14332,7 +14314,7 @@ function isProcessAlive(pid) {
   }
 }
 
-// src/state-dir.ts
+// src/shared/state-dir.ts
 import { mkdirSync, existsSync as existsSync2 } from "fs";
 import { join } from "path";
 import { homedir, platform } from "os";
@@ -14381,7 +14363,7 @@ class StateDirResolver {
   }
 }
 
-// src/config-service.ts
+// src/runtime-daemon/config-service.ts
 import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2, existsSync as existsSync3 } from "fs";
 import { join as join2 } from "path";
 var DEFAULT_CONFIG = {
@@ -14499,7 +14481,7 @@ class ConfigService {
   }
 }
 
-// src/bridge.ts
+// src/runtime-plugin/bridge.ts
 var stateDir = new StateDirResolver;
 var configService = new ConfigService;
 var config2 = configService.loadOrDefault();

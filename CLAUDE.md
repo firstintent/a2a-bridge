@@ -31,6 +31,66 @@ Rationale: this is an open-source project targeting a global audience. Mixed-lan
 - Two-process topology: foreground MCP plugin + persistent daemon
 - Peer adapters implement a common `IPeerAdapter` interface
 
+## Architecture constraints — **enforced**
+
+The `src/` tree is organized by runtime + domain, not by abstract
+"layer number":
+
+```
+src/
+  shared/          zero-dep utilities (state-dir, daemon-lifecycle, config-service, logger)
+  messages/        shared value objects (BridgeMessage, ...)
+  transport/       plugin <-> daemon control plane
+  runtime-plugin/  code that runs inside the Claude Code MCP plugin
+    claude-channel/    MCP channel adapter
+    daemon-client/     client side of the control plane
+    bridge.ts          plugin process entrypoint
+  runtime-daemon/  code that runs inside the persistent daemon
+    peers/             outbound peer adapters (codex, openclaw, hermes)
+    inbound/           A2A server exposing Claude Code to external clients
+    rooms/             RoomRouter
+    tasks/             Task lifecycle + storage
+    daemon.ts          daemon process entrypoint
+  cli/             user-facing CLI; composition root for integration tests
+```
+
+Import tsconfig aliases — **prefer these over relative paths** when
+crossing directory boundaries:
+
+| Alias          | Maps to                |
+|----------------|------------------------|
+| `@shared/*`    | `src/shared/*`         |
+| `@messages/*`  | `src/messages/*`       |
+| `@transport/*` | `src/transport/*`      |
+| `@plugin/*`    | `src/runtime-plugin/*` |
+| `@daemon/*`    | `src/runtime-daemon/*` |
+
+Dependency rules (checked by `bun run lint:deps`, enforced in CI):
+
+- `shared/` and `messages/` stay pure — they cannot import from any
+  other layer.
+- `transport/` cannot reach into `runtime-plugin/`, `runtime-daemon/`,
+  or `cli/`.
+- `runtime-plugin/` and `runtime-daemon/` **cannot import each
+  other**. They communicate only through `transport/` and
+  `messages/`.
+- Peer adapters (`runtime-daemon/peers/codex/`, `.../openclaw/`,
+  `.../hermes/`) **cannot import each other**.
+- `inbound/` and `peers/` cannot reach into each other's concrete
+  implementations — the meeting point is `rooms/`.
+- Production code cannot import from `*.test.ts`.
+- Unreferenced ("orphan") modules trigger a warning so we clean them
+  up.
+
+Why these rules exist: the plugin and daemon run in separate
+processes, possibly on separate machines. Code that forgets that
+distinction creates runtime crashes, not just type errors. Similarly,
+peer adapters must be independently swappable — cross-adapter imports
+make it impossible to split them into plugins later.
+
+When adding a file, ask: **which runtime does this run inside?** That
+answer determines the directory; the rules enforce the rest.
+
 ## Git workflow
 
 - All changes land on `dev`, never directly on `main`

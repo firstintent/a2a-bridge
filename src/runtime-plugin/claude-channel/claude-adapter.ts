@@ -21,7 +21,7 @@ import {
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
-import type { BridgeMessage } from "./types";
+import type { BridgeMessage } from "@messages/types";
 
 export type ReplySender = (msg: BridgeMessage, requireReply?: boolean) => Promise<{ success: boolean; error?: string }>;
 export type DeliveryMode = "push" | "pull" | "auto";

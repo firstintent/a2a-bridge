@@ -185,11 +185,19 @@ listeners the daemon activates and which endpoints it publishes.
 
 ## Non-goals
 
-- Fronting non-CC LLMs as A2A servers. InboundService wraps Claude
-  Code specifically. A separate project can layer a2a-bridge's
-  InboundService components over other model backends if desired.
-- Replacing Claude Code Channels. a2a-bridge is a channel plugin,
+- **Not a substitute for a well-prompted single agent with MCP
+  tools.** Multi-agent chains typically cost 3–10× the tokens of the
+  single-agent equivalent. If a single session suffices, skip the
+  bridge. See [`POSITIONING.md`](./POSITIONING.md).
+- **Fronting non-CC LLMs as A2A servers.** InboundService wraps
+  Claude Code specifically. A separate project can layer
+  a2a-bridge's InboundService components over other model backends if
+  desired.
+- **Replacing Claude Code Channels.** a2a-bridge is a channel plugin,
   not a replacement for the channel mechanism.
-- A generic orchestration framework. RoomRouter is routing, not
-  scheduling. Higher-level orchestration (DAGs, retries, human gates)
-  is out of scope for now.
+- **A generic orchestration framework.** RoomRouter is routing, not
+  scheduling. Higher-level orchestration (DAGs, retries, human
+  gates) belongs above a2a-bridge, not inside it.
+- **A cross-vendor LLM abstraction.** a2a-bridge wraps specific
+  agents at their native wire protocols. It is not LiteLLM or
+  LangGraph.

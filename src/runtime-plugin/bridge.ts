@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 
 import { appendFileSync } from "node:fs";
-import { ClaudeAdapter } from "./claude-adapter";
-import { DaemonClient } from "./daemon-client";
-import { DaemonLifecycle } from "./daemon-lifecycle";
-import { StateDirResolver } from "./state-dir";
-import { ConfigService } from "./config-service";
-import type { BridgeMessage } from "./types";
+import { ClaudeAdapter } from "@plugin/claude-channel/claude-adapter";
+import { DaemonClient } from "@plugin/daemon-client/daemon-client";
+import { DaemonLifecycle } from "@shared/daemon-lifecycle";
+import { StateDirResolver } from "@shared/state-dir";
+import { ConfigService } from "@shared/config-service";
+import type { BridgeMessage } from "@messages/types";
 
 const stateDir = new StateDirResolver();
 const configService = new ConfigService();

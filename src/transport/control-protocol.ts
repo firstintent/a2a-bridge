@@ -1,4 +1,4 @@
-import type { BridgeMessage } from "./types";
+import type { BridgeMessage } from "@messages/types";
 
 export interface DaemonStatus {
   bridgeReady: boolean;

@@ -1,4 +1,4 @@
-import type { BridgeMessage } from "./types";
+import type { BridgeMessage } from "@messages/types";
 
 export type MarkerLevel = "important" | "status" | "fyi" | "untagged";
 export type FilterMode = "filtered" | "full";

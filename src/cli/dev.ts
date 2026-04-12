@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { existsSync, cpSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { MARKETPLACE_NAME, PLUGIN_NAME } from "../cli";
+import { MARKETPLACE_NAME, PLUGIN_NAME } from "./constants";
 import { findPackageRoot, registerMarketplace } from "./pkg-root";
 
 export async function runDev() {
