@@ -64,7 +64,7 @@ their queries end-to-end.
   lint:deps green (enforces that `inbound/` cannot reach into
   `peers/` directly). No behavior yet.
 
-- [/] **P2.6 — Generate the Agent Card.**
+- [x] **P2.6 — Generate the Agent Card.**
   Acceptance: `src/runtime-daemon/inbound/a2a-http/agent-card.ts`
   exports `buildAgentCard(config)`; output validates against the
   fields in `ARCHITECTURE.md` §"Agent Card fields"; unit test
