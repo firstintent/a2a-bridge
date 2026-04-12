@@ -978,7 +978,7 @@ class TuiConnectionState {
   }
 }
 
-// src/runtime-plugin/daemon-client/daemon-lifecycle.ts
+// src/shared/daemon-lifecycle.ts
 import { spawn as spawn2, execFileSync } from "child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync, openSync, closeSync, constants } from "fs";
 import { fileURLToPath } from "url";
@@ -1288,7 +1288,7 @@ class StateDirResolver {
   }
 }
 
-// src/runtime-daemon/config-service.ts
+// src/shared/config-service.ts
 import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2, existsSync as existsSync3 } from "fs";
 import { join as join2 } from "path";
 var DEFAULT_CONFIG = {

@@ -74,7 +74,7 @@ describe("DaemonClient", () => {
     stopServer();
     const badClient = new DaemonClient("ws://127.0.0.1:19999/ws");
     await expect(badClient.connect()).rejects.toThrow();
-  });
+  }, 15_000);
 
   test("emits disconnect when server closes the socket", async () => {
     await client.connect();

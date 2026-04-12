@@ -21,7 +21,7 @@ their queries end-to-end.
 
 ## Preparation
 
-- [ ] **P2.0 — Establish a unit-test baseline on `dev`.**
+- [/] **P2.0 — Establish a unit-test baseline on `dev`.**
   Acceptance: `bun run check:ci` passes; record the "N passing"
   count in this file's footer so later tasks can detect
   regressions.
@@ -153,6 +153,7 @@ their queries end-to-end.
 
 ## Baseline
 
-- Unit-test count baseline (filled by P2.0):
+- Unit-test count baseline: 141 pass / 0 fail / 19 E2E filtered
+  (`bun run check:ci`, 13 files, 326 expect calls)
 - lint:deps violations baseline: 0 (51 modules / 133 deps as of
   commit `6b398ee`)
