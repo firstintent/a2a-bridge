@@ -134,7 +134,7 @@ their queries end-to-end.
 
 ## Verification
 
-- [ ] **P2.15 — SDK-level integration test.**
+- [/] **P2.15 — SDK-level integration test.**
   Acceptance: add `@a2a-js/sdk` as a dev dependency; a new test in
   `src/cli/a2a-inbound.test.ts` starts the daemon on an ephemeral
   port with `test:unit` hooks, uses the SDK's client to call
