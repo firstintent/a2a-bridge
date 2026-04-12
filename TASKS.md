@@ -143,7 +143,7 @@ their queries end-to-end.
   `final: true`. `bun run check:ci` green with the new test
   included.
 
-- [ ] **P2.16 — README "Connect Gemini CLI" section.**
+- [/] **P2.16 — README "Connect Gemini CLI" section.**
   Acceptance: add a short subsection to `README.md` showing the
   exact Gemini CLI `remote_agent` config that points at a local
   `a2a-bridge` daemon, including the Bearer token field. Do not

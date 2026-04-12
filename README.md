@@ -89,6 +89,39 @@ the minimum A2A server surface, and the three deployment shapes.
 | OpenClaw  | WebSocket + Ed25519    | Phase 5 |
 | Hermes    | stdio (Zed ACP)        | Phase 6 |
 
+## Connect Gemini CLI
+
+Any A2A client can drive Claude Code through a2a-bridge. For Gemini
+CLI specifically, add a single `remoteAgents` entry pointing at the
+daemon's agent-card URL and the bearer token it was started with.
+In `~/.gemini/settings.json`:
+
+```json
+{
+  "remoteAgents": [
+    {
+      "name": "a2a-bridge",
+      "agentCardUrl": "http://localhost:4520/.well-known/agent-card.json",
+      "auth": {
+        "type": "bearer",
+        "token": "<A2A_BRIDGE_BEARER_TOKEN>"
+      }
+    }
+  ]
+}
+```
+
+- Replace `<A2A_BRIDGE_BEARER_TOKEN>` with the token passed to the
+  daemon; it protects the JSON-RPC endpoint. The agent-card endpoint
+  can be served publicly via `publicAgentCard: true` so discovery
+  works before the token is wired client-side.
+- `localhost:4520` matches the daemon's A2A listener default; swap the
+  host/port when the daemon runs on a different machine.
+
+After restarting Gemini CLI, `@a2a-bridge` in a prompt routes the
+message to the paired Claude Code session; the streamed reply comes
+back as A2A `artifact-update` events.
+
 ## License
 
 MIT. See [`LICENSE`](./LICENSE) and [`NOTICE`](./NOTICE).
