@@ -21,7 +21,7 @@ their queries end-to-end.
 
 ## Preparation
 
-- [/] **P2.0 — Establish a unit-test baseline on `dev`.**
+- [x] **P2.0 — Establish a unit-test baseline on `dev`.**
   Acceptance: `bun run check:ci` passes; record the "N passing"
   count in this file's footer so later tasks can detect
   regressions.
