@@ -1,5 +1,6 @@
 import type { JsonRpcId } from "@daemon/inbound/a2a-http/jsonrpc";
 import type { Task, TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
+import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
 
 /**
  * `message/stream` SSE handler.
@@ -237,6 +238,78 @@ export function createEchoExecutor(
       },
     });
   };
+}
+
+/**
+ * Build an executor that forwards the user's text into the daemon's
+ * single active Claude Code room via a `ClaudeCodeGateway`. Each CC
+ * reply chunk becomes an `artifact-update(append: true)` SSE event;
+ * turn completion emits the terminal `status-update(completed)`.
+ *
+ * Replaces the echo executor once a gateway is wired. The gateway
+ * abstraction keeps the dep-cruiser boundary honest: inbound does not
+ * import Codex internals, it only calls `startTurn`.
+ */
+export interface ClaudeCodeExecutorOptions {
+  gateway: ClaudeCodeGateway;
+  /** Stable artifact id used for the streamed reply. */
+  artifactId?: string;
+  /** Deterministic id source for the terminal message; mainly for tests. */
+  idFactory?: () => string;
+}
+
+export function createClaudeCodeExecutor(
+  opts: ClaudeCodeExecutorOptions,
+): MessageStreamExecutor {
+  const makeId = opts.idFactory ?? (() => crypto.randomUUID());
+  const artifactId = opts.artifactId ?? "claude-code-reply";
+
+  return ({ userText, emit }) =>
+    new Promise<void>((resolve, reject) => {
+      emit({ kind: "status-update", state: "working" });
+      const turn = opts.gateway.startTurn(userText);
+
+      const onChunk = (text: string) => {
+        if (text.length === 0) return;
+        emit({
+          kind: "artifact-update",
+          artifactId,
+          text,
+          append: true,
+        });
+      };
+
+      const cleanup = () => {
+        turn.off("chunk", onChunk);
+        turn.off("complete", onComplete);
+        turn.off("error", onError);
+      };
+
+      const onComplete = () => {
+        cleanup();
+        emit({
+          kind: "status-update",
+          state: "completed",
+          final: true,
+          message: {
+            kind: "message",
+            messageId: makeId(),
+            role: "agent",
+            parts: [{ kind: "text", text: "Turn complete." }],
+          },
+        });
+        resolve();
+      };
+
+      const onError = (err: Error) => {
+        cleanup();
+        reject(err);
+      };
+
+      turn.on("chunk", onChunk);
+      turn.on("complete", onComplete);
+      turn.on("error", onError);
+    });
 }
 
 function extractText(msg: A2aMessage): string {
