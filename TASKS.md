@@ -28,7 +28,7 @@ their queries end-to-end.
 
 ## Transport abstraction
 
-- [ ] **P2.1 — Define the `Listener` interface in
+- [/] **P2.1 — Define the `Listener` interface in
   `src/transport/listener.ts`.**
   Acceptance: interface exports `Listener` with `listen()`,
   `close()`, and an `EventEmitter` surface emitting `connection` with
