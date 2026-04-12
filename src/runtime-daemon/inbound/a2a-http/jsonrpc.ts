@@ -58,6 +58,23 @@ export const JSON_RPC_ERRORS = {
 } as const;
 
 /**
+ * Thrown from a handler to surface a JSON-RPC error response with a
+ * specific code (e.g. A2A's `-32001` TaskNotFound). Handlers that throw
+ * a plain `Error` still get a generic `-32603` internal error.
+ */
+export class JsonRpcMethodError extends Error {
+  readonly code: number;
+  readonly data?: unknown;
+
+  constructor(code: number, message: string, data?: unknown) {
+    super(message);
+    this.name = "JsonRpcMethodError";
+    this.code = code;
+    this.data = data;
+  }
+}
+
+/**
  * Parse + validate + route a single JSON-RPC 2.0 request.
  *
  * Returns the response object to emit, or `null` if the input was a
@@ -120,6 +137,11 @@ export async function dispatch(
       ? null
       : { jsonrpc: "2.0", result: result ?? null, id };
   } catch (err) {
+    if (err instanceof JsonRpcMethodError) {
+      return isNotification
+        ? null
+        : errorResponse(id, err.code, err.message, err.data);
+    }
     const message = err instanceof Error ? err.message : String(err);
     return isNotification
       ? null
