@@ -109,7 +109,7 @@ their queries end-to-end.
   callback (no CC dependency yet). Integration test asserts the
   four-event stream.
 
-- [/] **P2.12 — `tasks/get` handler.**
+- [x] **P2.12 — `tasks/get` handler.**
   Acceptance: returns a stub 404 (`code: -32001`) until the
   in-memory task registry lands in the next task; unit test covers
   the 404 path.
