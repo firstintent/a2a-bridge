@@ -32,7 +32,7 @@ class CodexAdapter extends EventEmitter {
   staleProxyIds = new Map;
   bridgeRequestIds = new Map;
   intentionalDisconnect = false;
-  constructor(appPort = 4500, proxyPort = 4501) {
+  constructor(appPort = 4510, proxyPort = 4511) {
     super();
     this.appPort = appPort;
     this.proxyPort = proxyPort;
@@ -1131,8 +1131,8 @@ import { join as join2 } from "path";
 var DEFAULT_CONFIG = {
   version: "1.0",
   daemon: {
-    port: 4500,
-    proxyPort: 4501
+    port: 4510,
+    proxyPort: 4511
   },
   agents: {
     claude: {
@@ -1250,7 +1250,7 @@ var configService = new ConfigService;
 var config = configService.loadOrDefault();
 var CODEX_APP_PORT = parseInt(process.env.CODEX_WS_PORT ?? String(config.daemon.port), 10);
 var CODEX_PROXY_PORT = parseInt(process.env.CODEX_PROXY_PORT ?? String(config.daemon.proxyPort), 10);
-var CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4502", 10);
+var CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
 var TUI_DISCONNECT_GRACE_MS = parseInt(process.env.TUI_DISCONNECT_GRACE_MS ?? "2500", 10);
 var CLAUDE_DISCONNECT_GRACE_MS = 5000;
 var MAX_BUFFERED_MESSAGES = parseInt(process.env.AGENTBRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);

@@ -7,7 +7,7 @@ INPUT="$(cat 2>/dev/null || true)"
 workspace="${CLAUDE_PROJECT_DIR:-${PWD}}"
 cooldown_seconds="${AGENTBRIDGE_HEALTH_HOOK_COOLDOWN_SECONDS:-120}"
 state_root="${AGENTBRIDGE_HOOK_STATE_DIR:-${TMPDIR:-/tmp}/agentbridge-hooks}"
-port="${AGENTBRIDGE_CONTROL_PORT:-4502}"
+port="${AGENTBRIDGE_CONTROL_PORT:-4512}"
 
 if ! command -v curl >/dev/null 2>&1; then
   exit 0

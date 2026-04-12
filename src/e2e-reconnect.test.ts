@@ -13,9 +13,9 @@ import { DaemonClient } from "./daemon-client";
  * the client can reconnect — exercising the same path bridge.ts uses.
  */
 
-const TEST_CONTROL_PORT = 14502;
-const TEST_APP_PORT = 14500;
-const TEST_PROXY_PORT = 14501;
+const TEST_CONTROL_PORT = 14512;
+const TEST_APP_PORT = 14510;
+const TEST_PROXY_PORT = 14511;
 const TEST_STATE_DIR = `/tmp/agentbridge-e2e-test-${TEST_CONTROL_PORT}`;
 const TEST_PID_FILE = join(TEST_STATE_DIR, "daemon.pid");
 const HEALTH_URL = `http://127.0.0.1:${TEST_CONTROL_PORT}/healthz`;

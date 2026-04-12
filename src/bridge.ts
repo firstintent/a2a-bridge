@@ -12,7 +12,7 @@ const stateDir = new StateDirResolver();
 const configService = new ConfigService();
 const config = configService.loadOrDefault();
 
-const CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4502", 10);
+const CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
 const daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
 const CONTROL_WS_URL = daemonLifecycle.controlWsUrl;
 

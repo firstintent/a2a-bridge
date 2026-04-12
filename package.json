@@ -1,11 +1,11 @@
 {
-  "name": "@raysonmeng/agentbridge",
-  "version": "0.1.4",
-  "description": "Bridge between Claude Code and Codex — bidirectional agent communication via MCP Channel + JSON-RPC",
+  "name": "@firstintent/cc-bridge",
+  "version": "0.0.1",
+  "description": "Bidirectional bridge between Claude Code and other AI coding agents (Codex, OpenClaw, Hermes, ...) over the MCP Channels protocol.",
   "type": "module",
   "bin": {
-    "agentbridge": "dist/cli.js",
-    "abg": "dist/cli.js"
+    "cc-bridge": "dist/cli.js",
+    "ccb": "dist/cli.js"
   },
   "files": [
     "dist/",
@@ -13,7 +13,8 @@
     ".claude-plugin/",
     "scripts/postinstall.cjs",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "start": "bun run src/bridge.ts",
@@ -29,22 +30,24 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/raysonmeng/agent-bridge.git"
+    "url": "https://github.com/firstintent/cc-bridge.git"
   },
-  "homepage": "https://github.com/raysonmeng/agent-bridge#readme",
+  "homepage": "https://github.com/firstintent/cc-bridge#readme",
   "bugs": {
-    "url": "https://github.com/raysonmeng/agent-bridge/issues"
+    "url": "https://github.com/firstintent/cc-bridge/issues"
   },
   "keywords": [
     "claude-code",
-    "codex",
     "mcp",
+    "channels",
     "agent",
     "bridge",
     "multi-agent",
-    "channels"
+    "codex",
+    "openclaw",
+    "hermes"
   ],
-  "author": "AgentBridge Contributors",
+  "author": "FirstIntent",
   "license": "MIT",
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

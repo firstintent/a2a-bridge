@@ -33,7 +33,7 @@ export async function runCodex(args: string[]) {
   const stateDir = new StateDirResolver();
   const configService = new ConfigService();
   const config = configService.loadOrDefault();
-  const controlPort = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4502", 10);
+  const controlPort = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
 
   const lifecycle = new DaemonLifecycle({
     stateDir,

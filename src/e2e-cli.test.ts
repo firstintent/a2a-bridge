@@ -379,8 +379,8 @@ describe("E2E: CLI surface", () => {
       const config = JSON.parse(
         readFileSync(join(harness.projectDir, ".agentbridge", "config.json"), "utf-8"),
       ) as { daemon: { port: number; proxyPort: number } };
-      expect(config.daemon.port).toBe(4500);
-      expect(config.daemon.proxyPort).toBe(4501);
+      expect(config.daemon.port).toBe(4510);
+      expect(config.daemon.proxyPort).toBe(4511);
 
       const collaboration = readFileSync(
         join(harness.projectDir, ".agentbridge", "collaboration.md"),
@@ -836,9 +836,9 @@ import { appendFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from
 import { join } from "node:path";
 
 const stateDir = process.env.AGENTBRIDGE_STATE_DIR;
-const controlPort = Number.parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4502", 10);
-const appPort = Number.parseInt(process.env.CODEX_WS_PORT ?? "4500", 10);
-const proxyPort = Number.parseInt(process.env.CODEX_PROXY_PORT ?? "4501", 10);
+const controlPort = Number.parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
+const appPort = Number.parseInt(process.env.CODEX_WS_PORT ?? "4510", 10);
+const proxyPort = Number.parseInt(process.env.CODEX_PROXY_PORT ?? "4511", 10);
 const launchLog = process.env.AGENTBRIDGE_FAKE_DAEMON_LAUNCH_LOG;
 const delayMs = Number.parseInt(process.env.AGENTBRIDGE_FAKE_DAEMON_DELAY_MS ?? "0", 10);
 

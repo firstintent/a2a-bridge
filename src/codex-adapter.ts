@@ -77,7 +77,7 @@ export class CodexAdapter extends EventEmitter {
   private bridgeRequestIds = new Map<number, ReturnType<typeof setTimeout>>();
   private intentionalDisconnect = false;
 
-  constructor(appPort = 4500, proxyPort = 4501) {
+  constructor(appPort = 4510, proxyPort = 4511) {
     super();
     this.appPort = appPort;
     this.proxyPort = proxyPort;

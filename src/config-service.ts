@@ -26,8 +26,8 @@ export interface AgentBridgeConfig {
 const DEFAULT_CONFIG: AgentBridgeConfig = {
   version: "1.0",
   daemon: {
-    port: 4500,
-    proxyPort: 4501,
+    port: 4510,
+    proxyPort: 4511,
   },
   agents: {
     claude: {

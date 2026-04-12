@@ -62,7 +62,7 @@ describe("DaemonLifecycle", () => {
 
   test("writeStatus and readStatus round-trip", () => {
     const lc = createLifecycle();
-    const status = { proxyUrl: "ws://127.0.0.1:4501", controlPort: 4502, pid: 999 };
+    const status = { proxyUrl: "ws://127.0.0.1:4511", controlPort: 4512, pid: 999 };
     lc.writeStatus(status);
     const loaded = lc.readStatus();
     expect(loaded).toEqual(status);

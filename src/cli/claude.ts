@@ -11,7 +11,7 @@ export async function runClaude(args: string[]) {
   checkOwnedFlagConflicts(args, "agentbridge claude", OWNED_FLAGS);
 
   const stateDir = new StateDirResolver();
-  const controlPort = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4502", 10);
+  const controlPort = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
   const lifecycle = new DaemonLifecycle({
     stateDir,
     controlPort,

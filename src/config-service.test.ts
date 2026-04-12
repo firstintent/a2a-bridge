@@ -29,8 +29,8 @@ describe("ConfigService", () => {
     const svc = new ConfigService(tempDir);
     const config = svc.loadOrDefault();
     expect(config.version).toBe("1.0");
-    expect(config.daemon.port).toBe(4500);
-    expect(config.daemon.proxyPort).toBe(4501);
+    expect(config.daemon.port).toBe(4510);
+    expect(config.daemon.proxyPort).toBe(4511);
     expect(config.agents.claude.role).toBe("Reviewer, Planner");
     expect(config.agents.codex.role).toBe("Implementer, Executor");
   });

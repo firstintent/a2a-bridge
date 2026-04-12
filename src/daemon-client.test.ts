@@ -121,8 +121,8 @@ describe("DaemonClient", () => {
         tuiConnected: false,
         threadId: null,
         queuedMessageCount: 0,
-        proxyUrl: "http://localhost:4501",
-        appServerUrl: "http://localhost:4502",
+        proxyUrl: "http://localhost:4511",
+        appServerUrl: "http://localhost:4512",
         pid: 123,
       },
     });

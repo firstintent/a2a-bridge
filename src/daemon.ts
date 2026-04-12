@@ -29,7 +29,7 @@ const config = configService.loadOrDefault();
 
 const CODEX_APP_PORT = parseInt(process.env.CODEX_WS_PORT ?? String(config.daemon.port), 10);
 const CODEX_PROXY_PORT = parseInt(process.env.CODEX_PROXY_PORT ?? String(config.daemon.proxyPort), 10);
-const CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4502", 10);
+const CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
 const TUI_DISCONNECT_GRACE_MS = parseInt(process.env.TUI_DISCONNECT_GRACE_MS ?? "2500", 10);
 const CLAUDE_DISCONNECT_GRACE_MS = 5_000;
 const MAX_BUFFERED_MESSAGES = parseInt(process.env.AGENTBRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);

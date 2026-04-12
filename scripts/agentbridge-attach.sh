@@ -10,11 +10,11 @@
 # how the child process terminated.
 #
 # Usage: ./agentbridge-attach.sh [proxy-url]
-#   Default proxy URL: ws://127.0.0.1:4501
+#   Default proxy URL: ws://127.0.0.1:4511
 
 set -uo pipefail
 
-PROXY_URL="${1:-ws://127.0.0.1:4501}"
+PROXY_URL="${1:-ws://127.0.0.1:4511}"
 
 # Save terminal state
 if [ -t 0 ]; then

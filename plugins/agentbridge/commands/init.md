@@ -19,8 +19,8 @@ If `.agentbridge/config.json` is missing, create it with this default template:
 {
   "version": "1.0",
   "daemon": {
-    "port": 4500,
-    "proxyPort": 4501
+    "port": 4510,
+    "proxyPort": 4511
   },
   "agents": {
     "claude": {

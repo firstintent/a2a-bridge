@@ -14387,8 +14387,8 @@ import { join as join2 } from "path";
 var DEFAULT_CONFIG = {
   version: "1.0",
   daemon: {
-    port: 4500,
-    proxyPort: 4501
+    port: 4510,
+    proxyPort: 4511
   },
   agents: {
     claude: {
@@ -14503,7 +14503,7 @@ class ConfigService {
 var stateDir = new StateDirResolver;
 var configService = new ConfigService;
 var config2 = configService.loadOrDefault();
-var CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4502", 10);
+var CONTROL_PORT = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
 var daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
 var CONTROL_WS_URL = daemonLifecycle.controlWsUrl;
 var claude = new ClaudeAdapter;

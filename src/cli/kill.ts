@@ -7,7 +7,7 @@ export async function runKill() {
   console.log("AgentBridge Kill — stopping daemon and managed Codex TUI\n");
 
   const stateDir = new StateDirResolver();
-  const controlPort = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4502", 10);
+  const controlPort = parseInt(process.env.AGENTBRIDGE_CONTROL_PORT ?? "4512", 10);
 
   const lifecycle = new DaemonLifecycle({
     stateDir,
