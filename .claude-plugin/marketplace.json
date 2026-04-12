@@ -1,0 +1,22 @@
+{
+  "name": "cc-bridge",
+  "owner": {
+    "name": "FirstIntent",
+    "url": "https://github.com/firstintent/cc-bridge"
+  },
+  "metadata": {
+    "description": "Marketplace for the cc-bridge Claude Code plugin and supporting runtime integration."
+  },
+  "plugins": [
+    {
+      "name": "cc-bridge",
+      "description": "Bridge Claude Code with other AI coding agents (Codex, OpenClaw, Hermes, ...) through a shared daemon and bidirectional channel tooling.",
+      "version": "0.0.1",
+      "author": {
+        "name": "FirstIntent"
+      },
+      "source": "./plugins/cc-bridge",
+      "category": "development"
+    }
+  ]
+}

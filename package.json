@@ -1,0 +1,57 @@
+{
+  "name": "@firstintent/cc-bridge",
+  "version": "0.0.1",
+  "description": "Bidirectional bridge between Claude Code and other AI coding agents (Codex, OpenClaw, Hermes, ...) over the MCP Channels protocol.",
+  "type": "module",
+  "bin": {
+    "cc-bridge": "dist/cli.js",
+    "ccb": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "plugins/",
+    ".claude-plugin/",
+    "scripts/postinstall.cjs",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "start": "bun run src/bridge.ts",
+    "build:cli": "mkdir -p dist && bun build src/cli.ts --outfile dist/cli.js --target bun && chmod +x dist/cli.js",
+    "build:plugin": "mkdir -p plugins/cc-bridge/server && bun build src/bridge.ts --outfile plugins/cc-bridge/server/bridge-server.js --target bun && bun build src/daemon.ts --outfile plugins/cc-bridge/server/daemon.js --target bun",
+    "postinstall": "node scripts/postinstall.cjs",
+    "prepublishOnly": "bun run build:cli && bun run build:plugin",
+    "validate:plugin": "claude plugin validate plugins/cc-bridge && claude plugin validate .claude-plugin/marketplace.json",
+    "test": "bun test src",
+    "typecheck": "tsc --noEmit",
+    "validate:plugin-versions": "bun scripts/check-plugin-versions.js",
+    "check": "tsc --noEmit && bun test src && bun run build:plugin && bun scripts/check-plugin-versions.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/firstintent/cc-bridge.git"
+  },
+  "homepage": "https://github.com/firstintent/cc-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/firstintent/cc-bridge/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "mcp",
+    "channels",
+    "agent",
+    "bridge",
+    "multi-agent",
+    "codex",
+    "openclaw",
+    "hermes"
+  ],
+  "author": "FirstIntent",
+  "license": "MIT",
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@types/bun": "^1.3.11",
+    "typescript": "^5.8.0"
+  }
+}

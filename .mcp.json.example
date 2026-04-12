@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cc-bridge": {
+      "command": "bun",
+      "args": ["run", "/absolute/path/to/cc-bridge/src/bridge.ts"]
+    }
+  }
+}

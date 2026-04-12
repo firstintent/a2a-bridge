@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cc-bridge": {
+      "command": "bun",
+      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/server/bridge-server.js"],
+      "env": {
+        "CC_BRIDGE_DAEMON_ENTRY": "./daemon.js"
+      }
+    }
+  }
+}

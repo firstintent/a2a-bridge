@@ -1,0 +1,21 @@
+# Local Chinese design notes and scratchpads — never committed
+docs/
+
+# Node / Bun
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editor
+.vscode/
+.idea/
+*.swp
