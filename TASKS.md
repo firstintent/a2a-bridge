@@ -73,7 +73,7 @@ their queries end-to-end.
 
 ## HTTP surface
 
-- [ ] **P2.7 — HTTP server skeleton.**
+- [/] **P2.7 — HTTP server skeleton.**
   Acceptance: `a2a-http/server.ts` exports `startA2AServer(config)`
   returning a shutdown handle; uses `Bun.serve`; binds to
   `config.host`/`config.port`; logs requests through
