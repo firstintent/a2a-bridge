@@ -2,29 +2,40 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in CcBridge, please report it responsibly.
+If you discover a security vulnerability in cc-bridge, please report it
+responsibly.
 
-**Do NOT open a public GitHub issue for security vulnerabilities.**
-
-Instead, please email: [rayson951005@gmail.com](mailto:rayson951005@gmail.com)
-
-We will acknowledge your report within 48 hours and provide an estimated timeline for a fix.
+**Do not open a public GitHub issue for security vulnerabilities.** Instead,
+open a private advisory through GitHub Security Advisories on
+<https://github.com/firstintent/cc-bridge/security/advisories>.
 
 ## Security Considerations
 
-CcBridge runs locally on your machine and involves:
+cc-bridge can run in two deployment shapes:
 
-- **Local WebSocket connections** between Claude Code, the bridge daemon, and Codex app-server. All connections are on `127.0.0.1` — no external network exposure by default.
-- **MCP stdio communication** between Claude Code and the bridge process.
-- **Command execution**: The bridge spawns `codex app-server` as a subprocess. Ensure you trust the Codex CLI installed on your system.
-- **Message forwarding**: All messages between Claude Code and Codex pass through the bridge. The bridge does not filter or sanitize message content — both agents may execute code based on received messages.
+- **Local only**: the daemon and Claude Code run on the same host. All
+  traffic stays on loopback.
+- **Remote daemon**: the daemon runs on a separate host from Claude Code. In
+  this mode the plugin<->daemon control channel MUST be TLS-terminated and
+  bearer-token authenticated; never expose the daemon on a public network
+  without both.
+
+Regardless of shape, the bridge involves:
+
+- **Peer subprocess or network calls**: the daemon connects to peer agents
+  (Codex, OpenClaw, Hermes, ...) that can execute code on behalf of the
+  session. Trust the peer before wiring it in.
+- **MCP stdio communication** between Claude Code and the bridge plugin.
+- **Message forwarding**: messages traverse the bridge unfiltered; both
+  sides may act on content they receive.
 
 ## Trust Boundary
 
-This project uses Claude Code's **Channels** feature, which is currently a **Research Preview**. When launching with `--dangerously-load-development-channels`, you are granting the channel (CcBridge) the ability to inject messages into your Claude Code session. Only use channels you trust.
+cc-bridge uses Claude Code's **Channels** feature (currently a Research
+Preview). Launching with `--dangerously-load-development-channels` grants
+the channel the ability to inject messages into your Claude Code session.
+Only enable channels and peers you trust.
 
 ## Supported Versions
 
-| Version | Supported |
-|---------|-----------|
-| 0.1.x   | Yes       |
+Pre-1.0 — only the latest `0.x` release is supported.
