@@ -1,4 +1,5 @@
 import type { JsonRpcId } from "@daemon/inbound/a2a-http/jsonrpc";
+import type { Task, TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
 
 /**
  * `message/stream` SSE handler.
@@ -77,6 +78,13 @@ export interface HandleMessageStreamOptions {
   executor: MessageStreamExecutor;
   /** Deterministic id source for tests; defaults to `crypto.randomUUID`. */
   idFactory?: () => string;
+  /**
+   * Registry this stream registers against. When supplied, the handler
+   * creates the task on start, mirrors status-updates into it, and
+   * listens for `cancel` events so `tasks/cancel` can terminate the
+   * stream with a final status-update(canceled).
+   */
+  registry?: TaskRegistry;
 }
 
 /** Build an SSE `Response` for a single `message/stream` request. */
@@ -88,9 +96,19 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
 
   const encoder = new TextEncoder();
 
+  const registry = opts.registry;
+  const initialTask: Task = {
+    id: taskId,
+    contextId,
+    kind: "task",
+    status: { state: "submitted" },
+  };
+  registry?.create(initialTask);
+
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
+      let terminated = false;
       const write = (result: unknown) => {
         if (closed) return;
         const frame = `data: ${JSON.stringify({ jsonrpc: "2.0", id: opts.rpcId, result })}\n\n`;
@@ -98,24 +116,24 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
       };
 
       // 1. Initial task event.
-      write({
-        kind: "task",
-        id: taskId,
-        contextId,
-        status: { state: "submitted" },
-      });
+      write(initialTask);
 
       const emit: StreamEmitter = (event) => {
         if (event.kind === "status-update") {
+          const status = event.message
+            ? { state: event.state, message: event.message }
+            : { state: event.state };
+          registry?.updateStatus(taskId, status);
           write({
             kind: "status-update",
             taskId,
             contextId,
-            status: event.message
-              ? { state: event.state, message: event.message }
-              : { state: event.state },
+            status,
             final: event.final ?? false,
           });
+          if (event.final) {
+            terminated = true;
+          }
         } else {
           write({
             kind: "artifact-update",
@@ -130,6 +148,26 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
           });
         }
       };
+
+      const onRegistryCancel = (canceledId: string) => {
+        if (canceledId !== taskId || terminated) return;
+        emit({
+          kind: "status-update",
+          state: "canceled",
+          final: true,
+          message: {
+            kind: "message",
+            messageId: makeId(),
+            role: "agent",
+            parts: [{ kind: "text", text: "Task canceled by client." }],
+          },
+        });
+        closed = true;
+        try {
+          controller.close();
+        } catch {}
+      };
+      registry?.on("cancel", onRegistryCancel);
 
       const run = async () => {
         try {
@@ -148,6 +186,7 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
             },
           });
         } finally {
+          registry?.off("cancel", onRegistryCancel);
           closed = true;
           try {
             controller.close();

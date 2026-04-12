@@ -2,6 +2,7 @@ import {
   JsonRpcMethodError,
   type JsonRpcHandler,
 } from "@daemon/inbound/a2a-http/jsonrpc";
+import type { TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
 
 /**
  * A2A-reserved error code for "task not found" (the SDK's
@@ -10,20 +11,32 @@ import {
 export const TASK_NOT_FOUND = -32001;
 
 /**
- * `tasks/get` stub handler.
+ * Build the `tasks/get` handler bound to a TaskRegistry.
  *
- * Until the in-memory task registry lands (P2.13) there are no tasks
- * to fetch; every call returns a `-32001 TaskNotFound` error. The
- * `JsonRpcMethodError` path through `dispatch` emits it as a proper
- * JSON-RPC error response.
+ * When no registry is supplied, every call surfaces the
+ * `-32001 TaskNotFound` error — the P2.12 stub behavior, preserved so
+ * early wiring (e.g. server boot before the registry instance is ready)
+ * still reports the spec-accurate code instead of crashing.
  */
-export const handleTasksGet: JsonRpcHandler = (params) => {
-  const id = extractTaskId(params);
-  throw new JsonRpcMethodError(
-    TASK_NOT_FOUND,
-    id ? `Task not found: ${id}` : "Task not found",
-  );
-};
+export function createTasksGetHandler(registry?: TaskRegistry): JsonRpcHandler {
+  return (params) => {
+    const id = extractTaskId(params);
+    if (!id) {
+      throw new JsonRpcMethodError(TASK_NOT_FOUND, "Task not found");
+    }
+    const task = registry?.get(id);
+    if (!task) {
+      throw new JsonRpcMethodError(TASK_NOT_FOUND, `Task not found: ${id}`);
+    }
+    return task;
+  };
+}
+
+/**
+ * Back-compat alias preserving the P2.12 registry-less signature so
+ * call sites that hadn't plugged in the registry yet still resolve.
+ */
+export const handleTasksGet: JsonRpcHandler = createTasksGetHandler();
 
 function extractTaskId(params: unknown): string | undefined {
   if (typeof params === "object" && params !== null && "id" in params) {

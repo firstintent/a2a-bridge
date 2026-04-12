@@ -3,6 +3,7 @@ import {
   createEchoExecutor,
   handleMessageStream,
 } from "@daemon/inbound/a2a-http/handlers/message-stream";
+import { TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
 
 type SseFrame = { jsonrpc: "2.0"; id: string | number | null; result: Record<string, unknown> };
 
@@ -153,6 +154,82 @@ describe("handleMessageStream", () => {
     expect(last.kind).toBe("status-update");
     expect((last as { final: boolean }).final).toBe(true);
     expect((last as { status: { state: string } }).status.state).toBe("failed");
+  });
+
+  test("registers the task on start and mirrors status updates into the registry", async () => {
+    const { idFactory } = deterministicIds();
+    const registry = new TaskRegistry();
+    const resp = handleMessageStream({
+      rpcId: 77,
+      params: { message: { parts: [{ kind: "text", text: "hi" }] } },
+      executor: createEchoExecutor({ idFactory }),
+      idFactory,
+      registry,
+    });
+
+    const frames = await readSseFrames(resp);
+    const taskFrame = frames[0]!.result as { id: string };
+    const stored = registry.get(taskFrame.id);
+    expect(stored).toBeDefined();
+    expect(stored!.status.state).toBe("completed");
+  });
+
+  test("terminates the stream with status-update(canceled) when the registry cancels the task", async () => {
+    const { idFactory } = deterministicIds();
+    const registry = new TaskRegistry();
+    let taskId = "";
+    const resp = handleMessageStream({
+      rpcId: 99,
+      params: { message: { parts: [{ kind: "text", text: "hang" }] } },
+      executor: ({ taskId: tid, emit }) => {
+        taskId = tid;
+        emit({ kind: "status-update", state: "working" });
+        // Return a promise that never resolves on its own so the cancel
+        // path is the one that terminates the stream.
+        return new Promise(() => {});
+      },
+      idFactory,
+      registry,
+    });
+
+    // Read frames lazily so we can trigger the cancel between the
+    // initial frames and the terminal one.
+    const reader = resp.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const frames: Array<Record<string, unknown>> = [];
+    const drain = async (until: number) => {
+      while (frames.length < until) {
+        const { value, done } = await reader.read();
+        if (value) buffer += decoder.decode(value, { stream: true });
+        for (;;) {
+          const idx = buffer.indexOf("\n\n");
+          if (idx === -1) break;
+          const record = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          const data = record
+            .split("\n")
+            .filter((l) => l.startsWith("data: "))
+            .map((l) => l.slice("data: ".length))
+            .join("");
+          if (data) frames.push(JSON.parse(data));
+        }
+        if (done) break;
+      }
+    };
+
+    // Wait for the task + working frames before canceling.
+    await drain(2);
+    expect(taskId).toBeTruthy();
+
+    registry.cancel(taskId);
+
+    await drain(3);
+    const terminal = frames[2]!.result as { kind: string; final: boolean; status: { state: string } };
+    expect(terminal.kind).toBe("status-update");
+    expect(terminal.final).toBe(true);
+    expect(terminal.status.state).toBe("canceled");
+    expect(registry.get(taskId)!.status.state).toBe("canceled");
   });
 
   test("each SSE record is terminated by a blank line", async () => {
