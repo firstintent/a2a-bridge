@@ -41,7 +41,7 @@ their queries end-to-end.
   exactly one `connection` event whose `Connection` reads/writes the
   stdio pair. Unit test covers the happy path.
 
-- [ ] **P2.3 — Implement `UnixSocketListener` in
+- [/] **P2.3 — Implement `UnixSocketListener` in
   `src/transport/unix.ts`.**
   Acceptance: implements `Listener`; accepts multiple inbound
   connections over a unix socket path; unit test uses a temp path
