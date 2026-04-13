@@ -1,6 +1,6 @@
 {
   "name": "@firstintent/a2a-bridge",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Bidirectional bridge between Claude Code and other AI coding agents (Codex, OpenClaw, Hermes, ...) over the MCP Channels protocol.",
   "type": "module",
   "bin": {
