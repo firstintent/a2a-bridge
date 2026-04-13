@@ -8,6 +8,13 @@ const MIN_CLAUDE_VERSION = "2.1.80";
 
 export async function runInit(args: string[] = []) {
   const force = args.includes("--force");
+  const printOnly = args.includes("--print");
+
+  if (printOnly) {
+    runInitConfig({ force });
+    return;
+  }
+
   console.log("A2aBridge Init\n");
 
   // Step 1: Check dependencies

@@ -271,7 +271,7 @@ once that phase lands.
   description, screenshots placeholder paths, and `homepage`. Schema
   validates against the marketplace JSON schema. No behavior change.
 
-- [ ] **P6.7 — Tarball install smoke test.**
+- [/] **P6.7 — Tarball install smoke test.**
   Acceptance: `scripts/smoke-tarball.sh` runs `npm pack`, installs
   the resulting tarball into a temp directory with `npm i`, and
   invokes `a2a-bridge --version`, `a2a-bridge init --print`, and

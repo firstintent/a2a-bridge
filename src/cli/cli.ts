@@ -12,6 +12,8 @@
  *   a2a-bridge kill        — Force kill all A2aBridge processes
  */
 
+import pkg from "../../package.json" with { type: "json" };
+
 const args = process.argv.slice(2);
 const command = args[0];
 const restArgs = args.slice(1);
@@ -108,12 +110,8 @@ Examples:
 }
 
 function printVersion() {
-  try {
-    const pkg = require("../package.json");
-    console.log(`a2a-bridge v${pkg.version}`);
-  } catch {
-    console.log("a2a-bridge (version unknown)");
-  }
+  const version = (pkg as { version?: string }).version;
+  console.log(version ? `a2a-bridge v${version}` : "a2a-bridge (version unknown)");
 }
 
 main().catch((err) => {
