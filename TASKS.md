@@ -191,7 +191,7 @@ once that phase lands.
   request. Unit tests use the SDK's in-memory pair to verify the
   handshake.
 
-- [/] **P5.4 — Bridge ACP `prompt` → `ClaudeCodeGateway`.**
+- [x] **P5.4 — Bridge ACP `prompt` → `ClaudeCodeGateway`.**
   Acceptance: incoming `prompt` calls extract the user text, forward
   via `gateway.startTurn`, and stream each `chunk` event back as a
   `session/update` notification. Final `complete` produces a
