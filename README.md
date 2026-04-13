@@ -139,6 +139,10 @@ and a worked example.
   peers on genuinely independent subtasks (different files, modules,
   or investigations), await all of them, and merge.
 
+For end-to-end runnable `curl` + SDK examples of all three patterns
+(plus a rough token-cost reference), see
+[`docs/cookbook.md`](./docs/cookbook.md).
+
 ## License
 
 MIT. See [`LICENSE`](./LICENSE) and [`NOTICE`](./NOTICE).

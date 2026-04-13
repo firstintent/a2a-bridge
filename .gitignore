@@ -1,5 +1,6 @@
-# Local Chinese design notes and scratchpads — never committed
-docs/
+# Local Chinese design notes and scratchpads — never committed.
+# English public docs live under docs/ and ARE committed.
+docs-cn/
 
 # Node / Bun
 node_modules/

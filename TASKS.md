@@ -85,7 +85,7 @@ once that phase lands.
   when the executor supplies it. Unit test asserts the field
   round-trips through SSE and parses back via the SDK.
 
-- [ ] **P3.9 — Pattern cookbook documentation.**
+- [/] **P3.9 — Pattern cookbook documentation.**
   Acceptance: `docs/cookbook.md` documents the three canonical
   patterns (verification, context-protection, parallel) with
   end-to-end runnable examples (curl + SDK). Each example links to
@@ -342,7 +342,7 @@ once that phase lands.
 
 ## Phase footers (filled by the loop)
 
-- Phase 3 baseline: 223 pass / 0 fail (carried forward from Phase 2; P3.0 only verified CI still green).
+- Phase 3 baseline: 240 pass / 0 fail / 19 E2E filtered, 28 test files, 579 expect calls (on P3.9 close; P3.0 sanity-check started at 223 pass).
 - Phase 4 baseline:
 - Phase 5 baseline:
 - Phase 6 baseline:
