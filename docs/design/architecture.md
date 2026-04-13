@@ -251,6 +251,58 @@ no bearer tokens are exchanged on the stdio link. Authentication for
 the underlying daemon control plane is filesystem-permissioned on
 the unix socket.
 
+### Permission-relay policy for ACP-originated turns
+
+When Claude Code wants to use a tool during an in-flight turn, it
+emits a `notifications/claude/channel/permission_request` to the
+attached channel plugin. The plugin is expected to surface the
+request to the user (via its channel) and return an allow/deny
+decision as a `notifications/claude/channel/permission` notification
+back to CC — this is the "five-letter verdict dance" the Channels
+reference specifies.
+
+ACP has no native "chat to reply in" analogue for that dance — a
+Zed / OpenClaw / VS Code session is an IDE-style consumer, not a
+chat — but the ACP SDK's `AgentSideConnection.requestPermission()`
+method expresses the same intent at the protocol level: the agent
+asks the client to present the user with a decision, and receives a
+structured `RequestPermissionResponse` back.
+
+**Chosen policy (v0.1):** when an ACP turn is in flight, the plugin
+**bridges `notifications/claude/channel/permission_request` to the
+ACP client's `session/request_permission`**:
+
+1. Plugin receives CC's permission_request notification.
+2. Plugin forwards it to the daemon over the control plane.
+3. Daemon routes it to the ACP connection that owns the in-flight
+   turn (via `AcpTurnHandler`).
+4. The `a2a-bridge acp` subprocess invokes `conn.requestPermission()`
+   on its `AgentSideConnection`, which delivers the request to the
+   ACP client (editor UI).
+5. The ACP client prompts the user; its `RequestPermissionResponse`
+   flows back through the chain.
+6. Plugin emits `notifications/claude/channel/permission` to CC with
+   the decision.
+
+Rejected alternatives:
+
+- **Auto-allow, env-gated (e.g. `A2A_BRIDGE_ACP_AUTO_PERMISSION=1`).**
+  Convenient for dev, but silently grants tool permissions on behalf
+  of an editor user who never saw the prompt. A bad default for a
+  feature whose whole point is surfacing prompts to the human driver.
+  Can be layered on later as an explicit opt-in without changing the
+  primary path.
+
+- **Auto-deny, resolving the turn with `stopReason: "refusal"`.** Safe
+  but unhelpful: every ACP client loses access to tool use during any
+  turn they drive, which is most of the value proposition. Clients
+  could still `loadSession` and retry without tools, but the UX is
+  worse than asking the user.
+
+Bridging to `session/request_permission` puts the decision where it
+belongs — with the person at the IDE — and matches the channel
+plugin pattern for human-in-the-loop approval.
+
 ## InboundService: MCP server surface (deferred to v0.2)
 
 Will mirror the ACP shape: a `runtime-daemon/inbound/mcp/` directory

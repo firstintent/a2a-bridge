@@ -46,6 +46,12 @@ export function assertIdentifierSafeKeys(meta: AcpTurnMeta): void {
 // Control-plane message types
 // ---------------------------------------------------------------------------
 
+/**
+ * Permission verdict bridged between CC (`notifications/claude/channel/permission_request`)
+ * and the ACP client's `session/request_permission` reply.
+ */
+export type PermissionOutcome = "allow" | "deny";
+
 export type ControlClientMessage =
   | { type: "claude_connect" }
   | { type: "claude_disconnect" }
@@ -53,7 +59,13 @@ export type ControlClientMessage =
   | { type: "status" }
   // ACP turn relay — sent by the `a2a-bridge acp` subprocess to the daemon.
   | { type: "acp_turn_start"; turnId: string; sessionId: string; userText: string; meta?: AcpTurnMeta }
-  | { type: "acp_turn_cancel"; turnId: string };
+  | { type: "acp_turn_cancel"; turnId: string }
+  // Plugin → daemon: CC asked for a permission verdict; daemon decides where
+  // to forward it based on the currently-active inbound turn.
+  | { type: "plugin_permission_request"; requestId: string; toolName: string; description: string; inputPreview: string }
+  // ACP subprocess → daemon: the ACP client answered a previously-forwarded
+  // permission request (see `acp_permission_request` below).
+  | { type: "acp_permission_response"; requestId: string; outcome: PermissionOutcome };
 
 export type ControlServerMessage =
   | { type: "codex_to_claude"; message: BridgeMessage }
@@ -62,4 +74,10 @@ export type ControlServerMessage =
   // ACP turn relay — sent by the daemon back to the `a2a-bridge acp` subprocess.
   | { type: "acp_turn_chunk"; turnId: string; text: string }
   | { type: "acp_turn_complete"; turnId: string }
-  | { type: "acp_turn_error"; turnId: string; message: string };
+  | { type: "acp_turn_error"; turnId: string; message: string }
+  // Daemon → plugin: final verdict the plugin should forward back to CC as a
+  // `notifications/claude/channel/permission` notification.
+  | { type: "plugin_permission_response"; requestId: string; outcome: PermissionOutcome }
+  // Daemon → ACP subprocess: route a CC-originated permission request to the
+  // ACP client via `AgentSideConnection.requestPermission`.
+  | { type: "acp_permission_request"; requestId: string; turnId: string; toolName: string; description: string; inputPreview: string };

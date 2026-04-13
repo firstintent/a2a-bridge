@@ -92,6 +92,53 @@ describe("P8.1 control-plane: ControlServerMessage ACP variants", () => {
 });
 
 // ---------------------------------------------------------------------------
+// P8.2a — Permission-bridge frames
+// ---------------------------------------------------------------------------
+
+describe("P8.2a control-plane: permission bridge frames", () => {
+  test("plugin_permission_request (client → daemon) round-trips", () => {
+    const msg: ControlClientMessage = {
+      type: "plugin_permission_request",
+      requestId: "r1",
+      toolName: "Bash",
+      description: "run ls -la",
+      inputPreview: "ls -la",
+    };
+    expect(roundtripClient(msg)).toEqual(msg);
+  });
+
+  test("acp_permission_response (client → daemon) round-trips", () => {
+    const msg: ControlClientMessage = {
+      type: "acp_permission_response",
+      requestId: "r1",
+      outcome: "allow",
+    };
+    expect(roundtripClient(msg)).toEqual(msg);
+  });
+
+  test("plugin_permission_response (daemon → client) round-trips", () => {
+    const msg: ControlServerMessage = {
+      type: "plugin_permission_response",
+      requestId: "r1",
+      outcome: "deny",
+    };
+    expect(roundtripServer(msg)).toEqual(msg);
+  });
+
+  test("acp_permission_request (daemon → client) round-trips", () => {
+    const msg: ControlServerMessage = {
+      type: "acp_permission_request",
+      requestId: "r1",
+      turnId: "t1",
+      toolName: "Bash",
+      description: "run ls -la",
+      inputPreview: "ls -la",
+    };
+    expect(roundtripServer(msg)).toEqual(msg);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // assertIdentifierSafeKeys
 // ---------------------------------------------------------------------------
 

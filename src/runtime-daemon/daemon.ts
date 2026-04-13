@@ -345,6 +345,38 @@ function handleControlMessage(conn: Connection, raw: string) {
     case "acp_turn_cancel":
       acpTurnHandler.handleTurnCancel(conn, message);
       return;
+    case "plugin_permission_request": {
+      // Policy (architecture.md §"Permission-relay policy for ACP-originated
+      // turns"): forward the verdict request to the ACP client that owns
+      // the active turn; auto-deny when no ACP turn is active.
+      const { requestId } = message;
+      acpTurnHandler
+        .routePermissionRequest({
+          requestId,
+          toolName: message.toolName,
+          description: message.description,
+          inputPreview: message.inputPreview,
+        })
+        .then((outcome) => {
+          sendProtocolMessage(conn, {
+            type: "plugin_permission_response",
+            requestId,
+            outcome,
+          });
+        })
+        .catch((err: Error) => {
+          log(`Permission routing failed for ${requestId}: ${err.message}`);
+          sendProtocolMessage(conn, {
+            type: "plugin_permission_response",
+            requestId,
+            outcome: "deny",
+          });
+        });
+      return;
+    }
+    case "acp_permission_response":
+      acpTurnHandler.handlePermissionResponse(conn, message);
+      return;
     case "claude_to_codex": {
       if (message.message.source !== "claude") {
         sendProtocolMessage(conn, {
