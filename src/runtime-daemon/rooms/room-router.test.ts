@@ -117,6 +117,70 @@ describe("RoomRouter", () => {
     expect(calls).toEqual(["r", "r"] as RoomId[]);
   });
 
+  test("adopt seeds a pre-built room so getOrCreate returns it without reinvoking the factory", async () => {
+    const { factory, calls } = defaultFactory();
+    const router = new RoomRouter(factory);
+    const seeded = new Room({
+      id: "adopted" as RoomId,
+      gateway: stubGateway(),
+      registry: new TaskRegistry(),
+    });
+    router.adopt(seeded);
+    expect(router.size).toBe(1);
+    expect(router.get("adopted" as RoomId)).toBe(seeded);
+    const observed = await router.getOrCreate("adopted" as RoomId);
+    expect(observed).toBe(seeded);
+    expect(calls).toEqual([] as RoomId[]);
+  });
+
+  test("adopt rejects a duplicate id", () => {
+    const { factory } = defaultFactory();
+    const router = new RoomRouter(factory);
+    const first = new Room({
+      id: "dup" as RoomId,
+      gateway: stubGateway(),
+      registry: new TaskRegistry(),
+    });
+    router.adopt(first);
+    expect(() =>
+      router.adopt(
+        new Room({
+          id: "dup" as RoomId,
+          gateway: stubGateway(),
+          registry: new TaskRegistry(),
+        }),
+      ),
+    ).toThrow(/already adopted/);
+  });
+
+  test("allIdle is true only when every room reports idle", async () => {
+    const registry = new TaskRegistry();
+    const router = new RoomRouter(
+      (id) =>
+        new Room({
+          id,
+          gateway: stubGateway(),
+          registry,
+        }),
+    );
+    const roomA = await router.getOrCreate("a" as RoomId);
+    await router.getOrCreate("b" as RoomId);
+    expect(router.allIdle).toBe(true);
+
+    // Queue a task for roomA — router no longer idle.
+    registry.create({
+      id: "t1",
+      contextId: "c",
+      kind: "task",
+      status: { state: "submitted" },
+      roomId: roomA.id,
+    });
+    expect(router.allIdle).toBe(false);
+
+    registry.delete("t1");
+    expect(router.allIdle).toBe(true);
+  });
+
   test("disposeAll tears down every Room and rejects further getOrCreate", async () => {
     const disposed: RoomId[] = [];
     const factory = (id: RoomId) =>

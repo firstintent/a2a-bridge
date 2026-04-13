@@ -75,6 +75,18 @@ export class RoomRouter {
     return this.rooms.size;
   }
 
+  /**
+   * True when every live Room reports `isIdle`. The daemon's
+   * idle-shutdown path gates on this so it only stops when no room is
+   * mid-turn and no room has outstanding tasks (P4.9).
+   */
+  get allIdle(): boolean {
+    for (const room of this.rooms.values()) {
+      if (!room.isIdle) return false;
+    }
+    return true;
+  }
+
   /** Drop `id` from the map and dispose the Room. No-op when absent. */
   async dispose(id: RoomId): Promise<void> {
     const room = this.rooms.get(id);

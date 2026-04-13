@@ -43,4 +43,8 @@ export interface ITaskStore {
   cancel(id: string): TaskSnapshot | undefined;
   on(event: "cancel", listener: TaskStoreCancelListener): this;
   off(event: "cancel", listener: TaskStoreCancelListener): this;
+  /** Tasks for one room, ordered however the implementation prefers. */
+  listByRoom(roomId: RoomId): TaskSnapshot[];
+  /** Drop every task scoped to this room. Returns the count removed. */
+  deleteByRoom(roomId: RoomId): number;
 }

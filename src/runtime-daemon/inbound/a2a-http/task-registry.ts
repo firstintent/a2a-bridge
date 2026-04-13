@@ -5,6 +5,7 @@ import type {
   TaskSnapshot,
   TaskStatus as ITaskStatus,
 } from "@daemon/tasks/task-store";
+import type { RoomId } from "@daemon/rooms/room-id";
 
 /**
  * In-memory `ITaskStore` implementation. Paired with `SqliteTaskLog`
@@ -69,6 +70,31 @@ export class TaskRegistry extends EventEmitter<TaskRegistryEvents> implements IT
   /** Forget a task. Used by streams to release finished entries. */
   delete(id: string): void {
     this.tasks.delete(id);
+  }
+
+  /**
+   * All tasks whose stored input carried the given roomId. Returns an
+   * empty list when no tasks match or the registry was fed tasks
+   * without the optional `roomId` field.
+   */
+  listByRoom(roomId: RoomId): TaskSnapshot[] {
+    const out: TaskSnapshot[] = [];
+    for (const task of this.tasks.values()) {
+      if ((task as InitialTask).roomId === roomId) out.push(task);
+    }
+    return out;
+  }
+
+  /** Drop every task tagged with `roomId`. Returns the count removed. */
+  deleteByRoom(roomId: RoomId): number {
+    let removed = 0;
+    for (const [id, task] of this.tasks.entries()) {
+      if ((task as InitialTask).roomId === roomId) {
+        this.tasks.delete(id);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 
   /** Current task count. Useful for tests / diagnostics. */

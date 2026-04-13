@@ -217,6 +217,14 @@ export class SqliteTaskLog
     return rows.map((r) => this.rowToStoredTask(r));
   }
 
+  /** Drop every row scoped to `roomId`. Returns the count deleted. */
+  deleteByRoom(roomId: RoomId): number {
+    const changes = this.db
+      .prepare("DELETE FROM tasks WHERE room_id = ?")
+      .run(roomId);
+    return Number(changes.changes);
+  }
+
   /** Current row count. Useful for diagnostics and tests. */
   get size(): number {
     const row = this.db.prepare("SELECT COUNT(*) AS c FROM tasks").get() as {

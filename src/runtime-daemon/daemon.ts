@@ -477,11 +477,20 @@ function scheduleIdleShutdown() {
   const snapshot = tuiConnectionState.snapshot();
   if (snapshot.tuiConnected) return; // TUI still connected
 
+  // Per-Room idle gate (P4.9): don't shut down if any Room has an
+  // in-flight turn or outstanding tasks, even if no client is
+  // currently attached.
+  if (!inboundRoomRouter.allIdle) return;
+
   log(`No clients connected. Daemon will shut down in ${IDLE_SHUTDOWN_MS}ms if no one reconnects.`);
   idleShutdownTimer = setTimeout(() => {
     // Re-check before shutting down
     if (attachedClaude || tuiConnectionState.snapshot().tuiConnected) {
       log("Idle shutdown cancelled: client reconnected during grace period");
+      return;
+    }
+    if (!inboundRoomRouter.allIdle) {
+      log("Idle shutdown cancelled: a room became active during grace period");
       return;
     }
     shutdown("idle — no clients connected");

@@ -1593,6 +1593,17 @@ class Room {
   get isDisposed() {
     return this.disposed;
   }
+  get isIdle() {
+    if (this.disposed)
+      return true;
+    for (const adapter of this.peers.values()) {
+      if (adapter.turnInProgress)
+        return false;
+    }
+    if (this.registry.listByRoom(this.id).length > 0)
+      return false;
+    return true;
+  }
   async dispose() {
     if (this.disposed)
       return;
@@ -1606,6 +1617,9 @@ class Room {
         await adapter.dispose();
       } catch {}
     }
+    try {
+      this.registry.deleteByRoom(this.id);
+    } catch {}
   }
   ensureLive() {
     if (this.disposed) {
@@ -1653,6 +1667,13 @@ class RoomRouter {
   }
   get size() {
     return this.rooms.size;
+  }
+  get allIdle() {
+    for (const room of this.rooms.values()) {
+      if (!room.isIdle)
+        return false;
+    }
+    return true;
   }
   async dispose(id) {
     const room = this.rooms.get(id);
@@ -1770,6 +1791,10 @@ class SqliteTaskLog extends EventEmitter4 {
   listByRoom(roomId) {
     const rows = this.db.prepare("SELECT * FROM tasks WHERE room_id = ? ORDER BY updated_at DESC").all(roomId);
     return rows.map((r) => this.rowToStoredTask(r));
+  }
+  deleteByRoom(roomId) {
+    const changes = this.db.prepare("DELETE FROM tasks WHERE room_id = ?").run(roomId);
+    return Number(changes.changes);
   }
   get size() {
     const row = this.db.prepare("SELECT COUNT(*) AS c FROM tasks").get();
@@ -2695,10 +2720,16 @@ function scheduleIdleShutdown() {
   const snapshot = tuiConnectionState.snapshot();
   if (snapshot.tuiConnected)
     return;
+  if (!inboundRoomRouter.allIdle)
+    return;
   log(`No clients connected. Daemon will shut down in ${IDLE_SHUTDOWN_MS}ms if no one reconnects.`);
   idleShutdownTimer = setTimeout(() => {
     if (attachedClaude || tuiConnectionState.snapshot().tuiConnected) {
       log("Idle shutdown cancelled: client reconnected during grace period");
+      return;
+    }
+    if (!inboundRoomRouter.allIdle) {
+      log("Idle shutdown cancelled: a room became active during grace period");
       return;
     }
     shutdown("idle \u2014 no clients connected");

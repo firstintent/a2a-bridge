@@ -124,19 +124,60 @@ describe("Room", () => {
     expect(() => room.attachPeer(makeAdapter("late"))).toThrow(/disposed/);
   });
 
-  test("dispose leaves the external gateway and registry untouched", async () => {
+  test("dispose leaves the external gateway alone but purges this room's tasks", async () => {
     const registry = new TaskRegistry();
+    // One task for this room, one task for a sibling room — only the
+    // matching one should be purged.
     registry.create({
-      id: "t",
+      id: "mine",
       contextId: "c",
       kind: "task",
       status: { state: "submitted" },
+      roomId: "r" as RoomId,
+    });
+    registry.create({
+      id: "sibling",
+      contextId: "c",
+      kind: "task",
+      status: { state: "submitted" },
+      roomId: "other" as RoomId,
     });
     const gateway = stubGateway();
     const room = new Room({ id: "r" as RoomId, gateway, registry });
     await room.dispose();
     expect(room.gateway).toBe(gateway);
     expect(room.registry).toBe(registry);
-    expect(registry.get("t")).toBeDefined();
+    expect(registry.get("mine")).toBeUndefined();
+    expect(registry.get("sibling")).toBeDefined();
+  });
+
+  test("isIdle reflects both peer turnInProgress and pending tasks", () => {
+    const registry = new TaskRegistry();
+    const adapter: PeerAdapter = { peerName: "codex", turnInProgress: false };
+    const room = new Room({
+      id: "r" as RoomId,
+      gateway: stubGateway(),
+      registry,
+      peers: [adapter],
+    });
+    expect(room.isIdle).toBe(true);
+
+    // A task scoped to this room blocks idle.
+    registry.create({
+      id: "t",
+      contextId: "c",
+      kind: "task",
+      status: { state: "submitted" },
+      roomId: "r" as RoomId,
+    });
+    expect(room.isIdle).toBe(false);
+
+    // Drop the task; back to idle.
+    registry.delete("t");
+    expect(room.isIdle).toBe(true);
+
+    // A peer with an active turn blocks idle.
+    (adapter as { turnInProgress: boolean }).turnInProgress = true;
+    expect(room.isIdle).toBe(false);
   });
 });
