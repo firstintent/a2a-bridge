@@ -278,7 +278,7 @@ once that phase lands.
   `a2a-bridge doctor` to confirm the binary works end-to-end.
   `bun run check:ci` invokes it.
 
-- [ ] **P6.8 — End-to-end smoke test (A2A + ACP).**
+- [/] **P6.8 — End-to-end smoke test (A2A + ACP).**
   Acceptance: `scripts/smoke-e2e.sh` starts the daemon, posts a
   `message/stream` over A2A and asserts the four-event envelope,
   then spawns `a2a-bridge acp` and drives it via the SDK to assert

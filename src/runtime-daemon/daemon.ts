@@ -26,7 +26,10 @@ import {
   startA2AServer,
   type A2aServerHandle,
 } from "@daemon/inbound/a2a-http/server";
-import { createClaudeCodeExecutor } from "@daemon/inbound/a2a-http/handlers/message-stream";
+import {
+  createClaudeCodeExecutor,
+  createEchoExecutor,
+} from "@daemon/inbound/a2a-http/handlers/message-stream";
 
 interface ControlClientMeta {
   clientId: number;
@@ -700,6 +703,18 @@ async function bootInbound() {
     return;
   }
 
+  // `A2A_BRIDGE_INBOUND_ECHO=1` swaps the Claude Code executor for the
+  // built-in echo executor so the wire contract can be smoke-tested
+  // without a Claude Code session attached (used by `scripts/smoke-e2e.sh`).
+  const echoMode = process.env.A2A_BRIDGE_INBOUND_ECHO === "1";
+  const routedConfig = echoMode
+    ? { messageStreamExecutor: createEchoExecutor() }
+    : {
+        roomRouter: inboundRoomRouter,
+        executorFactory: (gateway: import("@daemon/inbound/a2a-http/claude-code-gateway").ClaudeCodeGateway) =>
+          createClaudeCodeExecutor({ gateway }),
+      };
+
   try {
     a2aInboundServer = await startA2AServer({
       host: A2A_INBOUND_HOST,
@@ -709,13 +724,14 @@ async function bootInbound() {
       agentCard: {
         url: `http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}/a2a`,
       },
-      roomRouter: inboundRoomRouter,
-      executorFactory: (gateway) => createClaudeCodeExecutor({ gateway }),
+      ...routedConfig,
       registry: sharedTaskStore,
       logger: (msg) => log(`[A2aInbound] ${msg}`),
     });
     log(
-      `A2A inbound server listening on http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}${a2aInboundServer.rpcPath}`,
+      `A2A inbound server listening on http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}${a2aInboundServer.rpcPath}${
+        echoMode ? " (echo mode)" : ""
+      }`,
     );
   } catch (err: any) {
     log(`Failed to start A2A inbound server: ${err?.message ?? err}`);

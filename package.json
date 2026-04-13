@@ -30,7 +30,7 @@
     "lint:deps": "depcruise --config .dependency-cruiser.cjs src",
     "validate:plugin-versions": "bun scripts/check-plugin-versions.js",
     "check": "tsc --noEmit && bun run lint:deps && bun test src && bun run build:plugin && bun scripts/check-plugin-versions.js",
-    "check:ci": "tsc --noEmit && bun run lint:deps && bun run test:unit && bun run build:plugin && bun scripts/check-plugin-versions.js && bash scripts/smoke-tarball.sh"
+    "check:ci": "tsc --noEmit && bun run lint:deps && bun run test:unit && bun run build:plugin && bun scripts/check-plugin-versions.js && bash scripts/smoke-tarball.sh && bash scripts/smoke-e2e.sh"
   },
   "repository": {
     "type": "git",

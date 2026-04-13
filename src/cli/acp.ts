@@ -51,7 +51,8 @@ export async function runAcp(
 ): Promise<AcpInboundService> {
   void args;
 
-  const ensureDaemon = options.ensureDaemon ?? true;
+  const ensureDaemon =
+    options.ensureDaemon ?? process.env.A2A_BRIDGE_ACP_SKIP_DAEMON !== "1";
   if (ensureDaemon) {
     const stateDir = new StateDirResolver();
     const controlPort = parseInt(process.env.A2A_BRIDGE_CONTROL_PORT ?? "4512", 10);
