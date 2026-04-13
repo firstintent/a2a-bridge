@@ -104,13 +104,16 @@ Agent Client Protocol (ACP) editor can drive against Claude Code.
   into a tmpdir + probe `--version` / `init --print` / `doctor`.
   Runs under `bun run check:ci`.
 - `scripts/smoke-e2e.sh` + `scripts/smoke-e2e-acp.ts` — spawn the
-  daemon in A2A-echo mode, assert the four-event envelope, then
-  spawn `a2a-bridge acp` and drive it with the ACP SDK client to
-  assert one prompt → streamed update → `end_turn`. Also under
-  `check:ci`.
-- `A2A_BRIDGE_INBOUND_ECHO=1` env knob puts the daemon in
-  echo-executor mode so A2A wire behavior can be validated
-  without a Claude Code session attached.
+  daemon on throwaway ports, assert the four-event A2A envelope,
+  then attach a stub Claude Code channel via `DaemonClient` and
+  drive `a2a-bridge acp` through the ACP SDK, asserting the
+  returned `session/update` text carries the stub CC's prefix
+  (not an echo). Under `check:ci`.
+- `A2A_BRIDGE_INBOUND_ECHO=1` env knob — **test/debug only** —
+  puts the A2A HTTP inbound into echo-executor mode so the A2A
+  wire contract can be validated without a Claude Code session.
+  The ACP path does not rely on this knob; `a2a-bridge acp`
+  always relays real turns through the daemon.
 - `A2A_BRIDGE_ACP_SKIP_DAEMON=1` env knob skips the ACP
   subcommand's auto-daemon bootstrap — useful when embedding
   `a2a-bridge acp` in a test harness that already owns the

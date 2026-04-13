@@ -458,7 +458,7 @@ once that phase lands.
   covers both the ACP `initialize` response and the plugin's
   advertised `Server` info.
 
-- [ ] **P8.8 — Documentation sweep: no more "post-v0.1" caveats
+- [x] **P8.8 — Documentation sweep: no more "post-v0.1" caveats
   on ACP → CC.**
   Acceptance: `CHANGELOG.md`'s `## [0.1.0]` block describes the
   real routing; `README.md`'s Connect-OpenClaw / Zed / VS Code
@@ -531,6 +531,7 @@ once that phase lands.
 - Phase 5 baseline: 304 pass / 0 fail / 20 E2E filtered, 38 test files, 768 expect calls (on P5.8 close; Phase 5 opened with the 293-pass baseline carried from Phase 4).
 - Phase 6 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P6.10 close; Phase 6 opened with the 304-pass baseline carried from Phase 5).
 - Phase 7 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P7.6 close; Phase 7 opened with the 339-pass baseline carried from Phase 6). v0.1 complete — every P3–P7 task is [x]; remaining release steps (`npm publish`, marketplace form, ACP registry PR) require human credentials per ROADMAP and are documented in `docs/release/publish.md`.
+- Phase 8 baseline: 384 pass / 0 fail / 20 E2E filtered, 47 test files, 935 expect calls (on P8.8 close; Phase 8 opened with the 339-pass baseline carried from Phase 7). Real ACP → Claude Code routing via DaemonProxyGateway lands end-to-end; `a2a-bridge acp` no longer falls back to the echo gateway in production. Permission-relay policy documented in `docs/design/architecture.md` §"Permission-relay policy for ACP-originated turns" (option b: bridge to ACP `session/request_permission`); daemon-side bridge mechanism landed — plugin-side MCP handler + subprocess-side AgentSideConnection bridge remain as follow-ups.
 
 ## v0.1 starting baseline
 

@@ -226,9 +226,14 @@ subprocess.
   newline-delimited JSON-RPC 2.0.
 - HTTP transport is a draft in the ACP spec; not implemented here.
 - The `a2a-bridge acp` subcommand is a thin process — it connects to
-  the long-running daemon over the unix-socket control plane (Phase 4)
-  and forwards ACP sessions through the shared
-  `ClaudeCodeGateway`.
+  the long-running daemon over the control-plane WebSocket and
+  forwards every turn through `DaemonProxyGateway`, a concrete
+  `ClaudeCodeGateway` implementation that relays `acp_turn_start` →
+  `acp_turn_chunk` / `acp_turn_complete` / `acp_turn_error` frames
+  in both directions (see `src/runtime-daemon/inbound/acp/
+  daemon-proxy-gateway.ts`). When the daemon is unreachable the
+  subcommand exits non-zero via the friendly error helper in
+  `src/cli/errors.ts`; there is no in-process echo fallback.
 
 ### Required methods
 

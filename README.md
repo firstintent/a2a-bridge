@@ -197,9 +197,11 @@ OpenClaw speaks the Agent Client Protocol (ACP) over stdio. Register
 ```
 
 The subcommand binds `process.stdin` / `process.stdout`; no ports are
-opened and no bearer token is required. v0.1 ships an in-process echo
-reply (`Echo: <prompt>`) so you can validate the wire end-to-end
-before daemon-backed ACP→CC routing lands post-v0.1.
+opened and no bearer token is required. Every turn is relayed through
+the a2a-bridge daemon to the attached Claude Code session via
+`DaemonProxyGateway`. When the daemon is unreachable the subcommand
+exits non-zero with a friendly `error: / fix:` block instead of
+returning a silent echo.
 
 ## Connect Zed
 
@@ -218,8 +220,8 @@ Zed reads the same ACP shape under `agent_servers` in its
 ```
 
 Restart Zed; the new agent appears in the agent picker. As with
-OpenClaw, the v0.1 echo gateway round-trips prompts without a live
-Claude Code session, which is enough to validate the bridge itself.
+OpenClaw, each prompt reaches the real Claude Code session through
+the daemon — the subcommand does not fall back to an in-process echo.
 
 ## Connect VS Code
 
