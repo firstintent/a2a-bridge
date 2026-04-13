@@ -70,12 +70,25 @@ export type MessageStreamExecutor = (ctx: {
   emit: StreamEmitter;
 }) => Promise<void> | void;
 
+/**
+ * Per-turn token usage reported by the executor. Emitted as
+ * `metadata.tokenUsage` on the terminal `status-update` so callers can see
+ * the 3–10× overhead of multi-agent delegation up front (per POSITIONING.md
+ * §"When NOT to use"). Adapters that cannot report usage simply omit it.
+ */
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export type StreamEvent =
   | {
       kind: "status-update";
       state: string;
       final?: boolean;
       message?: A2aMessage;
+      tokenUsage?: TokenUsage;
     }
   | {
       kind: "artifact-update";
@@ -147,13 +160,17 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
             ? { state: event.state, message: event.message }
             : { state: event.state };
           registry?.updateStatus(taskId, status);
-          write({
+          const frame: Record<string, unknown> = {
             kind: "status-update",
             taskId,
             contextId,
             status,
             final: event.final ?? false,
-          });
+          };
+          if (event.tokenUsage) {
+            frame.metadata = { tokenUsage: event.tokenUsage };
+          }
+          write(frame);
           if (event.final) {
             terminated = true;
           }

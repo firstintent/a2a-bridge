@@ -368,6 +368,75 @@ describe("handleMessageStream", () => {
     expect(parsed.value).toEqual(verdict);
   });
 
+  test("propagates tokenUsage onto metadata of the terminal status-update and parses as an A2A TaskStatusUpdateEvent", async () => {
+    const { idFactory } = deterministicIds();
+    const resp = handleMessageStream({
+      rpcId: "tok-1",
+      params: { message: { parts: [{ kind: "text", text: "hi" }] } },
+      executor: ({ emit }) => {
+        emit({ kind: "status-update", state: "working" });
+        emit({
+          kind: "status-update",
+          state: "completed",
+          final: true,
+          tokenUsage: {
+            promptTokens: 150,
+            completionTokens: 42,
+            totalTokens: 192,
+          },
+          message: {
+            kind: "message",
+            messageId: idFactory(),
+            role: "agent",
+            parts: [{ kind: "text", text: "done" }],
+          },
+        });
+      },
+      idFactory,
+    });
+
+    const frames = await readSseFrames(resp);
+    const terminal = frames[frames.length - 1]!.result as {
+      kind: "status-update";
+      final: boolean;
+      contextId: string;
+      taskId: string;
+      status: { state: string };
+      metadata?: { tokenUsage?: unknown };
+    };
+    expect(terminal.kind).toBe("status-update");
+    expect(terminal.final).toBe(true);
+    expect(terminal.metadata).toBeDefined();
+    expect(terminal.metadata!.tokenUsage).toEqual({
+      promptTokens: 150,
+      completionTokens: 42,
+      totalTokens: 192,
+    });
+
+    // The shape must satisfy the A2A SDK's TaskStatusUpdateEvent contract
+    // (metadata?: { [k: string]: unknown }) so clients can consume it.
+    const sdkView = terminal as unknown as import("@a2a-js/sdk").TaskStatusUpdateEvent;
+    expect(sdkView.kind).toBe("status-update");
+    expect(sdkView.metadata?.tokenUsage).toEqual(terminal.metadata!.tokenUsage);
+  });
+
+  test("omits metadata.tokenUsage when the executor does not supply it", async () => {
+    const { idFactory } = deterministicIds();
+    const resp = handleMessageStream({
+      rpcId: "tok-2",
+      params: { message: { parts: [{ kind: "text", text: "hi" }] } },
+      executor: createEchoExecutor({ idFactory }),
+      idFactory,
+    });
+    const frames = await readSseFrames(resp);
+    const terminal = frames[frames.length - 1]!.result as {
+      kind: string;
+      metadata?: unknown;
+    };
+    expect(terminal.kind).toBe("status-update");
+    expect(terminal.metadata).toBeUndefined();
+  });
+
   test("each SSE record is terminated by a blank line", async () => {
     const { idFactory } = deterministicIds();
     const resp = handleMessageStream({
