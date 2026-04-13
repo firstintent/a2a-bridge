@@ -151,7 +151,7 @@ once that phase lands.
   rather than globally — the daemon stops when *all* rooms are idle,
   not when any one is.
 
-- [/] **P4.10 — Concurrent-session integration test.**
+- [x] **P4.10 — Concurrent-session integration test.**
   Acceptance: new test in `src/cli/concurrent-sessions.test.ts`
   starts the daemon with two A2A clients posting to different
   `contextId`s in parallel; asserts each client sees its own task
