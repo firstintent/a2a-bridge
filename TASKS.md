@@ -403,7 +403,7 @@ once that phase lands.
   telegram reference handler at
   `references/claude-plugins-official/external_plugins/telegram/server.ts:405-430`.
 
-- [ ] **P8.3 — `DaemonProxyGateway` in `runtime-daemon/inbound/acp/`.**
+- [x] **P8.3 — `DaemonProxyGateway` in `runtime-daemon/inbound/acp/`.**
   Acceptance: new class implementing `ClaudeCodeGateway` that
   opens a control-plane WS connection to the daemon and uses the
   Phase-8.1 wire format to relay turns. `startTurn(text)` returns
