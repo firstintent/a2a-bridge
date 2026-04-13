@@ -25,7 +25,10 @@ import {
   type StopReason,
 } from "@agentclientprotocol/sdk";
 import type { IInboundService } from "@daemon/inbound/inbound-service";
-import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
+import type {
+  ClaudeCodeGateway,
+  ClaudeCodeTurn,
+} from "@daemon/inbound/a2a-http/claude-code-gateway";
 import {
   buildAcpStream,
   type AcpStdioPair,
@@ -60,6 +63,13 @@ export class AcpInboundService implements IInboundService {
   private readonly gateway?: ClaudeCodeGateway;
   private connection: AgentSideConnection | null = null;
   private activeSessions = new Map<string, { cwd: string }>();
+  /**
+   * Session → turn registry for the in-flight prompt. The cancel
+   * handler looks a session up here and calls `turn.cancel()`; the
+   * prompt handler's event loop then sees the gateway's completion
+   * and resolves with `cancelled`.
+   */
+  private readonly activeTurns = new Map<string, ActivePromptHandle>();
   private readonly makeSessionId: () => string;
 
   constructor(config: AcpInboundConfig) {
@@ -140,10 +150,24 @@ export class AcpInboundService implements IInboundService {
           gateway: self.gateway,
           sessionId: params.sessionId,
           userText: extractUserText(params.prompt),
+          register: (handle) => {
+            self.activeTurns.set(params.sessionId, handle);
+          },
+          unregister: () => {
+            self.activeTurns.delete(params.sessionId);
+          },
         });
       },
-      async cancel(_: CancelNotification): Promise<void> {
-        throw NOT_IMPLEMENTED("cancel");
+      async cancel(params: CancelNotification): Promise<void> {
+        const active = self.activeTurns.get(params.sessionId);
+        if (!active) return;
+        active.markCancelled();
+        try {
+          active.turn.cancel();
+        } catch {
+          // Adapter cancel is best-effort; the prompt resolver still
+          // flips to "cancelled" via markCancelled above.
+        }
       },
     };
     return agent;
@@ -157,11 +181,21 @@ function extractUserText(blocks: ContentBlock[]): string {
     .join("");
 }
 
+interface ActivePromptHandle {
+  turn: ClaudeCodeTurn;
+  /** Flip the terminal stopReason to `"cancelled"` before the gateway's own event fires. */
+  markCancelled(): void;
+}
+
 interface RunPromptArgs {
   conn: AgentSideConnection;
   gateway: ClaudeCodeGateway | undefined;
   sessionId: SessionId;
   userText: string;
+  /** Expose the handle so the ACP `cancel` notification can find this turn. */
+  register?: (handle: ActivePromptHandle) => void;
+  /** Drop the registration once the turn has settled (success or failure). */
+  unregister?: () => void;
 }
 
 /**
@@ -171,7 +205,7 @@ interface RunPromptArgs {
  * event-listener closure doesn't have to juggle `this` references.
  */
 function runPromptTurn(args: RunPromptArgs): Promise<PromptResponse> {
-  const { conn, gateway, sessionId, userText } = args;
+  const { conn, gateway, sessionId, userText, register, unregister } = args;
 
   if (!gateway) {
     // No gateway wired — surface a refusal so the client gets a
@@ -194,6 +228,7 @@ function runPromptTurn(args: RunPromptArgs): Promise<PromptResponse> {
   return new Promise<PromptResponse>((resolve) => {
     const turn = gateway.startTurn(userText);
     let settled = false;
+    let cancelled = false;
 
     const finish = (stopReason: StopReason) => {
       if (settled) return;
@@ -201,7 +236,11 @@ function runPromptTurn(args: RunPromptArgs): Promise<PromptResponse> {
       turn.off("chunk", onChunk);
       turn.off("complete", onComplete);
       turn.off("error", onError);
-      resolve({ stopReason });
+      unregister?.();
+      // A cancel notification overrides whatever the gateway reports
+      // next; the turn may still emit "complete" after its cancel()
+      // call lands, but ACP wants `stopReason: "cancelled"`.
+      resolve({ stopReason: cancelled ? "cancelled" : stopReason });
     };
 
     const onChunk = (text: string) => {
@@ -218,21 +257,30 @@ function runPromptTurn(args: RunPromptArgs): Promise<PromptResponse> {
     const onComplete = () => finish("end_turn");
 
     const onError = (err: Error) => {
-      void conn.sessionUpdate({
-        sessionId,
-        update: {
-          sessionUpdate: "agent_message_chunk",
-          content: {
-            type: "text",
-            text: `ClaudeCodeGateway error: ${err.message}`,
+      if (!cancelled) {
+        void conn.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: {
+              type: "text",
+              text: `ClaudeCodeGateway error: ${err.message}`,
+            },
           },
-        },
-      });
+        });
+      }
       finish("refusal");
     };
 
     turn.on("chunk", onChunk);
     turn.on("complete", onComplete);
     turn.on("error", onError);
+
+    register?.({
+      turn,
+      markCancelled: () => {
+        cancelled = true;
+      },
+    });
   });
 }

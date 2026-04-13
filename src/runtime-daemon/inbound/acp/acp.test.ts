@@ -52,7 +52,10 @@ function makeRecordingClient() {
 const noopClient = makeRecordingClient().client;
 
 class StubTurn extends EventEmitter implements ClaudeCodeTurn {
-  cancel(): void {}
+  cancelCalls = 0;
+  cancel(): void {
+    this.cancelCalls += 1;
+  }
 }
 
 class StubGateway implements ClaudeCodeGateway {
@@ -244,5 +247,54 @@ describe("AcpInboundService prompt → ClaudeCodeGateway (P5.4)", () => {
     expect(resp.stopReason).toBe("refusal");
     const refusal = recorder.updates.find((u) => u.text?.includes("no ClaudeCodeGateway"));
     expect(refusal).toBeDefined();
+  });
+});
+
+describe("AcpInboundService cancel (P5.5)", () => {
+  test("session/cancel calls turn.cancel and resolves the pending prompt with cancelled", async () => {
+    const recorder = makeRecordingClient();
+    const gateway = new StubGateway();
+    const { client } = buildInMemoryPair({
+      gateway,
+      clientImpl: recorder.client,
+    });
+    const session = await client.newSession({
+      cwd: "/tmp/acp-cancel",
+      mcpServers: [],
+    });
+
+    const promptPromise = client.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "start a long turn" }],
+    });
+    while (gateway.turns.length === 0) {
+      await new Promise((r) => setImmediate(r));
+    }
+    const turn = gateway.turns[0] as StubTurn;
+
+    // Client cancels the in-flight prompt. `cancel` is a notification,
+    // so no response to await; the pending `prompt` promise should
+    // settle once the gateway's stream flushes its terminal event.
+    await client.cancel({ sessionId: session.sessionId });
+
+    // Give the cancel handler a tick to land; then emit the gateway's
+    // own terminal so the runPromptTurn listeners resolve.
+    await new Promise((r) => setImmediate(r));
+    expect(turn.cancelCalls).toBe(1);
+    gateway.emitOn(0, "complete");
+
+    const resp = await promptPromise;
+    expect(resp.stopReason).toBe("cancelled");
+  });
+
+  test("cancel for an unknown session is a no-op", async () => {
+    const recorder = makeRecordingClient();
+    const gateway = new StubGateway();
+    const { client } = buildInMemoryPair({
+      gateway,
+      clientImpl: recorder.client,
+    });
+    // No prior newSession for "ghost" — cancel should resolve cleanly.
+    await expect(client.cancel({ sessionId: "ghost" })).resolves.toBeUndefined();
   });
 });
