@@ -5,6 +5,7 @@ import {
   type VerificationArtifact,
 } from "@daemon/inbound/a2a-http/verdict";
 import type { ITaskStore, InitialTask } from "@daemon/tasks/task-store";
+import type { RoomId } from "@daemon/rooms/room-id";
 
 /**
  * `message/stream` SSE handler.
@@ -120,6 +121,12 @@ export interface HandleMessageStreamOptions {
    * stream with a final status-update(canceled).
    */
   registry?: ITaskStore;
+  /**
+   * Optional room id to tag the created task with so `listByRoom`
+   * reflects ownership. When omitted the store's default applies
+   * (typically `"default"`).
+   */
+  roomId?: RoomId;
 }
 
 /** Build an SSE `Response` for a single `message/stream` request. */
@@ -138,6 +145,7 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
     contextId,
     kind: "task",
     status: { state: "submitted" },
+    ...(opts.roomId ? { roomId: opts.roomId } : {}),
   };
   registry?.create(initialTask);
 

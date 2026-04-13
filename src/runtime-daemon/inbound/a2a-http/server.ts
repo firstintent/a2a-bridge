@@ -167,11 +167,12 @@ export async function startA2AServer(config: A2aServerConfig): Promise<A2aServer
         if (methodName === "message/stream") {
           const params = extractParams(body);
           let requestExecutor: MessageStreamExecutor = defaultExecutor;
+          let resolvedRoomId: ReturnType<typeof deriveRoomId> | undefined;
           if (roomRouter && executorFactory) {
-            const roomId = deriveRoomId({
+            resolvedRoomId = deriveRoomId({
               contextId: params.message.contextId,
             });
-            const room = await roomRouter.getOrCreate(roomId);
+            const room = await roomRouter.getOrCreate(resolvedRoomId);
             requestExecutor = executorFactory(room.gateway);
           }
           return handleMessageStream({
@@ -179,6 +180,7 @@ export async function startA2AServer(config: A2aServerConfig): Promise<A2aServer
             params,
             executor: requestExecutor,
             registry,
+            roomId: resolvedRoomId,
           });
         }
 

@@ -2011,7 +2011,8 @@ function handleMessageStream(opts) {
     id: taskId,
     contextId,
     kind: "task",
-    status: { state: "submitted" }
+    status: { state: "submitted" },
+    ...opts.roomId ? { roomId: opts.roomId } : {}
   };
   registry?.create(initialTask);
   const stream = new ReadableStream({
@@ -2308,18 +2309,20 @@ async function startA2AServer(config) {
         if (methodName === "message/stream") {
           const params = extractParams(body);
           let requestExecutor = defaultExecutor;
+          let resolvedRoomId;
           if (roomRouter && executorFactory) {
-            const roomId = deriveRoomId({
+            resolvedRoomId = deriveRoomId({
               contextId: params.message.contextId
             });
-            const room = await roomRouter.getOrCreate(roomId);
+            const room = await roomRouter.getOrCreate(resolvedRoomId);
             requestExecutor = executorFactory(room.gateway);
           }
           return handleMessageStream({
             rpcId: normalizeId2(rpcId),
             params,
             executor: requestExecutor,
-            registry
+            registry,
+            roomId: resolvedRoomId
           });
         }
         const resp = await dispatch(body, handlers);
