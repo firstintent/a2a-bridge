@@ -64,7 +64,7 @@ once that phase lands.
   test asserts the SSE frame's artifact has the expected mime type
   and parses back into a `VerificationVerdict`.
 
-- [/] **P3.5 — Verification skill template.**
+- [x] **P3.5 — Verification skill template.**
   Acceptance: `skills/verify/SKILL.md` documents the verification
   delegation pattern: when to use, the prompt scaffold for the
   verifier subagent, expected return shape (the artifact from P3.3),
