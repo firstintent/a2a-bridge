@@ -304,7 +304,7 @@ once that phase lands.
   AND `scripts/smoke-tarball.sh` on every PR. Matrix on Ubuntu and
   macOS. Caches bun deps. README badge points at the workflow.
 
-- [ ] **P7.2 — Add `.github/workflows/release.yml`.**
+- [x] **P7.2 — Add `.github/workflows/release.yml`.**
   Acceptance: tag-triggered workflow runs the full check, builds the
   tarball, attaches it to a draft GitHub release, and surfaces an
   npm-publish step gated on a manual `production` environment
