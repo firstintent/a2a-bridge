@@ -414,7 +414,7 @@ once that phase lands.
   emitter must round-trip without lossy key renaming — meta keys
   stay identifier-safe end-to-end.
 
-- [ ] **P8.4 — Wire `runAcp()` onto `DaemonProxyGateway` (no echo
+- [x] **P8.4 — Wire `runAcp()` onto `DaemonProxyGateway` (no echo
   fallback).**
   Acceptance: `src/cli/acp.ts` default stdio path constructs
   `DaemonProxyGateway` after `lifecycle.ensureRunning()` resolves.
