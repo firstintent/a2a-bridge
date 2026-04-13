@@ -496,7 +496,7 @@ once that phase lands.
     echo. Unit / smoke tests for the parsed instructions if
     feasible; manual verification notes otherwise.
 
-- [ ] **P9.3 — README "Join the bridge" section.**
+- [x] **P9.3 — README "Join the bridge" section.**
   Acceptance: new top-level README section (between "Configure"
   and "Connect Gemini CLI") showing the single-line skill invoke
   for each side:
