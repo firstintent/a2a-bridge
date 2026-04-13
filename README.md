@@ -131,6 +131,10 @@ and a worked example.
 - [`skills/verify/SKILL.md`](./skills/verify/SKILL.md) — delegate a
   check to a peer agent and receive a structured pass/fail/needs-info
   verdict instead of free-form text.
+- [`skills/context-protect/SKILL.md`](./skills/context-protect/SKILL.md) —
+  push a long log dig, audit, or transcript analysis to a peer with
+  `return_format: "summary"` and keep the primary session's context
+  focused on the conclusion.
 
 ## License
 

@@ -70,7 +70,7 @@ once that phase lands.
   verifier subagent, expected return shape (the artifact from P3.3),
   and a worked example. README links to it. lint:deps green.
 
-- [ ] **P3.6 — Context-protection skill template.**
+- [/] **P3.6 — Context-protection skill template.**
   Acceptance: `skills/context-protect/SKILL.md` shows how to delegate
   a long log dig to a peer with `return_format: "summary"`. README
   links to it.
