@@ -364,7 +364,7 @@ once that phase lands.
 > Phase 8 change that alters plugin↔CC wire shape must be audited
 > against both.
 
-- [ ] **P8.1 — Control-plane wire format for ACP turns.**
+- [x] **P8.1 — Control-plane wire format for ACP turns.**
   Acceptance: new message variants in `transport/` (or the
   daemon's control-message types) covering `acp_turn_start`,
   `acp_turn_chunk`, `acp_turn_complete`, `acp_turn_error`, and
