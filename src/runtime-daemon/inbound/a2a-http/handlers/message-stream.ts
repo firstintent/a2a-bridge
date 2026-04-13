@@ -48,10 +48,21 @@ export interface MessageStreamParams {
 
 export type StreamEmitter = (event: StreamEvent) => void;
 
+/**
+ * Caller-requested output shape. Passed via `Message.metadata.return_format`
+ * per ARCHITECTURE.md §"return_format hint" and surfaced on the executor
+ * context so adapters can relay it to the peer. Unknown values fall back to
+ * `"full"`.
+ */
+export type ReturnFormat = "full" | "summary" | "verdict";
+
+const KNOWN_RETURN_FORMATS: readonly ReturnFormat[] = ["full", "summary", "verdict"];
+
 export type MessageStreamExecutor = (ctx: {
   taskId: string;
   contextId: string;
   userText: string;
+  returnFormat: ReturnFormat;
   emit: StreamEmitter;
 }) => Promise<void> | void;
 
@@ -94,6 +105,7 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
   const taskId = makeId();
   const contextId = opts.params.message.contextId ?? makeId();
   const userText = extractText(opts.params.message);
+  const returnFormat = extractReturnFormat(opts.params.message.metadata);
 
   const encoder = new TextEncoder();
 
@@ -172,7 +184,7 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
 
       const run = async () => {
         try {
-          await opts.executor({ taskId, contextId, userText, emit });
+          await opts.executor({ taskId, contextId, userText, returnFormat, emit });
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err);
           emit({
@@ -317,4 +329,11 @@ function extractText(msg: A2aMessage): string {
     .filter((p): p is TextPart => p.kind === "text")
     .map((p) => p.text)
     .join("");
+}
+
+function extractReturnFormat(metadata: A2aMessage["metadata"]): ReturnFormat {
+  const raw = metadata?.return_format;
+  return typeof raw === "string" && (KNOWN_RETURN_FORMATS as readonly string[]).includes(raw)
+    ? (raw as ReturnFormat)
+    : "full";
 }

@@ -43,7 +43,7 @@ once that phase lands.
   object. Unit tests cover happy parse, unrecognized verdict
   (coerced to `needs-info`), and missing-reasoning rejection.
 
-- [ ] **P3.2 — Add `return_format` hint plumbing.**
+- [/] **P3.2 — Add `return_format` hint plumbing.**
   Acceptance: `MessageStreamParams` accepts a `metadata.return_format`
   field with type `"full" | "summary" | "verdict"`. The handler
   forwards the value into the executor context (`ctx.returnFormat`).

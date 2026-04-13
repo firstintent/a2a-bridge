@@ -232,6 +232,76 @@ describe("handleMessageStream", () => {
     expect(registry.get(taskId)!.status.state).toBe("canceled");
   });
 
+  test("forwards metadata.return_format to the executor context for each variant", async () => {
+    const seen: string[] = [];
+    for (const variant of ["full", "summary", "verdict"] as const) {
+      const { idFactory } = deterministicIds();
+      const resp = handleMessageStream({
+        rpcId: variant,
+        params: {
+          message: {
+            parts: [{ kind: "text", text: "hi" }],
+            metadata: { return_format: variant },
+          },
+        },
+        executor: ({ returnFormat, emit }) => {
+          seen.push(returnFormat);
+          emit({
+            kind: "status-update",
+            state: "completed",
+            final: true,
+            message: {
+              kind: "message",
+              messageId: idFactory(),
+              role: "agent",
+              parts: [{ kind: "text", text: "done" }],
+            },
+          });
+        },
+        idFactory,
+      });
+      await readSseFrames(resp);
+    }
+    expect(seen).toEqual(["full", "summary", "verdict"]);
+  });
+
+  test("defaults return_format to \"full\" when metadata is absent or unknown", async () => {
+    const captured: string[] = [];
+    const run = async (metadata: Record<string, unknown> | undefined) => {
+      const { idFactory } = deterministicIds();
+      const resp = handleMessageStream({
+        rpcId: "rf-default",
+        params: {
+          message: {
+            parts: [{ kind: "text", text: "hi" }],
+            metadata,
+          },
+        },
+        executor: ({ returnFormat, emit }) => {
+          captured.push(returnFormat);
+          emit({
+            kind: "status-update",
+            state: "completed",
+            final: true,
+            message: {
+              kind: "message",
+              messageId: idFactory(),
+              role: "agent",
+              parts: [{ kind: "text", text: "done" }],
+            },
+          });
+        },
+        idFactory,
+      });
+      await readSseFrames(resp);
+    };
+
+    await run(undefined);
+    await run({ return_format: "bogus" });
+    await run({ return_format: 123 });
+    expect(captured).toEqual(["full", "full", "full"]);
+  });
+
   test("each SSE record is terminated by a blank line", async () => {
     const { idFactory } = deterministicIds();
     const resp = handleMessageStream({
