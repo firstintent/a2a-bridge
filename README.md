@@ -146,6 +146,23 @@ a2a-bridge daemon logs --tail 50
 a2a-bridge daemon stop
 ```
 
+## Join the bridge
+
+Hand the join skill to **both** AIs and each self-installs its
+side — no manual port / token juggling in the middle.  After both
+halves run, the ACP-side AI can drive the CC-side AI end-to-end
+through the bridge.
+
+```
+Claude Code:   Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
+OpenClaw:      Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
+```
+
+The same URL also works for Zed and the VS Code ACP extension —
+the skill's step 0 asks the host AI to identify itself and branches
+accordingly.  Full text lives in
+[`docs/join.md`](./docs/join.md).
+
 ## Connect Gemini CLI
 
 Any A2A client can drive Claude Code through a2a-bridge. For Gemini
