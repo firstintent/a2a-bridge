@@ -375,7 +375,7 @@ once that phase lands.
   otherwise non-identifier keys at the boundary so CC never
   silently drops them.
 
-- [ ] **P8.2 — Daemon-side handler for ACP turns.**
+- [x] **P8.2 — Daemon-side handler for ACP turns.**
   Acceptance: when an attached client sends `acp_turn_start`, the
   daemon calls `inboundGateway.startTurn(text)` on the shared
   `DaemonClaudeCodeGateway` and pipes the resulting `chunk` /
