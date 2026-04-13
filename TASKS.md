@@ -385,7 +385,7 @@ once that phase lands.
   test drives the handler with a stub gateway and asserts the
   frame sequence.
 
-- [ ] **P8.2a — Permission-relay policy for ACP-triggered turns.**
+- [x] **P8.2a — Permission-relay policy for ACP-triggered turns.**
   Acceptance: decide and document how the plugin's
   `notifications/claude/channel/permission_request` handler
   behaves when the in-flight turn originated from an ACP client
