@@ -516,7 +516,7 @@ once that phase lands.
   the transcript under `docs/release/verified-joins/<date>.md`
   (or similar) as evidence for the first publish.
 
-- [/] **P9.5 — Bump + CHANGELOG close for the first publish.**
+- [x] **P9.5 — Bump + CHANGELOG close for the first publish.**
   Acceptance: `CHANGELOG.md`'s `## [0.1.0]` header flips from
   `— Unreleased` to the release date. `docs/release/publish.md`
   remains the runbook; the maintainer takes over from there for
