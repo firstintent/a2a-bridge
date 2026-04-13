@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
-# smoke-e2e.sh — end-to-end A2A + ACP wire-level smoke test (P6.8).
+# smoke-e2e.sh — end-to-end A2A + ACP wire-level smoke test.
 #
-# A2A half: start the daemon with `A2A_BRIDGE_INBOUND_ECHO=1` so the
-# inbound executor is the built-in echo (no Claude Code attach needed),
-# POST a `message/stream`, and assert the four-event SSE envelope.
-# ACP half: invoke `scripts/smoke-e2e-acp.ts`, which spawns
-# `a2a-bridge acp` and drives it with the ACP SDK's
-# `ClientSideConnection` to assert initialize → session/new → prompt
-# → one streamed update + terminal `end_turn`.
+# A2A half (P6.8): start the daemon with `A2A_BRIDGE_INBOUND_ECHO=1` — a
+# test/debug knob that swaps the A2A HTTP inbound executor for a
+# built-in echo so the A2A wire contract can be verified without a real
+# Claude Code session. POST a `message/stream`, assert the four-event
+# SSE envelope. This knob is not documented in any user-facing runbook.
+#
+# ACP half (P8.6): invoke `scripts/smoke-e2e-acp.ts`, which attaches a
+# stub CC channel to the live daemon via the plugin-side DaemonClient
+# and drives `a2a-bridge acp` through the ACP SDK.  The ACP half does
+# NOT rely on the echo knob — it exercises the real ACP → daemon →
+# plugin → CC reply → daemon → subprocess wire and asserts the returned
+# `session/update` text carries the stub CC's deterministic prefix
+# ("smoke-cc:"), not "Echo:" (which would indicate a regression).
 #
 # All state — state-dir, ports, daemon log — lives under a throwaway
 # `mktemp -d` path; the daemon is killed on exit even when a step
@@ -52,7 +58,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[e2e] starting daemon in echo mode..."
+echo "[e2e] starting daemon (A2A half uses INBOUND_ECHO; ACP half uses stub CC)..."
 bun run src/runtime-daemon/daemon.ts >"$WORK/daemon.log" 2>&1 &
 DAEMON_PID=$!
 
@@ -96,12 +102,9 @@ if ! printf '%s\n' "$SSE" | grep -q '"final":true'; then
 fi
 echo "[e2e] A2A envelope OK ($DATA_LINES frames, completed/final present)"
 
-# Keep the daemon alive across the ACP half so `a2a-bridge acp`'s
-# built-in `ensureRunning` probe finds an already-live daemon at
-# control port $SMOKE_CONTROL_PORT and resolves immediately (the
-# smoke doesn't depend on ACP driving the daemon — the v0.1 echo
-# gateway is in-process — but the probe would otherwise spend
-# seconds launching its own).
+# Keep the daemon alive across the ACP half: smoke-e2e-acp.ts attaches
+# a stub CC via DaemonClient to the control port above and drives the
+# real ACP → CC reply wire through it (no echo fallback, per P8.4/P8.6).
 echo "[e2e] driving ACP subprocess..."
 bun scripts/smoke-e2e-acp.ts
 

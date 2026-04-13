@@ -749,9 +749,15 @@ async function bootInbound() {
     return;
   }
 
-  // `A2A_BRIDGE_INBOUND_ECHO=1` swaps the Claude Code executor for the
-  // built-in echo executor so the wire contract can be smoke-tested
-  // without a Claude Code session attached (used by `scripts/smoke-e2e.sh`).
+  // `A2A_BRIDGE_INBOUND_ECHO=1` is a **test/debug-only knob**: it swaps
+  // the A2A HTTP inbound's Claude Code executor for an in-process echo
+  // executor so the A2A wire contract can be exercised without a real
+  // Claude Code session attached. `scripts/smoke-e2e.sh` uses it for its
+  // A2A half; the ACP half attaches a real stub CC via DaemonClient and
+  // does NOT depend on this hook.  Do not document this env var in any
+  // user-facing runbook or advertise it as a production fallback — the
+  // `a2a-bridge acp` subcommand fails loudly when the daemon has no CC
+  // attached (P8.4).
   const echoMode = process.env.A2A_BRIDGE_INBOUND_ECHO === "1";
   const routedConfig = echoMode
     ? { messageStreamExecutor: createEchoExecutor() }
