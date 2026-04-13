@@ -101,7 +101,7 @@ once that phase lands.
   present, `A2A_BRIDGE_ROOM` env when set, `"default"` otherwise.
   Unit tests cover each branch.
 
-- [/] **P4.2 — Implement `Room`.**
+- [x] **P4.2 — Implement `Room`.**
   Acceptance: `src/runtime-daemon/rooms/room.ts` exports a `Room`
   class owning a `ClaudeCodeGateway`, a `TaskRegistry`, and a peer
   adapter set. Constructor accepts `{ id, gateway, registry }`.
