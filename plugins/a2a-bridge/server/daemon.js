@@ -1286,6 +1286,9 @@ class StateDirResolver {
   get killedFile() {
     return join(this.stateDir, "killed");
   }
+  get taskLogFile() {
+    return join(this.stateDir, "tasks.db");
+  }
 }
 
 // src/shared/config-service.ts
@@ -1560,6 +1563,259 @@ class DaemonClaudeCodeGateway {
   }
 }
 
+// src/runtime-daemon/rooms/room.ts
+class Room {
+  id;
+  gateway;
+  registry;
+  peers = new Map;
+  disposed = false;
+  constructor(init) {
+    this.id = init.id;
+    this.gateway = init.gateway;
+    this.registry = init.registry;
+    for (const adapter of init.peers ?? [])
+      this.attachPeer(adapter);
+  }
+  attachPeer(adapter) {
+    this.ensureLive();
+    if (this.peers.has(adapter.peerName)) {
+      throw new Error(`Room ${this.id}: peer "${adapter.peerName}" already attached`);
+    }
+    this.peers.set(adapter.peerName, adapter);
+  }
+  getPeer(name) {
+    return this.peers.get(name);
+  }
+  peerNames() {
+    return Array.from(this.peers.keys());
+  }
+  get isDisposed() {
+    return this.disposed;
+  }
+  get isIdle() {
+    if (this.disposed)
+      return true;
+    for (const adapter of this.peers.values()) {
+      if (adapter.turnInProgress)
+        return false;
+    }
+    if (this.registry.listByRoom(this.id).length > 0)
+      return false;
+    return true;
+  }
+  async dispose() {
+    if (this.disposed)
+      return;
+    this.disposed = true;
+    const adapters = Array.from(this.peers.values());
+    this.peers.clear();
+    for (const adapter of adapters) {
+      if (!adapter.dispose)
+        continue;
+      try {
+        await adapter.dispose();
+      } catch {}
+    }
+    try {
+      this.registry.deleteByRoom(this.id);
+    } catch {}
+  }
+  ensureLive() {
+    if (this.disposed) {
+      throw new Error(`Room ${this.id}: cannot mutate a disposed room`);
+    }
+  }
+}
+
+// src/runtime-daemon/rooms/room-router.ts
+class RoomRouter {
+  rooms = new Map;
+  pending = new Map;
+  factory;
+  disposed = false;
+  constructor(factory) {
+    this.factory = factory;
+  }
+  async getOrCreate(id) {
+    this.ensureLive();
+    const cached = this.rooms.get(id);
+    if (cached && !cached.isDisposed)
+      return cached;
+    const inflight = this.pending.get(id);
+    if (inflight)
+      return inflight;
+    const build = (async () => {
+      const room = await this.factory(id);
+      this.rooms.set(id, room);
+      return room;
+    })().finally(() => {
+      this.pending.delete(id);
+    });
+    this.pending.set(id, build);
+    return build;
+  }
+  get(id) {
+    return this.rooms.get(id);
+  }
+  adopt(room) {
+    this.ensureLive();
+    if (this.rooms.has(room.id)) {
+      throw new Error(`RoomRouter: room ${room.id} already adopted`);
+    }
+    this.rooms.set(room.id, room);
+  }
+  get size() {
+    return this.rooms.size;
+  }
+  get allIdle() {
+    for (const room of this.rooms.values()) {
+      if (!room.isIdle)
+        return false;
+    }
+    return true;
+  }
+  async dispose(id) {
+    const room = this.rooms.get(id);
+    if (!room)
+      return;
+    this.rooms.delete(id);
+    await room.dispose();
+  }
+  async disposeAll() {
+    this.disposed = true;
+    const rooms = Array.from(this.rooms.values());
+    this.rooms.clear();
+    for (const room of rooms) {
+      try {
+        await room.dispose();
+      } catch {}
+    }
+  }
+  ensureLive() {
+    if (this.disposed) {
+      throw new Error("RoomRouter: cannot use a router after disposeAll()");
+    }
+  }
+}
+
+// src/runtime-daemon/rooms/room-id.ts
+var DEFAULT_ROOM_ID = "default";
+var ROOM_ENV_VAR = "A2A_BRIDGE_ROOM";
+function deriveRoomId(input = {}) {
+  const contextId = input.contextId?.trim();
+  if (contextId && contextId.length > 0) {
+    return contextId;
+  }
+  const envRoom = (input.env ?? process.env)[ROOM_ENV_VAR]?.trim();
+  if (envRoom && envRoom.length > 0) {
+    return envRoom;
+  }
+  return DEFAULT_ROOM_ID;
+}
+
+// src/runtime-daemon/tasks/task-log.ts
+import { Database } from "bun:sqlite";
+import { EventEmitter as EventEmitter4 } from "events";
+import { readFileSync as readFileSync3 } from "fs";
+import { fileURLToPath as fileURLToPath2 } from "url";
+import { dirname as dirname2, join as join3 } from "path";
+var schemaPath = join3(dirname2(fileURLToPath2(import.meta.url)), "task-log-schema.sql");
+var cachedSchema;
+function loadSchema() {
+  if (cachedSchema === undefined) {
+    cachedSchema = readFileSync3(schemaPath, "utf8");
+  }
+  return cachedSchema;
+}
+function migrateTaskLogSchema(db) {
+  db.exec(loadSchema());
+}
+class SqliteTaskLog extends EventEmitter4 {
+  db;
+  now;
+  constructor(db, options = {}) {
+    super();
+    this.db = db;
+    this.now = options.now ?? (() => Date.now());
+  }
+  static open(path, options = {}) {
+    const db = new Database(path);
+    migrateTaskLogSchema(db);
+    return new SqliteTaskLog(db, options);
+  }
+  create(input) {
+    const now = this.now();
+    const status = input.status ?? { state: "submitted" };
+    const roomId = input.roomId ?? DEFAULT_ROOM_ID;
+    const row = {
+      id: input.id,
+      roomId,
+      contextId: input.contextId,
+      kind: "task",
+      status,
+      createdAt: now,
+      updatedAt: now
+    };
+    try {
+      this.db.prepare("INSERT INTO tasks (id, room_id, context_id, state, status_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(row.id, roomId, row.contextId, status.state, JSON.stringify(status), now, now);
+    } catch (err) {
+      throw new Error(`SqliteTaskLog: task ${input.id} already registered`, {
+        cause: err
+      });
+    }
+    return row;
+  }
+  get(id) {
+    const row = this.db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
+    if (!row)
+      return;
+    return this.rowToStoredTask(row);
+  }
+  updateStatus(id, status) {
+    const now = this.now();
+    this.db.prepare("UPDATE tasks SET state = ?, status_json = ?, updated_at = ? WHERE id = ?").run(status.state, JSON.stringify(status), now, id);
+  }
+  cancel(id) {
+    const now = this.now();
+    const canceled = { state: "canceled" };
+    const changes = this.db.prepare("UPDATE tasks SET state = ?, status_json = ?, updated_at = ? WHERE id = ?").run(canceled.state, JSON.stringify(canceled), now, id);
+    if (changes.changes === 0)
+      return;
+    this.emit("cancel", id);
+    return this.get(id);
+  }
+  delete(id) {
+    this.db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+  }
+  listByRoom(roomId) {
+    const rows = this.db.prepare("SELECT * FROM tasks WHERE room_id = ? ORDER BY updated_at DESC").all(roomId);
+    return rows.map((r) => this.rowToStoredTask(r));
+  }
+  deleteByRoom(roomId) {
+    const changes = this.db.prepare("DELETE FROM tasks WHERE room_id = ?").run(roomId);
+    return Number(changes.changes);
+  }
+  get size() {
+    const row = this.db.prepare("SELECT COUNT(*) AS c FROM tasks").get();
+    return row.c;
+  }
+  close() {
+    this.db.close();
+  }
+  rowToStoredTask(row) {
+    return {
+      id: row.id,
+      roomId: row.room_id,
+      contextId: row.context_id,
+      kind: "task",
+      status: JSON.parse(row.status_json),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+}
+
 // src/shared/logger.ts
 import { appendFileSync as appendFileSync2 } from "fs";
 function createLogger(opts) {
@@ -1725,55 +1981,38 @@ function normalizeId(id) {
   return null;
 }
 
-// src/runtime-daemon/inbound/a2a-http/task-registry.ts
-import { EventEmitter as EventEmitter4 } from "events";
-
-class TaskRegistry extends EventEmitter4 {
-  tasks = new Map;
-  create(task) {
-    if (this.tasks.has(task.id)) {
-      throw new Error(`TaskRegistry: task ${task.id} already registered`);
-    }
-    this.tasks.set(task.id, task);
-  }
-  get(id) {
-    return this.tasks.get(id);
-  }
-  updateStatus(id, status) {
-    const task = this.tasks.get(id);
-    if (!task)
-      return;
-    task.status = status;
-  }
-  cancel(id) {
-    const task = this.tasks.get(id);
-    if (!task)
-      return;
-    task.status = { state: "canceled" };
-    this.emit("cancel", id);
-    return task;
-  }
-  delete(id) {
-    this.tasks.delete(id);
-  }
-  get size() {
-    return this.tasks.size;
-  }
+// src/runtime-daemon/inbound/a2a-http/verdict.ts
+var VERDICT_MIME_TYPE = "application/vnd.a2a-bridge.verdict+json";
+var VERDICT_ARTIFACT_ID = "verification-verdict";
+function serializeVerdictArtifact(verdict, options = {}) {
+  return {
+    artifactId: options.artifactId ?? VERDICT_ARTIFACT_ID,
+    parts: [
+      {
+        kind: "data",
+        mimeType: VERDICT_MIME_TYPE,
+        data: verdict
+      }
+    ]
+  };
 }
 
 // src/runtime-daemon/inbound/a2a-http/handlers/message-stream.ts
+var KNOWN_RETURN_FORMATS = ["full", "summary", "verdict"];
 function handleMessageStream(opts) {
   const makeId = opts.idFactory ?? (() => crypto.randomUUID());
   const taskId = makeId();
   const contextId = opts.params.message.contextId ?? makeId();
   const userText = extractText(opts.params.message);
+  const returnFormat = extractReturnFormat(opts.params.message.metadata);
   const encoder = new TextEncoder;
   const registry = opts.registry;
   const initialTask = {
     id: taskId,
     contextId,
     kind: "task",
-    status: { state: "submitted" }
+    status: { state: "submitted" },
+    ...opts.roomId ? { roomId: opts.roomId } : {}
   };
   registry?.create(initialTask);
   const stream = new ReadableStream({
@@ -1793,16 +2032,32 @@ function handleMessageStream(opts) {
         if (event.kind === "status-update") {
           const status = event.message ? { state: event.state, message: event.message } : { state: event.state };
           registry?.updateStatus(taskId, status);
-          write({
+          const frame = {
             kind: "status-update",
             taskId,
             contextId,
             status,
             final: event.final ?? false
-          });
+          };
+          if (event.tokenUsage) {
+            frame.metadata = { tokenUsage: event.tokenUsage };
+          }
+          write(frame);
           if (event.final) {
             terminated = true;
           }
+        } else if ("verdict" in event) {
+          const envelope = serializeVerdictArtifact(event.verdict, {
+            artifactId: event.artifactId
+          });
+          write({
+            kind: "artifact-update",
+            taskId,
+            contextId,
+            artifact: envelope,
+            append: false,
+            lastChunk: event.lastChunk ?? true
+          });
         } else {
           write({
             kind: "artifact-update",
@@ -1839,7 +2094,7 @@ function handleMessageStream(opts) {
       registry?.on("cancel", onRegistryCancel);
       const run = async () => {
         try {
-          await opts.executor({ taskId, contextId, userText, emit });
+          await opts.executor({ taskId, contextId, userText, returnFormat, emit });
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err);
           emit({
@@ -1945,6 +2200,10 @@ function createClaudeCodeExecutor(opts) {
 function extractText(msg) {
   return (msg.parts ?? []).filter((p) => p.kind === "text").map((p) => p.text).join("");
 }
+function extractReturnFormat(metadata) {
+  const raw = metadata?.return_format;
+  return typeof raw === "string" && KNOWN_RETURN_FORMATS.includes(raw) ? raw : "full";
+}
 
 // src/runtime-daemon/inbound/a2a-http/handlers/tasks-get.ts
 var TASK_NOT_FOUND = -32001;
@@ -2000,8 +2259,13 @@ async function startA2AServer(config) {
   const log = config.logger ?? createLogger({ tag: "A2aHttpServer", filePath: config.logFilePath });
   const card = buildAgentCard(config.agentCard);
   const rpcPath = extractPath(card.url);
-  const registry = config.registry ?? new TaskRegistry;
-  const executor = config.messageStreamExecutor ?? createEchoExecutor();
+  const registry = config.registry ?? SqliteTaskLog.open(config.taskLogPath ?? ":memory:");
+  const defaultExecutor = config.messageStreamExecutor ?? createEchoExecutor();
+  const roomRouter = config.roomRouter;
+  const executorFactory = config.executorFactory;
+  if (roomRouter && !executorFactory) {
+    throw new Error("startA2AServer: roomRouter requires executorFactory so each per-room gateway can drive its own message/stream executor");
+  }
   const handlers = {
     "tasks/get": createTasksGetHandler(registry),
     "tasks/cancel": createTasksCancelHandler(registry),
@@ -2043,11 +2307,22 @@ async function startA2AServer(config) {
           rpcId = peek.id ?? null;
         } catch {}
         if (methodName === "message/stream") {
+          const params = extractParams(body);
+          let requestExecutor = defaultExecutor;
+          let resolvedRoomId;
+          if (roomRouter && executorFactory) {
+            resolvedRoomId = deriveRoomId({
+              contextId: params.message.contextId
+            });
+            const room = await roomRouter.getOrCreate(resolvedRoomId);
+            requestExecutor = executorFactory(room.gateway);
+          }
           return handleMessageStream({
             rpcId: normalizeId2(rpcId),
-            params: extractParams(body),
-            executor,
-            registry
+            params,
+            executor: requestExecutor,
+            registry,
+            roomId: resolvedRoomId
           });
         }
         const resp = await dispatch(body, handlers);
@@ -2121,8 +2396,6 @@ var A2A_INBOUND_HOST = process.env.A2A_BRIDGE_A2A_HOST ?? "127.0.0.1";
 var A2A_INBOUND_TOKEN = process.env.A2A_BRIDGE_BEARER_TOKEN ?? "";
 var A2A_INBOUND_PUBLIC_CARD = process.env.A2A_BRIDGE_PUBLIC_AGENT_CARD !== "false";
 var daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
-var codex = new CodexAdapter(CODEX_APP_PORT, CODEX_PROXY_PORT);
-var attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
 var controlListener = null;
 var a2aInboundServer = null;
 var attachedClaude = null;
@@ -2134,6 +2407,17 @@ var inboundGateway = new DaemonClaudeCodeGateway({
   },
   log: (msg) => log(`[A2aGateway] ${msg}`)
 });
+var sharedTaskStore = SqliteTaskLog.open(stateDir.taskLogFile);
+var defaultRoom = new Room({
+  id: DEFAULT_ROOM_ID,
+  gateway: inboundGateway,
+  registry: sharedTaskStore,
+  peers: [new CodexAdapter(CODEX_APP_PORT, CODEX_PROXY_PORT)]
+});
+var codex = defaultRoom.getPeer("codex");
+var attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
+var inboundRoomRouter = new RoomRouter((id) => new Room({ id, gateway: inboundGateway, registry: sharedTaskStore }));
+inboundRoomRouter.adopt(defaultRoom);
 var nextSystemMessageId = 0;
 var codexBootstrapped = false;
 var attentionWindowTimer = null;
@@ -2439,10 +2723,16 @@ function scheduleIdleShutdown() {
   const snapshot = tuiConnectionState.snapshot();
   if (snapshot.tuiConnected)
     return;
+  if (!inboundRoomRouter.allIdle)
+    return;
   log(`No clients connected. Daemon will shut down in ${IDLE_SHUTDOWN_MS}ms if no one reconnects.`);
   idleShutdownTimer = setTimeout(() => {
     if (attachedClaude || tuiConnectionState.snapshot().tuiConnected) {
       log("Idle shutdown cancelled: client reconnected during grace period");
+      return;
+    }
+    if (!inboundRoomRouter.allIdle) {
+      log("Idle shutdown cancelled: a room became active during grace period");
       return;
     }
     shutdown("idle \u2014 no clients connected");
@@ -2611,6 +2901,11 @@ async function bootInbound() {
     log("A2A inbound disabled (set A2A_BRIDGE_BEARER_TOKEN to enable)");
     return;
   }
+  const echoMode = process.env.A2A_BRIDGE_INBOUND_ECHO === "1";
+  const routedConfig = echoMode ? { messageStreamExecutor: createEchoExecutor() } : {
+    roomRouter: inboundRoomRouter,
+    executorFactory: (gateway) => createClaudeCodeExecutor({ gateway })
+  };
   try {
     a2aInboundServer = await startA2AServer({
       host: A2A_INBOUND_HOST,
@@ -2620,10 +2915,11 @@ async function bootInbound() {
       agentCard: {
         url: `http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}/a2a`
       },
-      messageStreamExecutor: createClaudeCodeExecutor({ gateway: inboundGateway }),
+      ...routedConfig,
+      registry: sharedTaskStore,
       logger: (msg) => log(`[A2aInbound] ${msg}`)
     });
-    log(`A2A inbound server listening on http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}${a2aInboundServer.rpcPath}`);
+    log(`A2A inbound server listening on http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}${a2aInboundServer.rpcPath}${echoMode ? " (echo mode)" : ""}`);
   } catch (err) {
     log(`Failed to start A2A inbound server: ${err?.message ?? err}`);
   }

@@ -8,8 +8,11 @@
  *   a2a-bridge dev         — Register local marketplace + install plugin for local dev
  *   a2a-bridge claude      — Start Claude Code with push channel flags
  *   a2a-bridge codex       — Start Codex TUI connected to daemon
+ *   a2a-bridge acp         — Start ACP-over-stdio server for Zed/OpenClaw/VS Code
  *   a2a-bridge kill        — Force kill all A2aBridge processes
  */
+
+import pkg from "../../package.json" with { type: "json" };
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -22,7 +25,7 @@ async function main() {
   switch (command) {
     case "init":
       const { runInit } = await import("./init");
-      await runInit();
+      await runInit(restArgs);
       break;
     case "dev":
       const { runDev } = await import("./dev");
@@ -35,6 +38,24 @@ async function main() {
     case "codex":
       const { runCodex } = await import("./codex");
       await runCodex(restArgs);
+      break;
+    case "acp":
+      const { runAcp } = await import("./acp");
+      await runAcp(restArgs);
+      break;
+    case "doctor":
+      const { runDoctor } = await import("./doctor");
+      {
+        const result = await runDoctor();
+        if (result.exitCode !== 0) process.exit(result.exitCode);
+      }
+      break;
+    case "daemon":
+      const { runDaemon } = await import("./daemon");
+      {
+        const result = await runDaemon(restArgs);
+        if (result.exitCode !== 0) process.exit(result.exitCode);
+      }
       break;
     case "kill":
       const { runKill } = await import("./kill");
@@ -69,6 +90,9 @@ Commands:
   dev               Register local marketplace + install plugin (for local dev)
   claude [args...]  Start Claude Code with push channel enabled
   codex [args...]   Start Codex TUI connected to A2aBridge daemon
+  acp [args...]     Start ACP-over-stdio server (for Zed / OpenClaw / VS Code)
+  doctor            Run preflight checks (bun, ports, SDK, plugin, state-dir)
+  daemon <cmd>      start | stop | status | logs  (daemon lifecycle)
   kill              Force kill all A2aBridge processes
 
 Options:
@@ -86,12 +110,8 @@ Examples:
 }
 
 function printVersion() {
-  try {
-    const pkg = require("../package.json");
-    console.log(`a2a-bridge v${pkg.version}`);
-  } catch {
-    console.log("a2a-bridge (version unknown)");
-  }
+  const version = (pkg as { version?: string }).version;
+  console.log(version ? `a2a-bridge v${version}` : "a2a-bridge (version unknown)");
 }
 
 main().catch((err) => {

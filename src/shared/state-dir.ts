@@ -65,4 +65,8 @@ export class StateDirResolver {
   get killedFile(): string {
     return join(this.stateDir, "killed");
   }
+
+  get taskLogFile(): string {
+    return join(this.stateDir, "tasks.db");
+  }
 }

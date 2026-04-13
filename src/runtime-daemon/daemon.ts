@@ -18,11 +18,18 @@ import { WebSocketListener } from "@transport/websocket";
 import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "@transport/control-protocol";
 import type { BridgeMessage } from "@messages/types";
 import { DaemonClaudeCodeGateway } from "@daemon/inbound/daemon-claude-code-gateway";
+import { Room } from "@daemon/rooms/room";
+import { RoomRouter } from "@daemon/rooms/room-router";
+import { DEFAULT_ROOM_ID } from "@daemon/rooms/room-id";
+import { SqliteTaskLog } from "@daemon/tasks/task-log";
 import {
   startA2AServer,
   type A2aServerHandle,
 } from "@daemon/inbound/a2a-http/server";
-import { createClaudeCodeExecutor } from "@daemon/inbound/a2a-http/handlers/message-stream";
+import {
+  createClaudeCodeExecutor,
+  createEchoExecutor,
+} from "@daemon/inbound/a2a-http/handlers/message-stream";
 
 interface ControlClientMeta {
   clientId: number;
@@ -52,9 +59,6 @@ const A2A_INBOUND_PUBLIC_CARD = process.env.A2A_BRIDGE_PUBLIC_AGENT_CARD !== "fa
 
 const daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
 
-const codex = new CodexAdapter(CODEX_APP_PORT, CODEX_PROXY_PORT);
-const attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
-
 let controlListener: WebSocketListener | null = null;
 let a2aInboundServer: A2aServerHandle | null = null;
 let attachedClaude: Connection | null = null;
@@ -67,6 +71,28 @@ const inboundGateway = new DaemonClaudeCodeGateway({
   },
   log: (msg) => log(`[A2aGateway] ${msg}`),
 });
+
+// One daemon-wide task log; every Room tracks through this shared store
+// (rows are scoped by the room_id column).
+const sharedTaskStore = SqliteTaskLog.open(stateDir.taskLogFile);
+
+// Default Room owns the one Codex adapter the daemon spawns on boot
+// (P4.8 — no module-level singleton). Non-default rooms share the
+// gateway + store but don't spawn a peer adapter set of their own
+// (single-CC v0.1). `adopt()` seeds the router so
+// `getOrCreate(DEFAULT_ROOM_ID)` returns this same room.
+const defaultRoom = new Room({
+  id: DEFAULT_ROOM_ID,
+  gateway: inboundGateway,
+  registry: sharedTaskStore,
+  peers: [new CodexAdapter(CODEX_APP_PORT, CODEX_PROXY_PORT)],
+});
+const codex = defaultRoom.getPeer("codex") as CodexAdapter;
+const attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
+const inboundRoomRouter = new RoomRouter(
+  (id) => new Room({ id, gateway: inboundGateway, registry: sharedTaskStore }),
+);
+inboundRoomRouter.adopt(defaultRoom);
 let nextSystemMessageId = 0;
 let codexBootstrapped = false;
 let attentionWindowTimer: ReturnType<typeof setTimeout> | null = null;
@@ -454,11 +480,20 @@ function scheduleIdleShutdown() {
   const snapshot = tuiConnectionState.snapshot();
   if (snapshot.tuiConnected) return; // TUI still connected
 
+  // Per-Room idle gate (P4.9): don't shut down if any Room has an
+  // in-flight turn or outstanding tasks, even if no client is
+  // currently attached.
+  if (!inboundRoomRouter.allIdle) return;
+
   log(`No clients connected. Daemon will shut down in ${IDLE_SHUTDOWN_MS}ms if no one reconnects.`);
   idleShutdownTimer = setTimeout(() => {
     // Re-check before shutting down
     if (attachedClaude || tuiConnectionState.snapshot().tuiConnected) {
       log("Idle shutdown cancelled: client reconnected during grace period");
+      return;
+    }
+    if (!inboundRoomRouter.allIdle) {
+      log("Idle shutdown cancelled: a room became active during grace period");
       return;
     }
     shutdown("idle — no clients connected");
@@ -668,6 +703,18 @@ async function bootInbound() {
     return;
   }
 
+  // `A2A_BRIDGE_INBOUND_ECHO=1` swaps the Claude Code executor for the
+  // built-in echo executor so the wire contract can be smoke-tested
+  // without a Claude Code session attached (used by `scripts/smoke-e2e.sh`).
+  const echoMode = process.env.A2A_BRIDGE_INBOUND_ECHO === "1";
+  const routedConfig = echoMode
+    ? { messageStreamExecutor: createEchoExecutor() }
+    : {
+        roomRouter: inboundRoomRouter,
+        executorFactory: (gateway: import("@daemon/inbound/a2a-http/claude-code-gateway").ClaudeCodeGateway) =>
+          createClaudeCodeExecutor({ gateway }),
+      };
+
   try {
     a2aInboundServer = await startA2AServer({
       host: A2A_INBOUND_HOST,
@@ -677,11 +724,14 @@ async function bootInbound() {
       agentCard: {
         url: `http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}/a2a`,
       },
-      messageStreamExecutor: createClaudeCodeExecutor({ gateway: inboundGateway }),
+      ...routedConfig,
+      registry: sharedTaskStore,
       logger: (msg) => log(`[A2aInbound] ${msg}`),
     });
     log(
-      `A2A inbound server listening on http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}${a2aInboundServer.rpcPath}`,
+      `A2A inbound server listening on http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}${a2aInboundServer.rpcPath}${
+        echoMode ? " (echo mode)" : ""
+      }`,
     );
   } catch (err: any) {
     log(`Failed to start A2A inbound server: ${err?.message ?? err}`);

@@ -1,6 +1,11 @@
 import type { JsonRpcId } from "@daemon/inbound/a2a-http/jsonrpc";
-import type { Task, TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
 import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
+import {
+  serializeVerdictArtifact,
+  type VerificationArtifact,
+} from "@daemon/inbound/a2a-http/verdict";
+import type { ITaskStore, InitialTask } from "@daemon/tasks/task-store";
+import type { RoomId } from "@daemon/rooms/room-id";
 
 /**
  * `message/stream` SSE handler.
@@ -48,12 +53,35 @@ export interface MessageStreamParams {
 
 export type StreamEmitter = (event: StreamEvent) => void;
 
+/**
+ * Caller-requested output shape. Passed via `Message.metadata.return_format`
+ * per ARCHITECTURE.md §"return_format hint" and surfaced on the executor
+ * context so adapters can relay it to the peer. Unknown values fall back to
+ * `"full"`.
+ */
+export type ReturnFormat = "full" | "summary" | "verdict";
+
+const KNOWN_RETURN_FORMATS: readonly ReturnFormat[] = ["full", "summary", "verdict"];
+
 export type MessageStreamExecutor = (ctx: {
   taskId: string;
   contextId: string;
   userText: string;
+  returnFormat: ReturnFormat;
   emit: StreamEmitter;
 }) => Promise<void> | void;
+
+/**
+ * Per-turn token usage reported by the executor. Emitted as
+ * `metadata.tokenUsage` on the terminal `status-update` so callers can see
+ * the 3–10× overhead of multi-agent delegation up front (per POSITIONING.md
+ * §"When NOT to use"). Adapters that cannot report usage simply omit it.
+ */
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
 
 export type StreamEvent =
   | {
@@ -61,12 +89,19 @@ export type StreamEvent =
       state: string;
       final?: boolean;
       message?: A2aMessage;
+      tokenUsage?: TokenUsage;
     }
   | {
       kind: "artifact-update";
       artifactId: string;
       text: string;
       append?: boolean;
+      lastChunk?: boolean;
+    }
+  | {
+      kind: "artifact-update";
+      verdict: VerificationArtifact;
+      artifactId?: string;
       lastChunk?: boolean;
     };
 
@@ -85,7 +120,13 @@ export interface HandleMessageStreamOptions {
    * listens for `cancel` events so `tasks/cancel` can terminate the
    * stream with a final status-update(canceled).
    */
-  registry?: TaskRegistry;
+  registry?: ITaskStore;
+  /**
+   * Optional room id to tag the created task with so `listByRoom`
+   * reflects ownership. When omitted the store's default applies
+   * (typically `"default"`).
+   */
+  roomId?: RoomId;
 }
 
 /** Build an SSE `Response` for a single `message/stream` request. */
@@ -94,15 +135,17 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
   const taskId = makeId();
   const contextId = opts.params.message.contextId ?? makeId();
   const userText = extractText(opts.params.message);
+  const returnFormat = extractReturnFormat(opts.params.message.metadata);
 
   const encoder = new TextEncoder();
 
   const registry = opts.registry;
-  const initialTask: Task = {
+  const initialTask: InitialTask = {
     id: taskId,
     contextId,
     kind: "task",
     status: { state: "submitted" },
+    ...(opts.roomId ? { roomId: opts.roomId } : {}),
   };
   registry?.create(initialTask);
 
@@ -125,16 +168,32 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
             ? { state: event.state, message: event.message }
             : { state: event.state };
           registry?.updateStatus(taskId, status);
-          write({
+          const frame: Record<string, unknown> = {
             kind: "status-update",
             taskId,
             contextId,
             status,
             final: event.final ?? false,
-          });
+          };
+          if (event.tokenUsage) {
+            frame.metadata = { tokenUsage: event.tokenUsage };
+          }
+          write(frame);
           if (event.final) {
             terminated = true;
           }
+        } else if ("verdict" in event) {
+          const envelope = serializeVerdictArtifact(event.verdict, {
+            artifactId: event.artifactId,
+          });
+          write({
+            kind: "artifact-update",
+            taskId,
+            contextId,
+            artifact: envelope,
+            append: false,
+            lastChunk: event.lastChunk ?? true,
+          });
         } else {
           write({
             kind: "artifact-update",
@@ -172,7 +231,7 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
 
       const run = async () => {
         try {
-          await opts.executor({ taskId, contextId, userText, emit });
+          await opts.executor({ taskId, contextId, userText, returnFormat, emit });
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err);
           emit({
@@ -317,4 +376,11 @@ function extractText(msg: A2aMessage): string {
     .filter((p): p is TextPart => p.kind === "text")
     .map((p) => p.text)
     .join("");
+}
+
+function extractReturnFormat(metadata: A2aMessage["metadata"]): ReturnFormat {
+  const raw = metadata?.return_format;
+  return typeof raw === "string" && (KNOWN_RETURN_FORMATS as readonly string[]).includes(raw)
+    ? (raw as ReturnFormat)
+    : "full";
 }

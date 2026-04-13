@@ -4,6 +4,11 @@ import {
   handleMessageStream,
 } from "@daemon/inbound/a2a-http/handlers/message-stream";
 import { TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
+import {
+  parseVerdict,
+  VERDICT_MIME_TYPE,
+  type VerificationArtifact,
+} from "@daemon/inbound/a2a-http/verdict";
 
 type SseFrame = { jsonrpc: "2.0"; id: string | number | null; result: Record<string, unknown> };
 
@@ -230,6 +235,206 @@ describe("handleMessageStream", () => {
     expect(terminal.final).toBe(true);
     expect(terminal.status.state).toBe("canceled");
     expect(registry.get(taskId)!.status.state).toBe("canceled");
+  });
+
+  test("forwards metadata.return_format to the executor context for each variant", async () => {
+    const seen: string[] = [];
+    for (const variant of ["full", "summary", "verdict"] as const) {
+      const { idFactory } = deterministicIds();
+      const resp = handleMessageStream({
+        rpcId: variant,
+        params: {
+          message: {
+            parts: [{ kind: "text", text: "hi" }],
+            metadata: { return_format: variant },
+          },
+        },
+        executor: ({ returnFormat, emit }) => {
+          seen.push(returnFormat);
+          emit({
+            kind: "status-update",
+            state: "completed",
+            final: true,
+            message: {
+              kind: "message",
+              messageId: idFactory(),
+              role: "agent",
+              parts: [{ kind: "text", text: "done" }],
+            },
+          });
+        },
+        idFactory,
+      });
+      await readSseFrames(resp);
+    }
+    expect(seen).toEqual(["full", "summary", "verdict"]);
+  });
+
+  test("defaults return_format to \"full\" when metadata is absent or unknown", async () => {
+    const captured: string[] = [];
+    const run = async (metadata: Record<string, unknown> | undefined) => {
+      const { idFactory } = deterministicIds();
+      const resp = handleMessageStream({
+        rpcId: "rf-default",
+        params: {
+          message: {
+            parts: [{ kind: "text", text: "hi" }],
+            metadata,
+          },
+        },
+        executor: ({ returnFormat, emit }) => {
+          captured.push(returnFormat);
+          emit({
+            kind: "status-update",
+            state: "completed",
+            final: true,
+            message: {
+              kind: "message",
+              messageId: idFactory(),
+              role: "agent",
+              parts: [{ kind: "text", text: "done" }],
+            },
+          });
+        },
+        idFactory,
+      });
+      await readSseFrames(resp);
+    };
+
+    await run(undefined);
+    await run({ return_format: "bogus" });
+    await run({ return_format: 123 });
+    expect(captured).toEqual(["full", "full", "full"]);
+  });
+
+  test("emits a verdict artifact with the stable mime type when the executor emits { verdict }", async () => {
+    const verdict: VerificationArtifact = {
+      verdict: "pass",
+      reasoning: "All assertions held.",
+      evidence: [{ claim: "Tests green", source: "src/foo.test.ts:42" }],
+      followups: [],
+    };
+    const { idFactory } = deterministicIds();
+    const resp = handleMessageStream({
+      rpcId: "verdict-1",
+      params: {
+        message: {
+          parts: [{ kind: "text", text: "verify this" }],
+          metadata: { return_format: "verdict" },
+        },
+      },
+      executor: ({ returnFormat, emit }) => {
+        expect(returnFormat).toBe("verdict");
+        emit({ kind: "status-update", state: "working" });
+        emit({ kind: "artifact-update", verdict });
+        emit({
+          kind: "status-update",
+          state: "completed",
+          final: true,
+          message: {
+            kind: "message",
+            messageId: idFactory(),
+            role: "agent",
+            parts: [{ kind: "text", text: "verdict attached" }],
+          },
+        });
+      },
+      idFactory,
+    });
+
+    const frames = await readSseFrames(resp);
+    const artifactFrame = frames.find(
+      (f) => (f.result as { kind?: string }).kind === "artifact-update",
+    );
+    expect(artifactFrame).toBeDefined();
+    const artifact = (
+      artifactFrame!.result as {
+        artifact: {
+          artifactId: string;
+          parts: Array<{ kind: string; mimeType?: string; data?: unknown }>;
+        };
+      }
+    ).artifact;
+    expect(artifact.artifactId).toBeTruthy();
+    const part = artifact.parts[0]!;
+    expect(part.kind).toBe("data");
+    expect(part.mimeType).toBe(VERDICT_MIME_TYPE);
+
+    // Survive a JSON round-trip, then parse back into a VerificationVerdict.
+    const roundTripped = JSON.parse(JSON.stringify(part.data));
+    const parsed = parseVerdict(roundTripped);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value).toEqual(verdict);
+  });
+
+  test("propagates tokenUsage onto metadata of the terminal status-update and parses as an A2A TaskStatusUpdateEvent", async () => {
+    const { idFactory } = deterministicIds();
+    const resp = handleMessageStream({
+      rpcId: "tok-1",
+      params: { message: { parts: [{ kind: "text", text: "hi" }] } },
+      executor: ({ emit }) => {
+        emit({ kind: "status-update", state: "working" });
+        emit({
+          kind: "status-update",
+          state: "completed",
+          final: true,
+          tokenUsage: {
+            promptTokens: 150,
+            completionTokens: 42,
+            totalTokens: 192,
+          },
+          message: {
+            kind: "message",
+            messageId: idFactory(),
+            role: "agent",
+            parts: [{ kind: "text", text: "done" }],
+          },
+        });
+      },
+      idFactory,
+    });
+
+    const frames = await readSseFrames(resp);
+    const terminal = frames[frames.length - 1]!.result as {
+      kind: "status-update";
+      final: boolean;
+      contextId: string;
+      taskId: string;
+      status: { state: string };
+      metadata?: { tokenUsage?: unknown };
+    };
+    expect(terminal.kind).toBe("status-update");
+    expect(terminal.final).toBe(true);
+    expect(terminal.metadata).toBeDefined();
+    expect(terminal.metadata!.tokenUsage).toEqual({
+      promptTokens: 150,
+      completionTokens: 42,
+      totalTokens: 192,
+    });
+
+    // The shape must satisfy the A2A SDK's TaskStatusUpdateEvent contract
+    // (metadata?: { [k: string]: unknown }) so clients can consume it.
+    const sdkView = terminal as unknown as import("@a2a-js/sdk").TaskStatusUpdateEvent;
+    expect(sdkView.kind).toBe("status-update");
+    expect(sdkView.metadata?.tokenUsage).toEqual(terminal.metadata!.tokenUsage);
+  });
+
+  test("omits metadata.tokenUsage when the executor does not supply it", async () => {
+    const { idFactory } = deterministicIds();
+    const resp = handleMessageStream({
+      rpcId: "tok-2",
+      params: { message: { parts: [{ kind: "text", text: "hi" }] } },
+      executor: createEchoExecutor({ idFactory }),
+      idFactory,
+    });
+    const frames = await readSseFrames(resp);
+    const terminal = frames[frames.length - 1]!.result as {
+      kind: string;
+      metadata?: unknown;
+    };
+    expect(terminal.kind).toBe("status-update");
+    expect(terminal.metadata).toBeUndefined();
   });
 
   test("each SSE record is terminated by a blank line", async () => {

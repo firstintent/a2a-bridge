@@ -20,9 +20,9 @@ Everything stored in this git repo MUST be in English:
 - File and directory names
 - README, ARCHITECTURE, ROADMAP, and any other top-level docs
 
-Chinese-language documentation lives in `docs/`, which is **git-ignored** (see `.gitignore`). `docs/` is a scratchpad for local design notes, meeting memos, and translation drafts — it must never be committed.
+English-language documentation targeted at readers of the repo lives under `docs/` and **is** committed (cookbook, runbooks, subsystem guides). Chinese-language scratchpads — local design notes, meeting memos, translation drafts — live under `docs-cn/`, which is **git-ignored** (see `.gitignore`) and must never be committed.
 
-Rationale: this is an open-source project targeting a global audience. Mixed-language repos fragment the reader base and confuse grep.
+Rationale: this is an open-source project targeting a global audience. Mixed-language repos fragment the reader base and confuse grep, so the committed tree stays English-only; `docs-cn/` exists to keep the local workflow useful without polluting the repo.
 
 ## Stack
 

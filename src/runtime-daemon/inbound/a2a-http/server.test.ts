@@ -1,5 +1,15 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { startA2AServer, type A2aServerHandle } from "@daemon/inbound/a2a-http/server";
+import { Room } from "@daemon/rooms/room";
+import { RoomRouter } from "@daemon/rooms/room-router";
+import type { RoomId } from "@daemon/rooms/room-id";
+import type {
+  ClaudeCodeGateway,
+  ClaudeCodeTurn,
+} from "@daemon/inbound/a2a-http/claude-code-gateway";
+import { EventEmitter } from "node:events";
+import { TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
+import type { MessageStreamExecutor } from "@daemon/inbound/a2a-http/handlers/message-stream";
 
 const teardown: Array<() => Promise<void>> = [];
 
@@ -196,4 +206,126 @@ describe("startA2AServer", () => {
     expect(last.final).toBe(true);
     expect(last.status.state).toBe("completed");
   });
+
+  test("routes through RoomRouter: two contextIds hit distinct per-room gateways", async () => {
+    // Each room's gateway emits text identifying the room it belongs to.
+    // Two concurrent message/stream requests with different contextIds
+    // must each come back with their own room's label, never the other's.
+    const gatewayByRoom = new Map<string, StubGateway>();
+    const roomFactory = (id: RoomId) => {
+      const gateway = new StubGateway(`from-${id}`);
+      gatewayByRoom.set(id, gateway);
+      return new Room({ id, gateway, registry: new TaskRegistry() });
+    };
+    const router = new RoomRouter(roomFactory);
+
+    const port = randomPort();
+    const server = track(
+      await startA2AServer({
+        port,
+        logger: () => {},
+        agentCard: cardConfig(port),
+        bearerToken: "tok",
+        publicAgentCard: true,
+        roomRouter: router,
+        executorFactory: (gateway): MessageStreamExecutor => ({
+          taskId,
+          contextId,
+          userText,
+          emit,
+        }) =>
+          new Promise<void>((resolve) => {
+            const turn = gateway.startTurn(userText);
+            void taskId;
+            void contextId;
+            emit({ kind: "status-update", state: "working" });
+            turn.on("chunk", (text) => {
+              emit({
+                kind: "artifact-update",
+                artifactId: "out",
+                text,
+                append: true,
+              });
+            });
+            turn.on("complete", () => {
+              emit({
+                kind: "status-update",
+                state: "completed",
+                final: true,
+                message: {
+                  kind: "message",
+                  messageId: "m",
+                  role: "agent",
+                  parts: [{ kind: "text", text: "done" }],
+                },
+              });
+              resolve();
+            });
+          }),
+      }),
+    );
+
+    const postMessage = async (contextId: string) => {
+      const resp = await fetch(`http://localhost:${server.port}${server.rpcPath}`, {
+        method: "POST",
+        headers: { authorization: "Bearer tok", "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "message/stream",
+          params: {
+            message: { contextId, parts: [{ kind: "text", text: "hi" }] },
+          },
+          id: contextId,
+        }),
+      });
+      expect(resp.status).toBe(200);
+      const text = await resp.text();
+      const frames = text
+        .split("\n\n")
+        .filter((r) => r.startsWith("data: "))
+        .map((r) => JSON.parse(r.slice("data: ".length)));
+      const joinedArtifactText = frames
+        .filter((f) => f.result.kind === "artifact-update")
+        .map(
+          (f) =>
+            (f.result.artifact.parts[0] as { text: string }).text,
+        )
+        .join("");
+      return joinedArtifactText;
+    };
+
+    // Kick both rooms off concurrently with distinct contextIds, then
+    // let each gateway complete its turn.
+    const p1 = postMessage("ctx-alpha");
+    const p2 = postMessage("ctx-beta");
+    await new Promise((r) => setTimeout(r, 20));
+    gatewayByRoom.get("ctx-alpha")!.pushAndComplete();
+    gatewayByRoom.get("ctx-beta")!.pushAndComplete();
+    const [a, b] = await Promise.all([p1, p2]);
+
+    expect(a).toBe("from-ctx-alpha");
+    expect(b).toBe("from-ctx-beta");
+    expect(router.size).toBe(2);
+  });
 });
+
+class StubGateway implements ClaudeCodeGateway {
+  constructor(private readonly label: string) {}
+  private active: StubTurn | null = null;
+  startTurn(_userText: string): ClaudeCodeTurn {
+    const turn = new StubTurn();
+    this.active = turn;
+    return turn;
+  }
+  pushAndComplete(): void {
+    const turn = this.active;
+    if (!turn) throw new Error("no active turn");
+    turn.emit("chunk", this.label);
+    turn.emit("complete");
+    this.active = null;
+  }
+}
+
+class StubTurn extends EventEmitter implements ClaudeCodeTurn {
+  cancel(): void {}
+}
