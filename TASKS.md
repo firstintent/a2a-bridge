@@ -200,7 +200,7 @@ once that phase lands.
   notification. Unit test mocks the gateway and asserts the wire
   sequence.
 
-- [/] **P5.5 — Wire ACP `cancel` to gateway turn cancel.**
+- [x] **P5.5 — Wire ACP `cancel` to gateway turn cancel.**
   Acceptance: ACP `cancel` calls `turn.cancel()` on the active
   ClaudeCodeTurn. Pending `prompt` resolves with
   `stopReason: "cancelled"`. Unit test covers the cancel path.
