@@ -30,7 +30,7 @@ once that phase lands.
 
 ## Phase 3 — Verification and delegation patterns
 
-- [/] **P3.0 — Sanity-check the v0.1 starting baseline.**
+- [x] **P3.0 — Sanity-check the v0.1 starting baseline.**
   Acceptance: `bun run check:ci` passes; record `N pass / 0 fail` in
   this file's footer for Phase 3. No other changes.
 
