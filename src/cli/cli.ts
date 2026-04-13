@@ -8,6 +8,7 @@
  *   a2a-bridge dev         — Register local marketplace + install plugin for local dev
  *   a2a-bridge claude      — Start Claude Code with push channel flags
  *   a2a-bridge codex       — Start Codex TUI connected to daemon
+ *   a2a-bridge acp         — Start ACP-over-stdio server for Zed/OpenClaw/VS Code
  *   a2a-bridge kill        — Force kill all A2aBridge processes
  */
 
@@ -35,6 +36,10 @@ async function main() {
     case "codex":
       const { runCodex } = await import("./codex");
       await runCodex(restArgs);
+      break;
+    case "acp":
+      const { runAcp } = await import("./acp");
+      await runAcp(restArgs);
       break;
     case "kill":
       const { runKill } = await import("./kill");
@@ -69,6 +74,7 @@ Commands:
   dev               Register local marketplace + install plugin (for local dev)
   claude [args...]  Start Claude Code with push channel enabled
   codex [args...]   Start Codex TUI connected to A2aBridge daemon
+  acp [args...]     Start ACP-over-stdio server (for Zed / OpenClaw / VS Code)
   kill              Force kill all A2aBridge processes
 
 Options:
