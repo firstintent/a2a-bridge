@@ -23,7 +23,7 @@ async function main() {
   switch (command) {
     case "init":
       const { runInit } = await import("./init");
-      await runInit();
+      await runInit(restArgs);
       break;
     case "dev":
       const { runDev } = await import("./dev");

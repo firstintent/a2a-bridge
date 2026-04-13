@@ -2,10 +2,12 @@ import { execSync, execFileSync } from "node:child_process";
 import { ConfigService } from "@shared/config-service";
 import { MARKETPLACE_NAME, PLUGIN_NAME } from "./constants";
 import { findPackageRoot, registerMarketplace } from "./pkg-root";
+import { runInitConfig } from "./init-config";
 
 const MIN_CLAUDE_VERSION = "2.1.80";
 
-export async function runInit() {
+export async function runInit(args: string[] = []) {
+  const force = args.includes("--force");
   console.log("A2aBridge Init\n");
 
   // Step 1: Check dependencies
@@ -44,12 +46,18 @@ export async function runInit() {
   }
   console.log("");
 
-  // Step 4: Done
+  // Step 4: Generate state-dir config + bearer token, print client snippets.
+  console.log("Generating a2a-bridge config...");
+  runInitConfig({ force, log: (msg) => console.log(`  ${msg}`) });
+  console.log("");
+
+  // Step 5: Done
   console.log("Setup complete!\n");
   console.log("Next steps:");
   console.log("  1. If Claude Code is already running, execute /reload-plugins in your session");
   console.log("  2. Start Claude Code:  a2a-bridge claude");
   console.log("  3. Start Codex TUI:    a2a-bridge codex");
+  console.log("  4. Drive ACP clients:  a2a-bridge acp  (see Connect ACP clients in README)");
 }
 
 function checkBun() {
