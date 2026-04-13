@@ -8,6 +8,7 @@
  */
 
 export const VERDICT_MIME_TYPE = "application/vnd.a2a-bridge.verdict+json";
+export const VERDICT_ARTIFACT_ID = "verification-verdict";
 
 export type VerificationVerdict = "pass" | "fail" | "needs-info";
 
@@ -27,6 +28,45 @@ export interface VerificationArtifact {
 export type ParseVerdictResult =
   | { ok: true; value: VerificationArtifact }
   | { ok: false; error: string };
+
+/**
+ * A2A artifact envelope carrying a verification verdict. Matches the
+ * shape `handleMessageStream` already emits for `artifact-update` events
+ * (`{ artifactId, parts: [...] }`), with a `data` part whose `mimeType`
+ * is the stable `VERDICT_MIME_TYPE`.
+ */
+export interface VerdictArtifactEnvelope {
+  artifactId: string;
+  parts: [
+    {
+      kind: "data";
+      mimeType: typeof VERDICT_MIME_TYPE;
+      data: VerificationArtifact;
+    },
+  ];
+}
+
+/**
+ * Wrap a parsed `VerificationArtifact` in its A2A data-part envelope.
+ * Paired with `parseVerdict` as the round-trip: the value produced by
+ * this function, when extracted back out via `parts[0].data`, parses
+ * successfully and preserves every field.
+ */
+export function serializeVerdictArtifact(
+  verdict: VerificationArtifact,
+  options: { artifactId?: string } = {},
+): VerdictArtifactEnvelope {
+  return {
+    artifactId: options.artifactId ?? VERDICT_ARTIFACT_ID,
+    parts: [
+      {
+        kind: "data",
+        mimeType: VERDICT_MIME_TYPE,
+        data: verdict,
+      },
+    ],
+  };
+}
 
 const KNOWN_VERDICTS: readonly VerificationVerdict[] = ["pass", "fail", "needs-info"];
 

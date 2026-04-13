@@ -1,6 +1,8 @@
 import { describe, test, expect } from "bun:test";
 import {
   parseVerdict,
+  serializeVerdictArtifact,
+  VERDICT_ARTIFACT_ID,
   VERDICT_MIME_TYPE,
   type VerificationArtifact,
 } from "@daemon/inbound/a2a-http/verdict";
@@ -90,5 +92,51 @@ describe("parseVerdict", () => {
 
   test("exports the stable mime type literal", () => {
     expect(VERDICT_MIME_TYPE).toBe("application/vnd.a2a-bridge.verdict+json");
+  });
+});
+
+describe("serializeVerdictArtifact", () => {
+  test("wraps a verdict in an A2A data-part artifact envelope", () => {
+    const verdict: VerificationArtifact = {
+      verdict: "pass",
+      reasoning: "All checks pass.",
+      evidence: [{ claim: "Tests pass", source: "src/foo.test.ts:42" }],
+      followups: [],
+    };
+    const artifact = serializeVerdictArtifact(verdict);
+    expect(artifact.artifactId).toBe(VERDICT_ARTIFACT_ID);
+    expect(artifact.parts).toHaveLength(1);
+    const part = artifact.parts[0];
+    expect(part.kind).toBe("data");
+    expect(part.mimeType).toBe("application/vnd.a2a-bridge.verdict+json");
+    expect(part.data).toBe(verdict);
+  });
+
+  test("accepts a custom artifactId", () => {
+    const verdict: VerificationArtifact = {
+      verdict: "needs-info",
+      reasoning: "Insufficient context.",
+      evidence: [],
+      followups: ["Attach CI logs"],
+    };
+    const artifact = serializeVerdictArtifact(verdict, { artifactId: "custom-verify-1" });
+    expect(artifact.artifactId).toBe("custom-verify-1");
+  });
+
+  test("round-trips through parseVerdict without field loss", () => {
+    const original: VerificationArtifact = {
+      verdict: "fail",
+      reasoning: "Missing null check on line 10.",
+      evidence: [
+        { claim: "Reproduces locally", source: "repro.sh", note: "crash trace attached" },
+      ],
+      followups: ["Add null guard", "Backfill regression test"],
+    };
+    const artifact = serializeVerdictArtifact(original);
+    const extracted = artifact.parts[0].data;
+    const result = parseVerdict(JSON.parse(JSON.stringify(extracted)));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual(original);
   });
 });

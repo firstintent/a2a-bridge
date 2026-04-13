@@ -50,7 +50,7 @@ once that phase lands.
   Unit test asserts the value reaches the executor for each variant
   and defaults to `"full"` when absent.
 
-- [ ] **P3.3 — Verification artifact serializer.**
+- [/] **P3.3 — Verification artifact serializer.**
   Acceptance: `verdict.ts` exports `serializeVerdictArtifact(verdict)`
   returning an A2A artifact whose part has
   `kind: "data"`, `mimeType: "application/vnd.a2a-bridge.verdict+json"`,
