@@ -95,11 +95,12 @@ bridge flow, add manual reproduction steps in the PR description.
 
 ## Reading next
 
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — runtime layout, dependency
-  rules enforced by `bun run lint:deps`, and the A2A / ACP inbound
-  surfaces.
-- [`POSITIONING.md`](./POSITIONING.md) — the design principles; read
-  this before proposing a refactor.
-- [`ROADMAP.md`](./ROADMAP.md) — shipped phases and the v0.2 backlog.
-- [`CLAUDE.md`](./CLAUDE.md) — operational rules for autonomous
+- [`architecture.md`](../design/architecture.md) — runtime layout,
+  dependency rules enforced by `bun run lint:deps`, and the A2A /
+  ACP inbound surfaces.
+- [`positioning.md`](../design/positioning.md) — the design
+  principles; read this before proposing a refactor.
+- [`roadmap.md`](../design/roadmap.md) — shipped phases and the v0.2
+  backlog.
+- [`CLAUDE.md`](../../CLAUDE.md) — operational rules for autonomous
   Claude Code sessions running against this repo.

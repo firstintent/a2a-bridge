@@ -6,7 +6,7 @@ work. Specialized peer adapters wait until the general surface is
 proven.
 
 Design principles that drive this ordering live in
-[`POSITIONING.md`](./POSITIONING.md). The baseline assumption is that
+[`positioning.md`](./positioning.md). The baseline assumption is that
 most tasks should still run on a single well-prompted Claude Code
 session — a2a-bridge ships capability for the cases where that is
 genuinely insufficient.
@@ -17,7 +17,7 @@ genuinely insufficient.
 outbound, RoomRouter + SQLite TaskLog, verification artifact +
 `return_format` hint, `a2a-bridge init / doctor / daemon` UX, CI +
 release workflow, marketplace + ACP-registry submission packages.
-See [`CHANGELOG.md`](./CHANGELOG.md).
+See [`CHANGELOG.md`](../../CHANGELOG.md).
 
 **v0.2 (planned).** Outbound OpenClaw + Hermes adapters, MCP
 inbound, TLS listener. Each item needs live external infrastructure
@@ -49,7 +49,7 @@ This is the biggest breadth-per-effort ratio in the roadmap.
   interface with stdio and unix-socket implementations (TLS TCP
   deferred until we need it).
 - Implement the minimum A2A server surface documented in
-  `ARCHITECTURE.md` — `GET /.well-known/agent-card.json`, JSON-RPC
+  `architecture.md` — `GET /.well-known/agent-card.json`, JSON-RPC
   endpoint handling `message/stream` (SSE), `tasks/get`,
   `tasks/cancel`. Bearer auth.
 - Wire InboundService through the existing CodexAdapter-backed
@@ -175,7 +175,7 @@ not a research project.
   stub the user attaches to a registry PR.
 - Claude Code marketplace submission package: required artifacts and
   a step-by-step submit guide.
-- `docs/release/PUBLISH.md` runbook covering the credential-gated
+- `docs/release/publish.md` runbook covering the credential-gated
   steps the user runs locally.
 - `scripts/check-release-ready.sh` script that verifies version
   alignment, CHANGELOG presence, tarball integrity, and lists any
@@ -210,4 +210,4 @@ applications) that the autonomous loop cannot provision in CI.
   clients.
 - gRPC transport for A2A. JSON-RPC + SSE covers the field.
 - Per-peer prompt templates for roles beyond verification.
-  Orchestration framework territory; see `POSITIONING.md`.
+  Orchestration framework territory; see `positioning.md`.

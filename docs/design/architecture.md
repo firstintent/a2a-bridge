@@ -263,7 +263,7 @@ clients.
 ## Pattern contracts
 
 The design principles behind these contracts live in
-[`POSITIONING.md`](./POSITIONING.md).
+[`positioning.md`](./positioning.md).
 
 ### Verification artifact
 
@@ -333,7 +333,7 @@ publishes.
 - **Not a substitute for a well-prompted single agent with MCP
   tools.** Multi-agent chains typically cost 3–10× the tokens of
   the single-agent equivalent. If a single session suffices, skip
-  the bridge. See [`POSITIONING.md`](./POSITIONING.md).
+  the bridge. See [`positioning.md`](./positioning.md).
 - **Fronting non-CC LLMs as A2A servers.** InboundService wraps
   Claude Code specifically. A separate project can layer
   a2a-bridge's InboundService components over other model backends

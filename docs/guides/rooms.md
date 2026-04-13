@@ -14,7 +14,7 @@ what survives restarts, and when adapters live or die.
 
 A RoomId is a **branded string** (`RoomId = string & { __brand }`)
 derived per inbound request by
-[`deriveRoomId`](../src/runtime-daemon/rooms/room-id.ts):
+[`deriveRoomId`](../../src/runtime-daemon/rooms/room-id.ts):
 
 | Precedence | Source                        | Notes                                           |
 |------------|-------------------------------|-------------------------------------------------|
@@ -49,7 +49,7 @@ with these guarantees:
   own SSE pipe. Events emitted during room A's turn never reach
   room B's stream, because they're written into different Response
   bodies. The
-  [concurrent-sessions integration test](../src/cli/concurrent-sessions.test.ts)
+  [concurrent-sessions integration test](../../src/cli/concurrent-sessions.test.ts)
   is the regression guard.
 
 ## TaskLog persistence guarantees
@@ -57,7 +57,7 @@ with these guarantees:
 All tasks route through a daemon-wide `SqliteTaskLog` at
 `stateDir.taskLogFile` (`tasks.db` in the a2a-bridge state dir). Rows
 are scoped by `room_id`; the
-[`ITaskStore`](../src/runtime-daemon/tasks/task-store.ts) seam lets
+[`ITaskStore`](../../src/runtime-daemon/tasks/task-store.ts) seam lets
 in-memory `TaskRegistry` substitute in unit tests without changing
 any call sites.
 
@@ -67,7 +67,7 @@ any call sites.
   the row's most recent state is what reopens see — a fresh
   `SqliteTaskLog` on the same file answers `tasks/get` with the last
   persisted snapshot. The
-  [plugin-reconnect survival test](../src/cli/plugin-reconnect-survival.test.ts)
+  [plugin-reconnect survival test](../../src/cli/plugin-reconnect-survival.test.ts)
   drives this flow end-to-end.
 - **Room-scoped history.** `listByRoom(roomId)` returns every task
   tagged with that id, most-recently-updated first — the source of
@@ -105,11 +105,11 @@ any call sites.
 
 ## Related reading
 
-- [`ARCHITECTURE.md`](../ARCHITECTURE.md) — the authoritative
+- [`architecture.md`](../design/architecture.md) — the authoritative
   directory layout and the rules `lint:deps` enforces between
   `inbound/`, `peers/`, `rooms/`, `shared/`, `messages/`.
-- [`ROADMAP.md`](../ROADMAP.md) — Phase 4 is where the room
+- [`roadmap.md`](../design/roadmap.md) — Phase 4 is where the room
   abstraction was introduced; outbound peer adapters (per-Room
   ownership of OpenClaw/Hermes) move to v0.2.
-- [`docs/cookbook.md`](./cookbook.md) — parallel-work pattern uses
+- [`cookbook.md`](./cookbook.md) — parallel-work pattern uses
   distinct `contextId`s so each branch gets its own Room.
