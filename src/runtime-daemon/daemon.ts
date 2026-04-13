@@ -17,6 +17,12 @@ import type { Connection } from "@transport/listener";
 import { WebSocketListener } from "@transport/websocket";
 import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "@transport/control-protocol";
 import type { BridgeMessage } from "@messages/types";
+import { DaemonClaudeCodeGateway } from "@daemon/inbound/daemon-claude-code-gateway";
+import {
+  startA2AServer,
+  type A2aServerHandle,
+} from "@daemon/inbound/a2a-http/server";
+import { createClaudeCodeExecutor } from "@daemon/inbound/a2a-http/handlers/message-stream";
 
 interface ControlClientMeta {
   clientId: number;
@@ -39,15 +45,28 @@ const FILTER_MODE: FilterMode =
 const IDLE_SHUTDOWN_MS = parseInt(process.env.A2A_BRIDGE_IDLE_SHUTDOWN_MS ?? String(config.idleShutdownSeconds * 1000), 10);
 const ATTENTION_WINDOW_MS = parseInt(process.env.A2A_BRIDGE_ATTENTION_WINDOW_MS ?? String(config.turnCoordination.attentionWindowSeconds * 1000), 10);
 
+const A2A_INBOUND_PORT = parseInt(process.env.A2A_BRIDGE_A2A_PORT ?? "4520", 10);
+const A2A_INBOUND_HOST = process.env.A2A_BRIDGE_A2A_HOST ?? "127.0.0.1";
+const A2A_INBOUND_TOKEN = process.env.A2A_BRIDGE_BEARER_TOKEN ?? "";
+const A2A_INBOUND_PUBLIC_CARD = process.env.A2A_BRIDGE_PUBLIC_AGENT_CARD !== "false";
+
 const daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
 
 const codex = new CodexAdapter(CODEX_APP_PORT, CODEX_PROXY_PORT);
 const attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
 
 let controlListener: WebSocketListener | null = null;
+let a2aInboundServer: A2aServerHandle | null = null;
 let attachedClaude: Connection | null = null;
 const controlClientMeta = new WeakMap<Connection, ControlClientMeta>();
 let nextControlClientId = 0;
+
+const inboundGateway = new DaemonClaudeCodeGateway({
+  sendToClaude: (text) => {
+    emitToClaude(systemMessage("a2a_inbound", text));
+  },
+  log: (msg) => log(`[A2aGateway] ${msg}`),
+});
 let nextSystemMessageId = 0;
 let codexBootstrapped = false;
 let attentionWindowTimer: ReturnType<typeof setTimeout> | null = null;
@@ -293,6 +312,19 @@ function handleControlMessage(conn: Connection, raw: string) {
           requestId: message.requestId,
           success: false,
           error: "Invalid message source",
+        });
+        return;
+      }
+
+      // If an A2A inbound turn is in flight, the reply belongs to it,
+      // not to Codex. Delivers the chunk + completes the turn.
+      if (inboundGateway.interceptReply(message.message.content)) {
+        log(`Claude reply consumed by inbound A2A turn (${message.message.content.length} chars)`);
+        clearAttentionWindow();
+        sendProtocolMessage(conn, {
+          type: "claude_to_codex_result",
+          requestId: message.requestId,
+          success: true,
         });
         return;
       }
@@ -630,6 +662,32 @@ async function bootCodex() {
   }
 }
 
+async function bootInbound() {
+  if (!A2A_INBOUND_TOKEN) {
+    log("A2A inbound disabled (set A2A_BRIDGE_BEARER_TOKEN to enable)");
+    return;
+  }
+
+  try {
+    a2aInboundServer = await startA2AServer({
+      host: A2A_INBOUND_HOST,
+      port: A2A_INBOUND_PORT,
+      bearerToken: A2A_INBOUND_TOKEN,
+      publicAgentCard: A2A_INBOUND_PUBLIC_CARD,
+      agentCard: {
+        url: `http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}/a2a`,
+      },
+      messageStreamExecutor: createClaudeCodeExecutor({ gateway: inboundGateway }),
+      logger: (msg) => log(`[A2aInbound] ${msg}`),
+    });
+    log(
+      `A2A inbound server listening on http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}${a2aInboundServer.rpcPath}`,
+    );
+  } catch (err: any) {
+    log(`Failed to start A2A inbound server: ${err?.message ?? err}`);
+  }
+}
+
 function shutdown(reason: string) {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -638,6 +696,8 @@ function shutdown(reason: string) {
   clearPendingClaudeDisconnect(`daemon shutdown (${reason})`);
   void controlListener?.close();
   controlListener = null;
+  void a2aInboundServer?.shutdown();
+  a2aInboundServer = null;
   codex.stop();
   removePidFile();
   removeStatusFile();
@@ -673,3 +733,4 @@ if (daemonLifecycle.wasKilled()) {
 writePidFile();
 void startControlServer();
 void bootCodex();
+void bootInbound();
