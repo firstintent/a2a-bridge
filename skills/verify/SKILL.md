@@ -46,7 +46,7 @@ On the A2A inbound surface, set `Message.metadata.return_format` to
 The peer responds with an A2A `artifact-update` whose part has
 `kind: "data"` and `mimeType: "application/vnd.a2a-bridge.verdict+json"`.
 The `data` object matches the verification artifact shape from
-`ARCHITECTURE.md` §"Verification artifact":
+`docs/design/architecture.md` §"Verification artifact":
 
 ```json
 {
@@ -155,7 +155,7 @@ caller surfaces the missing context before retrying.
 
 ## See also
 
-- [`ARCHITECTURE.md`](../../ARCHITECTURE.md) §"Verification artifact"
+- [`architecture.md`](../../docs/design/architecture.md) §"Verification artifact"
   — the authoritative schema.
 - `src/runtime-daemon/inbound/a2a-http/verdict.ts` —
   `parseVerdict` / `serializeVerdictArtifact` implementations.

@@ -2,7 +2,7 @@
  * A2A Agent Card generator.
  *
  * Shape and field names follow the A2A SDK (camelCase) and the
- * "Agent Card fields" section of ARCHITECTURE.md. The SDK's client
+ * "Agent Card fields" section of docs/design/architecture.md. The SDK's client
  * validates a minimum of these fields, so any missing required key
  * fails Gemini-CLI-style callers.
  */

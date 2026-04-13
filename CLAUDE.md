@@ -106,9 +106,9 @@ that mode, the following files are **read-only** and must not be
 edited by the loop:
 
 - `CLAUDE.md`
-- `ARCHITECTURE.md`
-- `POSITIONING.md`
-- `ROADMAP.md`
+- `docs/design/architecture.md`
+- `docs/design/positioning.md`
+- `docs/design/roadmap.md`
 - `.dependency-cruiser.cjs`
 
 If the loop encounters a task that appears to require changing any of
@@ -124,15 +124,15 @@ The loop must also stop and notify when:
 - A dependency-cruiser rule would need to be relaxed to land the
   task.
 - The task as described in `TASKS.md` is ambiguous or contradicts
-  something in `ARCHITECTURE.md` / `POSITIONING.md`.
+  something in `docs/design/architecture.md` / `docs/design/positioning.md`.
 - Any change would touch external accounts, secrets, infrastructure,
   or the `main` branch.
 
 Per-iteration checklist the loop follows, top of file:
 
 1. `git pull origin dev`.
-2. Re-read `ARCHITECTURE.md`, `POSITIONING.md`, `CLAUDE.md`,
-   `ROADMAP.md`, `TASKS.md`.
+2. Re-read `docs/design/architecture.md`, `docs/design/positioning.md`,
+   `CLAUDE.md`, `docs/design/roadmap.md`, `TASKS.md`.
 3. Pick the next unchecked atomic task from `TASKS.md`.
 4. Implement it with the minimum diff.
 5. Run `bun run check:ci`. On failure, debug the task or stop.

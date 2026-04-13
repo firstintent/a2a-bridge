@@ -1,7 +1,7 @@
 # TASKS — v0.1 (Phases 3–7)
 
 Atomic work units for the v0.1 autonomous development loop, spanning
-Phases 3 through 7 of `ROADMAP.md`. Each task has acceptance criteria;
+Phases 3 through 7 of `docs/design/roadmap.md`. Each task has acceptance criteria;
 the loop must only mark a task done when `bun run check:ci` passes
 AND the acceptance criteria are met.
 
@@ -38,7 +38,7 @@ once that phase lands.
   Acceptance: `src/runtime-daemon/inbound/a2a-http/verdict.ts`
   exports `VerificationVerdict` (the literal union `"pass" | "fail" |
   "needs-info"`), `VerificationEvidence`, and `VerificationArtifact`
-  matching the shape in `ARCHITECTURE.md` §"Verification artifact".
+  matching the shape in `docs/design/architecture.md` §"Verification artifact".
   Includes a `parseVerdict(value)` validator returning a `Result`-style
   object. Unit tests cover happy parse, unrecognized verdict
   (coerced to `needs-info`), and missing-reasoning rejection.
@@ -86,7 +86,7 @@ once that phase lands.
   round-trips through SSE and parses back via the SDK.
 
 - [x] **P3.9 — Pattern cookbook documentation.**
-  Acceptance: `docs/cookbook.md` documents the three canonical
+  Acceptance: `docs/guides/cookbook.md` documents the three canonical
   patterns (verification, context-protection, parallel) with
   end-to-end runnable examples (curl + SDK). Each example links to
   its skill template and lists the rough token cost. No source-code
@@ -165,7 +165,7 @@ once that phase lands.
   SQLite. `bun run check:ci` green.
 
 - [x] **P4.12 — Document the concurrency model.**
-  Acceptance: `docs/rooms.md` covers RoomId derivation,
+  Acceptance: `docs/guides/rooms.md` covers RoomId derivation,
   multi-session semantics, TaskLog persistence guarantees, and the
   per-Room adapter lifecycle. Linked from README.
 
@@ -294,7 +294,7 @@ once that phase lands.
 - [x] **P6.10 — Version bump to 0.1.0.**
   Acceptance: `package.json`, `plugins/a2a-bridge/.claude-plugin/plugin.json`,
   and `.claude-plugin/marketplace.json` bumped to 0.1.0.
-  `bun scripts/check-plugin-versions.js` passes. ARCHITECTURE.md
+  `bun scripts/check-plugin-versions.js` passes. architecture.md
   references to "v0.1" remain accurate.
 
 ## Phase 7 — Release packaging
@@ -323,7 +323,7 @@ once that phase lands.
   artifacts exist in the repo or have placeholder paths flagged
   for the user.
 
-- [x] **P7.5 — `docs/release/PUBLISH.md` runbook.**
+- [x] **P7.5 — `docs/release/publish.md` runbook.**
   Acceptance: step-by-step guide covering: bump check, CHANGELOG
   finalization, tag creation, GitHub Actions release run, manual
   npm publish (with `--otp` reminder), marketplace submission, ACP
@@ -346,7 +346,7 @@ once that phase lands.
 - Phase 4 baseline: 293 pass / 0 fail / 19 E2E filtered, 35 test files, 739 expect calls (on P4.12 close; Phase 4 opened with the 240-pass baseline carried from Phase 3).
 - Phase 5 baseline: 304 pass / 0 fail / 20 E2E filtered, 38 test files, 768 expect calls (on P5.8 close; Phase 5 opened with the 293-pass baseline carried from Phase 4).
 - Phase 6 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P6.10 close; Phase 6 opened with the 304-pass baseline carried from Phase 5).
-- Phase 7 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P7.6 close; Phase 7 opened with the 339-pass baseline carried from Phase 6). v0.1 complete — every P3–P7 task is [x]; remaining release steps (`npm publish`, marketplace form, ACP registry PR) require human credentials per ROADMAP and are documented in `docs/release/PUBLISH.md`.
+- Phase 7 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P7.6 close; Phase 7 opened with the 339-pass baseline carried from Phase 6). v0.1 complete — every P3–P7 task is [x]; remaining release steps (`npm publish`, marketplace form, ACP registry PR) require human credentials per ROADMAP and are documented in `docs/release/publish.md`.
 
 ## v0.1 starting baseline
 

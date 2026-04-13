@@ -1,7 +1,7 @@
 /**
  * `RoomId` derivation for inbound requests.
  *
- * Precedence (highest first) matches `ROADMAP.md` §"Phase 4":
+ * Precedence (highest first) matches `docs/design/roadmap.md` §"Phase 4":
  *   1. The caller's `contextId` — every A2A inbound call mints one.
  *   2. `A2A_BRIDGE_ROOM` env var — for CLI-style callers that want a
  *      stable room across calls without threading a `contextId`.

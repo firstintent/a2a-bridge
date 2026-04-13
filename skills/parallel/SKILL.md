@@ -124,7 +124,7 @@ Caller awaits all three SSE streams to completion, concatenates
 
 ## See also
 
-- [`ARCHITECTURE.md`](../../ARCHITECTURE.md) §"return_format hint"
+- [`architecture.md`](../../docs/design/architecture.md) §"return_format hint"
   — how each branch's output mode is relayed to the peer.
 - `skills/verify/` — when each branch is a check and the merge is
   all-pass-or-fail.

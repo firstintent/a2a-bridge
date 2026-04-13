@@ -48,7 +48,7 @@ Agent Client Protocol (ACP) editor can drive against Claude Code.
   per `contextId` (falling back to the `A2A_BRIDGE_ROOM` env var
   or `"default"`). Each room owns its own Claude Code gateway and
   peer adapter set, so two concurrent sessions never see each
-  other's events. See `docs/rooms.md`.
+  other's events. See `docs/guides/rooms.md`.
 - **SQLite-backed task log.** Per-room task history is persisted
   to `<stateDir>/tasks.db` via Bun's built-in `bun:sqlite`.
   `tasks/get` on a mid-turn task id keeps working after a plugin
@@ -75,9 +75,9 @@ Agent Client Protocol (ACP) editor can drive against Claude Code.
   first-run user, the CLI prints a two-line `error: / fix:` block
   naming the exact command or env var to try next.
 - **Documentation.** Three new top-level docs under `docs/`:
-  `docs/cookbook.md` walks through the verification /
+  `docs/guides/cookbook.md` walks through the verification /
   context-protection / parallel patterns with `curl` and SDK
-  examples and a rough token-cost table; `docs/rooms.md` covers
+  examples and a rough token-cost table; `docs/guides/rooms.md` covers
   the concurrency model, RoomId derivation, and restart
   semantics; README is reorganized around Install → Configure →
   Connect (Gemini CLI / OpenClaw / Zed / VS Code) → Troubleshooting.

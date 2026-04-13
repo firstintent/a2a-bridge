@@ -55,7 +55,7 @@ export type StreamEmitter = (event: StreamEvent) => void;
 
 /**
  * Caller-requested output shape. Passed via `Message.metadata.return_format`
- * per ARCHITECTURE.md §"return_format hint" and surfaced on the executor
+ * per docs/design/architecture.md §"return_format hint" and surfaced on the executor
  * context so adapters can relay it to the peer. Unknown values fall back to
  * `"full"`.
  */
@@ -74,7 +74,7 @@ export type MessageStreamExecutor = (ctx: {
 /**
  * Per-turn token usage reported by the executor. Emitted as
  * `metadata.tokenUsage` on the terminal `status-update` so callers can see
- * the 3–10× overhead of multi-agent delegation up front (per POSITIONING.md
+ * the 3–10× overhead of multi-agent delegation up front (per docs/design/positioning.md
  * §"When NOT to use"). Adapters that cannot report usage simply omit it.
  */
 export interface TokenUsage {
