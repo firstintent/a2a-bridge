@@ -118,7 +118,7 @@ once that phase lands.
   updated_at)`. Migration helper in `task-log.ts` runs the schema
   idempotently on first open.
 
-- [ ] **P4.5 — Implement `SqliteTaskLog`.**
+- [/] **P4.5 — Implement `SqliteTaskLog`.**
   Acceptance: `src/runtime-daemon/tasks/task-log.ts` exports
   `SqliteTaskLog` with `create / get / updateStatus / cancel /
   listByRoom` matching the `TaskRegistry` interface so call sites can

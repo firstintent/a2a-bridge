@@ -1,19 +1,24 @@
 /**
- * TaskLog migration helper (Phase 4).
+ * TaskLog — SQLite-backed replacement for the in-memory `TaskRegistry`
+ * (Phase 4).
  *
- * Reads `task-log-schema.sql` sibling file at runtime and applies it to
- * an open `bun:sqlite` database. Idempotent — every statement in the
- * schema is guarded with `CREATE ... IF NOT EXISTS`, so running
- * `migrateTaskLogSchema` on every open is safe.
+ * Shares the same create / get / updateStatus / cancel surface as the
+ * in-memory registry so `message/stream`, `tasks/get`, and `tasks/cancel`
+ * can swap between the two via an `ITaskStore` shim (P4.6 seam). Adds
+ * `listByRoom` because room-scoped queries are the whole point of going
+ * to disk — the daemon can survive a plugin restart and still answer
+ * `tasks/get` against the same task id.
  *
- * The `SqliteTaskLog` class itself lands in P4.5; this file owns only
- * the migration glue so the schema is committable + testable in one
- * atomic unit without coupling to the final TaskRegistry interface.
+ * The migration helper `migrateTaskLogSchema` loads `task-log-schema.sql`
+ * once from disk and is idempotent.
  */
 
+import { Database } from "bun:sqlite";
+import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import type { RoomId } from "@daemon/rooms/room-id";
 
 /** Minimal shape of `bun:sqlite`'s Database needed by the migrator. */
 export interface SqliteDatabaseLike {
@@ -42,4 +47,181 @@ export function migrateTaskLogSchema(db: SqliteDatabaseLike): void {
 /** Exposed for tests — lets them assert the statement list directly. */
 export function readTaskLogSchemaSql(): string {
   return loadSchema();
+}
+
+/** Row-level snapshot of a task, mirroring the `tasks` table. */
+export interface StoredTask {
+  id: string;
+  roomId: RoomId;
+  contextId: string;
+  kind: "task";
+  status: TaskStatus;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface TaskStatus {
+  state: string;
+  /** A2A `Message` payload the client treats as the terminal narrative. */
+  message?: unknown;
+}
+
+export interface TaskCreateInput {
+  id: string;
+  roomId: RoomId;
+  contextId: string;
+  status?: TaskStatus;
+}
+
+interface SqliteTaskLogEvents {
+  cancel: [taskId: string];
+}
+
+interface TaskRow {
+  id: string;
+  room_id: string;
+  context_id: string;
+  state: string;
+  status_json: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface SqliteTaskLogOptions {
+  /** Deterministic clock for tests. Defaults to `Date.now`. */
+  now?: () => number;
+}
+
+/**
+ * `bun:sqlite`-backed task registry. Not safe to share across processes;
+ * callers should route through the one SqliteTaskLog the daemon opens at
+ * its state-dir path.
+ */
+export class SqliteTaskLog extends EventEmitter<SqliteTaskLogEvents> {
+  private readonly db: Database;
+  private readonly now: () => number;
+
+  constructor(db: Database, options: SqliteTaskLogOptions = {}) {
+    super();
+    this.db = db;
+    this.now = options.now ?? (() => Date.now());
+  }
+
+  /** Open + migrate a database at `path`. `:memory:` is allowed for tests. */
+  static open(path: string, options: SqliteTaskLogOptions = {}): SqliteTaskLog {
+    const db = new Database(path);
+    migrateTaskLogSchema(db);
+    return new SqliteTaskLog(db, options);
+  }
+
+  /** Register a freshly-minted task. Throws if the id is already present. */
+  create(input: TaskCreateInput): StoredTask {
+    const now = this.now();
+    const status = input.status ?? { state: "submitted" };
+    const row: StoredTask = {
+      id: input.id,
+      roomId: input.roomId,
+      contextId: input.contextId,
+      kind: "task",
+      status,
+      createdAt: now,
+      updatedAt: now,
+    };
+    try {
+      this.db
+        .prepare(
+          "INSERT INTO tasks (id, room_id, context_id, state, status_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          row.id,
+          row.roomId,
+          row.contextId,
+          status.state,
+          JSON.stringify(status),
+          now,
+          now,
+        );
+    } catch (err) {
+      // SQLITE_CONSTRAINT on the primary key — surface the same shape
+      // the in-memory registry uses so call sites keep one error path.
+      throw new Error(`SqliteTaskLog: task ${input.id} already registered`, {
+        cause: err,
+      });
+    }
+    return row;
+  }
+
+  get(id: string): StoredTask | undefined {
+    const row = this.db
+      .prepare("SELECT * FROM tasks WHERE id = ?")
+      .get(id) as TaskRow | null;
+    if (!row) return undefined;
+    return this.rowToStoredTask(row);
+  }
+
+  /** Replace the status snapshot. No-op if the task is gone. */
+  updateStatus(id: string, status: TaskStatus): void {
+    const now = this.now();
+    this.db
+      .prepare(
+        "UPDATE tasks SET state = ?, status_json = ?, updated_at = ? WHERE id = ?",
+      )
+      .run(status.state, JSON.stringify(status), now, id);
+  }
+
+  /**
+   * Mark the task canceled and emit `cancel` so an active stream can
+   * deliver its terminal frame. Returns the updated snapshot or
+   * undefined when the id is unknown.
+   */
+  cancel(id: string): StoredTask | undefined {
+    const now = this.now();
+    const canceled: TaskStatus = { state: "canceled" };
+    const changes = this.db
+      .prepare(
+        "UPDATE tasks SET state = ?, status_json = ?, updated_at = ? WHERE id = ?",
+      )
+      .run(canceled.state, JSON.stringify(canceled), now, id);
+    if (changes.changes === 0) return undefined;
+    this.emit("cancel", id);
+    return this.get(id);
+  }
+
+  /** Forget a task. Used sparingly; `tasks/get` typically wants history. */
+  delete(id: string): void {
+    this.db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+  }
+
+  /** All tasks for a room, most-recently-updated first. */
+  listByRoom(roomId: RoomId): StoredTask[] {
+    const rows = this.db
+      .prepare("SELECT * FROM tasks WHERE room_id = ? ORDER BY updated_at DESC")
+      .all(roomId) as TaskRow[];
+    return rows.map((r) => this.rowToStoredTask(r));
+  }
+
+  /** Current row count. Useful for diagnostics and tests. */
+  get size(): number {
+    const row = this.db.prepare("SELECT COUNT(*) AS c FROM tasks").get() as {
+      c: number;
+    };
+    return row.c;
+  }
+
+  /** Release the underlying DB handle. Safe to call once. */
+  close(): void {
+    this.db.close();
+  }
+
+  private rowToStoredTask(row: TaskRow): StoredTask {
+    return {
+      id: row.id,
+      roomId: row.room_id as RoomId,
+      contextId: row.context_id,
+      kind: "task",
+      status: JSON.parse(row.status_json) as TaskStatus,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
 }
