@@ -425,7 +425,7 @@ once that phase lands.
   Update `acp-cli.test.ts` to assert the end-to-end SDK round-trip
   lands a daemon-originated reply, not an echo.
 
-- [ ] **P8.5 — End-to-end integration test with a stub Claude Code
+- [x] **P8.5 — End-to-end integration test with a stub Claude Code
   channel.**
   Acceptance: new test that boots the real daemon, attaches a stub
   CC channel (via the existing `DaemonClient` seam) that replies
