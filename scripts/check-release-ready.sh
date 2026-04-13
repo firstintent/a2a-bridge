@@ -2,7 +2,7 @@
 # check-release-ready.sh — pre-release gate for a2a-bridge (P7.6).
 #
 # Asserts every precondition the release runbook
-# (`docs/release/PUBLISH.md`) expects to hold before a maintainer
+# (`docs/release/publish.md`) expects to hold before a maintainer
 # cuts a tag. Exits non-zero on the first failure so `set -e` callers
 # stop immediately.
 #
@@ -20,7 +20,7 @@
 #        release/acp-registry/icon.svg
 #        release/acp-registry/README.md
 #        release/marketplace/SUBMIT.md
-#        docs/release/PUBLISH.md
+#        docs/release/publish.md
 #
 # Run from the repo root:
 #   bash scripts/check-release-ready.sh
@@ -72,7 +72,7 @@ REQUIRED_ARTIFACTS=(
   "release/acp-registry/icon.svg"
   "release/acp-registry/README.md"
   "release/marketplace/SUBMIT.md"
-  "docs/release/PUBLISH.md"
+  "docs/release/publish.md"
 )
 missing=0
 for f in "${REQUIRED_ARTIFACTS[@]}"; do

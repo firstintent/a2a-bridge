@@ -2,7 +2,7 @@
  * dependency-cruiser rules for a2a-bridge.
  *
  * These rules enforce the directory-based architecture documented in
- * ARCHITECTURE.md. Violations fail CI via `bun run lint:deps`.
+ * docs/design/architecture.md. Violations fail CI via `bun run lint:deps`.
  *
  * Layer map:
  *   src/shared/          zero-dep utilities

@@ -1,7 +1,7 @@
 # TASKS — v0.1 (Phases 3–7)
 
 Atomic work units for the v0.1 autonomous development loop, spanning
-Phases 3 through 7 of `ROADMAP.md`. Each task has acceptance criteria;
+Phases 3 through 7 of `docs/design/roadmap.md`. Each task has acceptance criteria;
 the loop must only mark a task done when `bun run check:ci` passes
 AND the acceptance criteria are met.
 
@@ -38,7 +38,7 @@ once that phase lands.
   Acceptance: `src/runtime-daemon/inbound/a2a-http/verdict.ts`
   exports `VerificationVerdict` (the literal union `"pass" | "fail" |
   "needs-info"`), `VerificationEvidence`, and `VerificationArtifact`
-  matching the shape in `ARCHITECTURE.md` §"Verification artifact".
+  matching the shape in `docs/design/architecture.md` §"Verification artifact".
   Includes a `parseVerdict(value)` validator returning a `Result`-style
   object. Unit tests cover happy parse, unrecognized verdict
   (coerced to `needs-info`), and missing-reasoning rejection.
@@ -86,7 +86,7 @@ once that phase lands.
   round-trips through SSE and parses back via the SDK.
 
 - [x] **P3.9 — Pattern cookbook documentation.**
-  Acceptance: `docs/cookbook.md` documents the three canonical
+  Acceptance: `docs/guides/cookbook.md` documents the three canonical
   patterns (verification, context-protection, parallel) with
   end-to-end runnable examples (curl + SDK). Each example links to
   its skill template and lists the rough token cost. No source-code
@@ -165,7 +165,7 @@ once that phase lands.
   SQLite. `bun run check:ci` green.
 
 - [x] **P4.12 — Document the concurrency model.**
-  Acceptance: `docs/rooms.md` covers RoomId derivation,
+  Acceptance: `docs/guides/rooms.md` covers RoomId derivation,
   multi-session semantics, TaskLog persistence guarantees, and the
   per-Room adapter lifecycle. Linked from README.
 
@@ -294,7 +294,7 @@ once that phase lands.
 - [x] **P6.10 — Version bump to 0.1.0.**
   Acceptance: `package.json`, `plugins/a2a-bridge/.claude-plugin/plugin.json`,
   and `.claude-plugin/marketplace.json` bumped to 0.1.0.
-  `bun scripts/check-plugin-versions.js` passes. ARCHITECTURE.md
+  `bun scripts/check-plugin-versions.js` passes. architecture.md
   references to "v0.1" remain accurate.
 
 ## Phase 7 — Release packaging
@@ -323,7 +323,7 @@ once that phase lands.
   artifacts exist in the repo or have placeholder paths flagged
   for the user.
 
-- [x] **P7.5 — `docs/release/PUBLISH.md` runbook.**
+- [x] **P7.5 — `docs/release/publish.md` runbook.**
   Acceptance: step-by-step guide covering: bump check, CHANGELOG
   finalization, tag creation, GitHub Actions release run, manual
   npm publish (with `--otp` reminder), marketplace submission, ACP
@@ -338,6 +338,140 @@ once that phase lands.
   on any failure. README references the script in the release
   workflow section.
 
+## Phase 8 — Real ACP → Claude Code routing (no mock)
+
+> Why this block lands before the first public 0.1.0 release. The
+> v0.1 ACP inbound currently resolves `prompt` against an in-process
+> `EchoGateway` — OpenClaw / Zed / VS Code users see `Echo: <text>`
+> instead of a real Claude Code reply. Before a Join skill is useful
+> (Phase 9) the `a2a-bridge acp` subprocess must actually reach the
+> attached Claude Code session through the daemon. Unit tests may
+> still use fakes; the CLI default path must never short-circuit to
+> a mock or echo reply.
+
+- [ ] **P8.1 — Control-plane wire format for ACP turns.**
+  Acceptance: new message variants in `transport/` (or the
+  daemon's control-message types) covering `acp_turn_start`,
+  `acp_turn_chunk`, `acp_turn_complete`, `acp_turn_error`, and
+  `acp_turn_cancel`. Typed on both ends; round-trip unit tests.
+
+- [ ] **P8.2 — Daemon-side handler for ACP turns.**
+  Acceptance: when an attached client sends `acp_turn_start`, the
+  daemon calls `inboundGateway.startTurn(text)` on the shared
+  `DaemonClaudeCodeGateway` and pipes the resulting `chunk` /
+  `complete` / `error` events back to that client as the matching
+  control-plane frames. One ACP connection can own at most one
+  in-flight turn; `acp_turn_cancel` fires `turn.cancel()`. Unit
+  test drives the handler with a stub gateway and asserts the
+  frame sequence.
+
+- [ ] **P8.3 — `DaemonProxyGateway` in `runtime-daemon/inbound/acp/`.**
+  Acceptance: new class implementing `ClaudeCodeGateway` that
+  opens a control-plane WS connection to the daemon and uses the
+  Phase-8.1 wire format to relay turns. `startTurn(text)` returns
+  a `ClaudeCodeTurn` whose `chunk` / `complete` / `error` events
+  come straight from the WS frames. Reconnect logic mirrors the
+  plugin-side `DaemonClient`.
+
+- [ ] **P8.4 — Wire `runAcp()` onto `DaemonProxyGateway` (no echo
+  fallback).**
+  Acceptance: `src/cli/acp.ts` default stdio path constructs
+  `DaemonProxyGateway` after `lifecycle.ensureRunning()` resolves.
+  When the daemon is unreachable the subcommand **fails loudly**
+  (non-zero exit + friendly error helper from `errors.ts`) rather
+  than falling back to echo. `EchoGateway` stays in the codebase
+  but only test files import it; a lint:deps rule enforces this.
+  Update `acp-cli.test.ts` to assert the end-to-end SDK round-trip
+  lands a daemon-originated reply, not an echo.
+
+- [ ] **P8.5 — End-to-end integration test with a stub Claude Code
+  channel.**
+  Acceptance: new test that boots the real daemon, attaches a stub
+  CC channel (via the existing `DaemonClient` seam) that replies
+  with deterministic text, spawns `a2a-bridge acp` as a child
+  process, drives it via the ACP SDK, and asserts the returned
+  `session/update` text equals the stub CC reply verbatim. Runs
+  under `check:ci`; covers the full real wire end-to-end.
+
+- [ ] **P8.6 — Update `smoke-e2e.sh` to exercise the real ACP → CC
+  path.**
+  Acceptance: the ACP half of `scripts/smoke-e2e.sh` no longer
+  runs with `A2A_BRIDGE_INBOUND_ECHO=1`; it attaches a stub CC
+  client to the daemon and asserts the smoke ACP prompt returns
+  the stub's reply (not `Echo: ...`). The env-var hook stays but
+  is documented as a test/debug only knob.
+
+- [ ] **P8.7 — Fix hardcoded `agentInfo.version: "0.0.1"` in
+  `src/runtime-daemon/inbound/acp/index.ts`.**
+  Acceptance: the ACP `initialize` response advertises the real
+  package version (via the same JSON-import trick
+  `src/cli/cli.ts` uses). Unit test asserts the response's
+  `agentInfo.version` matches `package.json`.
+
+- [ ] **P8.8 — Documentation sweep: no more "post-v0.1" caveats
+  on ACP → CC.**
+  Acceptance: `CHANGELOG.md`'s `## [0.1.0]` block describes the
+  real routing; `README.md`'s Connect-OpenClaw / Zed / VS Code
+  sections drop the echo-gateway warning; `docs/guides/cookbook.md`
+  gains a fourth pattern example if natural; `docs/design/architecture.md`'s
+  ACP subsection promotes the `DaemonProxyGateway` from
+  "planned" to "implemented."
+
+## Phase 9 — Join skill + first public release
+
+> Why this block caps v0.1. Once ACP → CC is real (Phase 8), the
+> user can hand a single URL to Claude Code AND OpenClaw and each
+> AI self-installs its side of the bridge. This is the
+> developer-facing payoff of the whole v0.1 body of work.
+
+- [ ] **P9.1 — Cut a draft GitHub release with the tarball.**
+  Acceptance: tag `v0.1.0` pushed to GitHub; `release.yml` runs
+  green on the matrix; the resulting draft release at
+  `github.com/firstintent/a2a-bridge/releases/tag/v0.1.0` carries
+  the tarball. Release stays as a draft (do NOT publish-npm yet);
+  the tarball URL is what the skill will reference.
+
+- [ ] **P9.2 — `docs/join.md` — cross-bridge join skill.**
+  Acceptance: a single self-contained Markdown document a user can
+  hand to either Claude Code or OpenClaw via "Read <url> and
+  follow it." The document detects the host environment (by
+  asking the host AI) and runs one of two installers:
+  - **Claude Code side**: `npm i -g <tarball-URL>` → `a2a-bridge
+    init` → `a2a-bridge daemon start` → report bearer token +
+    control port back to the user.
+  - **OpenClaw side**: `npm i -g <tarball-URL>` → verify
+    `a2a-bridge --version` → register the ACP agent in
+    `acpx.config.agents` → restart acpx → test the bridge by
+    sending a one-shot prompt and asserting the reply is not an
+    echo. Unit / smoke tests for the parsed instructions if
+    feasible; manual verification notes otherwise.
+
+- [ ] **P9.3 — README "Join the bridge" section.**
+  Acceptance: new top-level README section (between "Configure"
+  and "Connect Gemini CLI") showing the single-line skill invoke
+  for each side:
+  ```
+  Claude Code:   Read <skill-url> and follow it.
+  OpenClaw:      Read <skill-url> and follow it.
+  ```
+  Short two-sentence intro on what happens after both sides run
+  the skill. Links to `docs/join.md` for the full text.
+
+- [ ] **P9.4 — End-to-end manual verification of the cross-bridge
+  loop.**
+  Acceptance: on the maintainer's machine, execute the skill
+  against a live Claude Code session and a live OpenClaw session,
+  then drive a non-trivial prompt through OpenClaw and record the
+  full reply (must originate from Claude Code, not echo). Save
+  the transcript under `docs/release/verified-joins/<date>.md`
+  (or similar) as evidence for the first publish.
+
+- [ ] **P9.5 — Bump + CHANGELOG close for the first publish.**
+  Acceptance: `CHANGELOG.md`'s `## [0.1.0]` header flips from
+  `— Unreleased` to the release date. `docs/release/publish.md`
+  remains the runbook; the maintainer takes over from there for
+  `npm publish`, the marketplace form, and the ACP registry PR.
+
 ---
 
 ## Phase footers (filled by the loop)
@@ -346,7 +480,7 @@ once that phase lands.
 - Phase 4 baseline: 293 pass / 0 fail / 19 E2E filtered, 35 test files, 739 expect calls (on P4.12 close; Phase 4 opened with the 240-pass baseline carried from Phase 3).
 - Phase 5 baseline: 304 pass / 0 fail / 20 E2E filtered, 38 test files, 768 expect calls (on P5.8 close; Phase 5 opened with the 293-pass baseline carried from Phase 4).
 - Phase 6 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P6.10 close; Phase 6 opened with the 304-pass baseline carried from Phase 5).
-- Phase 7 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P7.6 close; Phase 7 opened with the 339-pass baseline carried from Phase 6). v0.1 complete — every P3–P7 task is [x]; remaining release steps (`npm publish`, marketplace form, ACP registry PR) require human credentials per ROADMAP and are documented in `docs/release/PUBLISH.md`.
+- Phase 7 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P7.6 close; Phase 7 opened with the 339-pass baseline carried from Phase 6). v0.1 complete — every P3–P7 task is [x]; remaining release steps (`npm publish`, marketplace form, ACP registry PR) require human credentials per ROADMAP and are documented in `docs/release/publish.md`.
 
 ## v0.1 starting baseline
 

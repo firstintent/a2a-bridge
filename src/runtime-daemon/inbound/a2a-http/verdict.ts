@@ -1,5 +1,5 @@
 /**
- * Verification artifact schema (see ARCHITECTURE.md §"Verification artifact").
+ * Verification artifact schema (see docs/design/architecture.md §"Verification artifact").
  *
  * Shape carried inside an A2A `Artifact.parts[]` entry with
  * `kind: "data"` and `mimeType: "application/vnd.a2a-bridge.verdict+json"`.

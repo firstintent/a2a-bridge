@@ -11,7 +11,7 @@ make ergonomic:
 
 Every example is copy-pasteable as a `curl` call and as an
 `@a2a-js/sdk` snippet. Each pattern is paired with a
-[skill template](../skills) that teaches the prompting scaffold.
+[skill template](../../skills) that teaches the prompting scaffold.
 
 ## Prerequisites
 
@@ -50,7 +50,7 @@ can log or display this to make the overhead visible up front.
 
 ## 1. Verification
 
-**Skill template:** [`skills/verify/SKILL.md`](../skills/verify/SKILL.md).
+**Skill template:** [`skills/verify/SKILL.md`](../../skills/verify/SKILL.md).
 
 **When to use:** you have an artifact and explicit criteria, you
 want pass/fail + reasoning, and you do NOT want the peer to rewrite.
@@ -132,7 +132,7 @@ stay small because they quote criteria, not implementation.
 
 ## 2. Context protection
 
-**Skill template:** [`skills/context-protect/SKILL.md`](../skills/context-protect/SKILL.md).
+**Skill template:** [`skills/context-protect/SKILL.md`](../../skills/context-protect/SKILL.md).
 
 **When to use:** the subtask's raw output would crowd the primary
 session (long logs, transcripts, audits); you only need a
@@ -206,7 +206,7 @@ than the peer's summary.
 
 ## 3. Parallel independent work
 
-**Skill template:** [`skills/parallel/SKILL.md`](../skills/parallel/SKILL.md).
+**Skill template:** [`skills/parallel/SKILL.md`](../../skills/parallel/SKILL.md).
 
 **When to use:** subtasks are independent by construction (different
 modules, files, or investigations). Do not use when one subtask
@@ -304,10 +304,10 @@ single branch, not the sum.
 
 ## See also
 
-- [`ARCHITECTURE.md`](../ARCHITECTURE.md) §"Verification artifact",
-  §"return_format hint" — authoritative contract for the fields
-  every example uses.
-- [`POSITIONING.md`](../POSITIONING.md) — when multi-agent patterns
-  are worth the overhead and when they are not.
+- [`architecture.md`](../design/architecture.md) §"Verification
+  artifact", §"return_format hint" — authoritative contract for the
+  fields every example uses.
+- [`positioning.md`](../design/positioning.md) — when multi-agent
+  patterns are worth the overhead and when they are not.
 - The three skill templates under
-  [`skills/`](../skills) — copy-paste prompt scaffolds.
+  [`skills/`](../../skills) — copy-paste prompt scaffolds.

@@ -14,9 +14,10 @@ multi-machine deployment.
 
 ## Status
 
-Early development. See [`ROADMAP.md`](./ROADMAP.md) for the phased
-plan; see [`POSITIONING.md`](./POSITIONING.md) for the design
-principles.
+Early development. See [`docs/design/roadmap.md`](./docs/design/roadmap.md)
+for the phased plan;
+see [`docs/design/positioning.md`](./docs/design/positioning.md) for
+the design principles.
 
 ## When to use
 
@@ -79,7 +80,7 @@ multi-agent collaboration is the right call:
   (Gemini CLI today, any A2A peer tomorrow) can drive Claude Code
   remotely.
 
-See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the protocol matrix,
+See [`docs/design/architecture.md`](./docs/design/architecture.md) for the protocol matrix,
 the minimum A2A server surface, and the three deployment shapes.
 
 ## Supported peers (planned)
@@ -287,14 +288,14 @@ and a worked example.
 
 For end-to-end runnable `curl` + SDK examples of all three patterns
 (plus a rough token-cost reference), see
-[`docs/cookbook.md`](./docs/cookbook.md). For how the daemon isolates
+[`docs/guides/cookbook.md`](./docs/guides/cookbook.md). For how the daemon isolates
 concurrent sessions and what survives a restart, see
-[`docs/rooms.md`](./docs/rooms.md).
+[`docs/guides/rooms.md`](./docs/guides/rooms.md).
 
 ## Releasing
 
 Maintainers cutting a release follow
-[`docs/release/PUBLISH.md`](./docs/release/PUBLISH.md) — the
+[`docs/release/publish.md`](./docs/release/publish.md) — the
 11-step runbook covering bump check → CHANGELOG → tag push →
 `release.yml` → manual `npm publish --otp` → marketplace form →
 ACP registry PR → post-release smoke.

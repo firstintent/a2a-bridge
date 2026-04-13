@@ -6,10 +6,27 @@ work. Specialized peer adapters wait until the general surface is
 proven.
 
 Design principles that drive this ordering live in
-[`POSITIONING.md`](./POSITIONING.md). The baseline assumption is that
+[`positioning.md`](./positioning.md). The baseline assumption is that
 most tasks should still run on a single well-prompted Claude Code
 session — a2a-bridge ships capability for the cases where that is
 genuinely insufficient.
+
+## Status
+
+**v0.1 (dev — Phases 1–7 on `dev`, Phases 8–9 in flight).** A2A +
+ACP inbound, Codex outbound, RoomRouter + SQLite TaskLog,
+verification artifact + `return_format` hint, `a2a-bridge init /
+doctor / daemon` UX, CI + release workflow, marketplace +
+ACP-registry submission packages. The ACP inbound currently binds
+to an in-process echo reply; Phases 8 and 9 land the real
+Claude-Code routing and the cross-bridge join skill before the
+first public publish. See [`CHANGELOG.md`](../../CHANGELOG.md) and
+[`../../TASKS.md`](../../TASKS.md).
+
+**v0.2 (planned).** Outbound OpenClaw + Hermes adapters, MCP
+inbound, TLS listener. Each item needs live external infrastructure
+or client software that the autonomous loop cannot provision; see
+the "v0.2 backlog" section at the bottom of this file.
 
 ## Phase 1 — Foundation (done)
 
@@ -25,7 +42,7 @@ genuinely insufficient.
 - Architecture boundaries enforced by dependency-cruiser via
   `bun run lint:deps`.
 
-## Phase 2 — InboundService v0 (A2A server)
+## Phase 2 — InboundService v0 (A2A server) (done)
 
 **Why first.** One feature unlocks the broadest audience: any A2A
 client (Gemini CLI today, every A2A peer that follows) can drive
@@ -36,7 +53,7 @@ This is the biggest breadth-per-effort ratio in the roadmap.
   interface with stdio and unix-socket implementations (TLS TCP
   deferred until we need it).
 - Implement the minimum A2A server surface documented in
-  `ARCHITECTURE.md` — `GET /.well-known/agent-card.json`, JSON-RPC
+  `architecture.md` — `GET /.well-known/agent-card.json`, JSON-RPC
   endpoint handling `message/stream` (SSE), `tasks/get`,
   `tasks/cancel`. Bearer auth.
 - Wire InboundService through the existing CodexAdapter-backed
@@ -50,7 +67,7 @@ This is the biggest breadth-per-effort ratio in the roadmap.
 entry pointing at the daemon and has Claude Code answering their
 queries.
 
-## Phase 3 — Verification and delegation patterns
+## Phase 3 — Verification and delegation patterns (done)
 
 **Why next.** The article's validated pattern is the verification
 subagent. Phase 2 makes inbound connectivity exist; Phase 3 makes
@@ -79,7 +96,7 @@ differentiates from "just another MCP server."
 documented skill, from a single Claude Code session, targeting the
 CodexAdapter, returning structured pass/fail.
 
-## Phase 4 — RoomRouter and TaskLog
+## Phase 4 — RoomRouter and TaskLog (done)
 
 **Why here.** Phase 3's context-protection and parallel patterns
 expose scale needs: multiple concurrent Claude Code sessions per
@@ -96,7 +113,7 @@ daemon, task history that survives plugin restarts.
 daemon run in parallel without cross-talk; a task survives a plugin
 reconnect.
 
-## Phase 5 — ACP inbound (multi-client reach)
+## Phase 5 — ACP inbound (multi-client reach) (done)
 
 **Why next, ahead of outbound peers.** Phase 2 covered the A2A
 inbound surface that Gemini CLI (and future A2A peers) speak. The
@@ -122,7 +139,7 @@ cannot provision; they move to v0.2.
 register `a2a-bridge acp` as a custom ACP agent and have Claude Code
 answering their prompts end-to-end with streamed replies.
 
-## Phase 6 — Distribution and UX polish
+## Phase 6 — Distribution and UX polish (done)
 
 **Why before release packaging.** The build chain produces a tarball
 today, but first-run UX still requires reading source. Shipping v0.1
@@ -148,7 +165,7 @@ for every supported integration.
 && a2a-bridge daemon start` works, with all four client integrations
 documented and locally verified.
 
-## Phase 7 — Release packaging
+## Phase 7 — Release packaging (done)
 
 **Why this seam.** v0.1 release requires steps the autonomous loop
 cannot fully execute — npm publish, marketplace submission, registry
@@ -162,7 +179,7 @@ not a research project.
   stub the user attaches to a registry PR.
 - Claude Code marketplace submission package: required artifacts and
   a step-by-step submit guide.
-- `docs/release/PUBLISH.md` runbook covering the credential-gated
+- `docs/release/publish.md` runbook covering the credential-gated
   steps the user runs locally.
 - `scripts/check-release-ready.sh` script that verifies version
   alignment, CHANGELOG presence, tarball integrity, and lists any
@@ -171,6 +188,65 @@ not a research project.
 **Ship criterion:** the user can `npm publish` and submit the two
 marketplace packages by following one runbook, with no further code
 changes required.
+
+## Phase 8 — Real ACP → Claude Code routing (no mock)
+
+**Why before release.** Phase 5 built the ACP inbound wire; v0.1
+shipped it against an in-process echo reply to validate the
+handshake. Before any OpenClaw / Zed / VS Code user can actually
+drive Claude Code through `a2a-bridge acp`, the subprocess needs to
+reach the attached CC session through the daemon. Tests may use
+fakes; the CLI default path may not short-circuit to a mock.
+
+- `DaemonProxyGateway` replaces `EchoGateway` in the `runAcp()`
+  default path. `a2a-bridge acp` connects to the daemon over its
+  control-plane WS and forwards each ACP `prompt` into the shared
+  `DaemonClaudeCodeGateway`.
+- New control-plane message variants carry ACP-originated
+  `turn_start` / `turn_chunk` / `turn_complete` / `turn_cancel`
+  frames in both directions.
+- `a2a-bridge acp` fails loudly when the daemon is unreachable
+  (non-zero exit + friendly error helper) rather than silently
+  degrading to echo.
+- Integration test boots the real daemon + a stub CC channel
+  client; drives ACP via the SDK; asserts the `session/update`
+  text is the stub CC's reply verbatim. `scripts/smoke-e2e.sh`
+  exercises the same path under `check:ci`.
+
+**Ship criterion:** the existing SDK-level ACP integration test
+(and `smoke-e2e.sh`) pass against the real routing — no
+`A2A_BRIDGE_INBOUND_ECHO=1` in the production code path.
+
+## Phase 9 — Join skill + first public release
+
+**Why this caps v0.1.** Once ACP → CC is real, the developer-facing
+payoff is a one-URL cross-bridge skill: a user hands the same
+document to Claude Code and to OpenClaw, each AI self-installs its
+side, and OpenClaw can then drive Claude Code end-to-end.
+
+- Cut a draft GitHub release at `v0.1.0` with the tarball attached
+  via `release.yml`. The tarball URL is what the skill will
+  reference for `npm i -g`.
+- `docs/join.md` — a single self-contained Markdown skill that
+  detects the host environment (asks the AI what it is) and runs
+  the matching installer plus a post-install smoke. Claude Code
+  side installs + `a2a-bridge init` + `daemon start`. OpenClaw
+  side installs + registers the ACP agent in `acpx.config.agents`
+  + round-trips a prompt to verify the reply is not echo.
+- README gains a "Join the bridge" section showing the one-line
+  "Read <skill-url> and follow it" invocation for each AI, linking
+  to `docs/join.md` for the full document.
+- Manual end-to-end verification on the maintainer's machine
+  against a live Claude Code + live OpenClaw; transcript saved
+  under `docs/release/verified-joins/` as evidence for publish.
+- `CHANGELOG.md`'s `[0.1.0]` header flips from `— Unreleased` to
+  the release date.
+
+**Ship criterion:** a fresh OpenClaw session, having followed the
+Join skill, can drive a non-trivial prompt through to Claude Code
+and receive Claude Code's actual reply. The maintainer takes over
+for `npm publish`, marketplace form submission, and the ACP
+registry PR.
 
 ## v0.2 backlog — outbound peers, MCP inbound
 
@@ -197,4 +273,4 @@ applications) that the autonomous loop cannot provision in CI.
   clients.
 - gRPC transport for A2A. JSON-RPC + SSE covers the field.
 - Per-peer prompt templates for roles beyond verification.
-  Orchestration framework territory; see `POSITIONING.md`.
+  Orchestration framework territory; see `positioning.md`.

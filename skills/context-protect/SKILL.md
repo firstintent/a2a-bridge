@@ -122,7 +122,7 @@ peer absorbs the full cost of the dig.
 
 ## See also
 
-- [`ARCHITECTURE.md`](../../ARCHITECTURE.md) §"return_format hint"
+- [`architecture.md`](../../docs/design/architecture.md) §"return_format hint"
   — authoritative wording on how adapters relay the hint.
 - `skills/verify/` — pairs well with this pattern when the summary
   itself needs a spot-check.

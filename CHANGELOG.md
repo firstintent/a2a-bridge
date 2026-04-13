@@ -25,9 +25,11 @@ Agent Client Protocol (ACP) editor can drive against Claude Code.
   VS Code ACP extension can register a2a-bridge as an agent with
   `command: "a2a-bridge", args: ["acp"]`. Implements the
   `initialize` / `session/new` / `session/prompt` / `cancel`
-  surface against the shared Claude Code gateway. v0.1 ships an
-  in-process echo reply so the wire can be validated before
-  daemon-backed ACP → CC routing lands post-v0.1.
+  surface against a `DaemonProxyGateway` that relays each turn to
+  the attached Claude Code session through the daemon's
+  control-plane WS. The subprocess fails loudly if no daemon is
+  reachable — there is no silent echo fallback in the production
+  path.
 - **Verification artifact type.** New A2A artifact with MIME type
   `application/vnd.a2a-bridge.verdict+json` carries a
   `pass | fail | needs-info` verdict plus structured evidence.
@@ -48,7 +50,7 @@ Agent Client Protocol (ACP) editor can drive against Claude Code.
   per `contextId` (falling back to the `A2A_BRIDGE_ROOM` env var
   or `"default"`). Each room owns its own Claude Code gateway and
   peer adapter set, so two concurrent sessions never see each
-  other's events. See `docs/rooms.md`.
+  other's events. See `docs/guides/rooms.md`.
 - **SQLite-backed task log.** Per-room task history is persisted
   to `<stateDir>/tasks.db` via Bun's built-in `bun:sqlite`.
   `tasks/get` on a mid-turn task id keeps working after a plugin
@@ -75,9 +77,9 @@ Agent Client Protocol (ACP) editor can drive against Claude Code.
   first-run user, the CLI prints a two-line `error: / fix:` block
   naming the exact command or env var to try next.
 - **Documentation.** Three new top-level docs under `docs/`:
-  `docs/cookbook.md` walks through the verification /
+  `docs/guides/cookbook.md` walks through the verification /
   context-protection / parallel patterns with `curl` and SDK
-  examples and a rough token-cost table; `docs/rooms.md` covers
+  examples and a rough token-cost table; `docs/guides/rooms.md` covers
   the concurrency model, RoomId derivation, and restart
   semantics; README is reorganized around Install → Configure →
   Connect (Gemini CLI / OpenClaw / Zed / VS Code) → Troubleshooting.
