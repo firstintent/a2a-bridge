@@ -1,5 +1,7 @@
 # a2a-bridge
 
+[![CI](https://github.com/firstintent/a2a-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/firstintent/a2a-bridge/actions/workflows/ci.yml)
+
 Protocol-level plumbing that lets Claude Code be **called by** any
 Agent2Agent (A2A) client and that lets Claude Code **call out to**
 other AI coding agents — Codex, OpenClaw, Hermes — through a uniform

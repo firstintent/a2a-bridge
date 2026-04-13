@@ -299,7 +299,7 @@ once that phase lands.
 
 ## Phase 7 — Release packaging
 
-- [ ] **P7.1 — Upgrade `.github/workflows/ci.yml`.**
+- [/] **P7.1 — Upgrade `.github/workflows/ci.yml`.**
   Acceptance: CI runs typecheck, lint:deps, test, build:plugin,
   AND `scripts/smoke-tarball.sh` on every PR. Matrix on Ubuntu and
   macOS. Caches bun deps. README badge points at the workflow.
