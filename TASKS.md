@@ -221,7 +221,7 @@ once that phase lands.
   references `a2a-bridge acp` as the command. No other README
   sections touched.
 
-- [/] **P5.8 — SDK-level ACP integration test.**
+- [x] **P5.8 — SDK-level ACP integration test.**
   Acceptance: new test in `src/cli/acp-inbound.test.ts` boots the
   ACP service against an in-memory stdio pair using the SDK's
   `ClientSideConnection`, sends a `prompt`, and asserts the client
