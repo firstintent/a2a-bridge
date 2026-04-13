@@ -107,7 +107,7 @@ once that phase lands.
   adapter set. Constructor accepts `{ id, gateway, registry }`.
   Unit tests for create / dispose lifecycle.
 
-- [ ] **P4.3 — Implement `RoomRouter`.**
+- [/] **P4.3 — Implement `RoomRouter`.**
   Acceptance: `src/runtime-daemon/rooms/room-router.ts` exports
   `RoomRouter` with `getOrCreate(roomId)` and `dispose(roomId)`.
   Tests for the two paths plus `Map<RoomId, Room>` size accounting.
