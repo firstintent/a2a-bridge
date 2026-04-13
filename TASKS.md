@@ -364,7 +364,7 @@ once that phase lands.
 > Phase 8 change that alters plugin↔CC wire shape must be audited
 > against both.
 
-- [ ] **P8.1 — Control-plane wire format for ACP turns.**
+- [x] **P8.1 — Control-plane wire format for ACP turns.**
   Acceptance: new message variants in `transport/` (or the
   daemon's control-message types) covering `acp_turn_start`,
   `acp_turn_chunk`, `acp_turn_complete`, `acp_turn_error`, and
@@ -375,7 +375,7 @@ once that phase lands.
   otherwise non-identifier keys at the boundary so CC never
   silently drops them.
 
-- [ ] **P8.2 — Daemon-side handler for ACP turns.**
+- [x] **P8.2 — Daemon-side handler for ACP turns.**
   Acceptance: when an attached client sends `acp_turn_start`, the
   daemon calls `inboundGateway.startTurn(text)` on the shared
   `DaemonClaudeCodeGateway` and pipes the resulting `chunk` /
@@ -385,7 +385,7 @@ once that phase lands.
   test drives the handler with a stub gateway and asserts the
   frame sequence.
 
-- [ ] **P8.2a — Permission-relay policy for ACP-triggered turns.**
+- [x] **P8.2a — Permission-relay policy for ACP-triggered turns.**
   Acceptance: decide and document how the plugin's
   `notifications/claude/channel/permission_request` handler
   behaves when the in-flight turn originated from an ACP client
@@ -403,7 +403,7 @@ once that phase lands.
   telegram reference handler at
   `references/claude-plugins-official/external_plugins/telegram/server.ts:405-430`.
 
-- [ ] **P8.3 — `DaemonProxyGateway` in `runtime-daemon/inbound/acp/`.**
+- [x] **P8.3 — `DaemonProxyGateway` in `runtime-daemon/inbound/acp/`.**
   Acceptance: new class implementing `ClaudeCodeGateway` that
   opens a control-plane WS connection to the daemon and uses the
   Phase-8.1 wire format to relay turns. `startTurn(text)` returns
@@ -414,7 +414,7 @@ once that phase lands.
   emitter must round-trip without lossy key renaming — meta keys
   stay identifier-safe end-to-end.
 
-- [ ] **P8.4 — Wire `runAcp()` onto `DaemonProxyGateway` (no echo
+- [x] **P8.4 — Wire `runAcp()` onto `DaemonProxyGateway` (no echo
   fallback).**
   Acceptance: `src/cli/acp.ts` default stdio path constructs
   `DaemonProxyGateway` after `lifecycle.ensureRunning()` resolves.
@@ -425,7 +425,7 @@ once that phase lands.
   Update `acp-cli.test.ts` to assert the end-to-end SDK round-trip
   lands a daemon-originated reply, not an echo.
 
-- [ ] **P8.5 — End-to-end integration test with a stub Claude Code
+- [x] **P8.5 — End-to-end integration test with a stub Claude Code
   channel.**
   Acceptance: new test that boots the real daemon, attaches a stub
   CC channel (via the existing `DaemonClient` seam) that replies
@@ -434,7 +434,7 @@ once that phase lands.
   `session/update` text equals the stub CC reply verbatim. Runs
   under `check:ci`; covers the full real wire end-to-end.
 
-- [ ] **P8.6 — Update `smoke-e2e.sh` to exercise the real ACP → CC
+- [x] **P8.6 — Update `smoke-e2e.sh` to exercise the real ACP → CC
   path.**
   Acceptance: the ACP half of `scripts/smoke-e2e.sh` no longer
   runs with `A2A_BRIDGE_INBOUND_ECHO=1`; it attaches a stub CC
@@ -442,7 +442,7 @@ once that phase lands.
   the stub's reply (not `Echo: ...`). The env-var hook stays but
   is documented as a test/debug only knob.
 
-- [ ] **P8.7 — Fix hardcoded `agentInfo.version: "0.0.1"` in
+- [x] **P8.7 — Fix hardcoded `agentInfo.version: "0.0.1"` in
   `src/runtime-daemon/inbound/acp/index.ts`.**
   Acceptance: the ACP `initialize` response advertises the real
   package version (via the same JSON-import trick
@@ -458,7 +458,7 @@ once that phase lands.
   covers both the ACP `initialize` response and the plugin's
   advertised `Server` info.
 
-- [ ] **P8.8 — Documentation sweep: no more "post-v0.1" caveats
+- [x] **P8.8 — Documentation sweep: no more "post-v0.1" caveats
   on ACP → CC.**
   Acceptance: `CHANGELOG.md`'s `## [0.1.0]` block describes the
   real routing; `README.md`'s Connect-OpenClaw / Zed / VS Code
@@ -474,14 +474,14 @@ once that phase lands.
 > AI self-installs its side of the bridge. This is the
 > developer-facing payoff of the whole v0.1 body of work.
 
-- [ ] **P9.1 — Cut a draft GitHub release with the tarball.**
+- [x] **P9.1 — Cut a draft GitHub release with the tarball.**
   Acceptance: tag `v0.1.0` pushed to GitHub; `release.yml` runs
   green on the matrix; the resulting draft release at
   `github.com/firstintent/a2a-bridge/releases/tag/v0.1.0` carries
   the tarball. Release stays as a draft (do NOT publish-npm yet);
   the tarball URL is what the skill will reference.
 
-- [ ] **P9.2 — `docs/join.md` — cross-bridge join skill.**
+- [x] **P9.2 — `docs/join.md` — cross-bridge join skill.**
   Acceptance: a single self-contained Markdown document a user can
   hand to either Claude Code or OpenClaw via "Read <url> and
   follow it." The document detects the host environment (by
@@ -496,7 +496,7 @@ once that phase lands.
     echo. Unit / smoke tests for the parsed instructions if
     feasible; manual verification notes otherwise.
 
-- [ ] **P9.3 — README "Join the bridge" section.**
+- [x] **P9.3 — README "Join the bridge" section.**
   Acceptance: new top-level README section (between "Configure"
   and "Connect Gemini CLI") showing the single-line skill invoke
   for each side:
@@ -507,7 +507,7 @@ once that phase lands.
   Short two-sentence intro on what happens after both sides run
   the skill. Links to `docs/join.md` for the full text.
 
-- [ ] **P9.4 — End-to-end manual verification of the cross-bridge
+- [/] **P9.4 — End-to-end manual verification of the cross-bridge
   loop.**
   Acceptance: on the maintainer's machine, execute the skill
   against a live Claude Code session and a live OpenClaw session,
@@ -516,7 +516,7 @@ once that phase lands.
   the transcript under `docs/release/verified-joins/<date>.md`
   (or similar) as evidence for the first publish.
 
-- [ ] **P9.5 — Bump + CHANGELOG close for the first publish.**
+- [x] **P9.5 — Bump + CHANGELOG close for the first publish.**
   Acceptance: `CHANGELOG.md`'s `## [0.1.0]` header flips from
   `— Unreleased` to the release date. `docs/release/publish.md`
   remains the runbook; the maintainer takes over from there for
@@ -531,6 +531,8 @@ once that phase lands.
 - Phase 5 baseline: 304 pass / 0 fail / 20 E2E filtered, 38 test files, 768 expect calls (on P5.8 close; Phase 5 opened with the 293-pass baseline carried from Phase 4).
 - Phase 6 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P6.10 close; Phase 6 opened with the 304-pass baseline carried from Phase 5).
 - Phase 7 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P7.6 close; Phase 7 opened with the 339-pass baseline carried from Phase 6). v0.1 complete — every P3–P7 task is [x]; remaining release steps (`npm publish`, marketplace form, ACP registry PR) require human credentials per ROADMAP and are documented in `docs/release/publish.md`.
+- Phase 8 baseline: 384 pass / 0 fail / 20 E2E filtered, 47 test files, 935 expect calls (on P8.8 close; Phase 8 opened with the 339-pass baseline carried from Phase 7). Real ACP → Claude Code routing via DaemonProxyGateway lands end-to-end; `a2a-bridge acp` no longer falls back to the echo gateway in production. Permission-relay policy documented in `docs/design/architecture.md` §"Permission-relay policy for ACP-originated turns" (option b: bridge to ACP `session/request_permission`); daemon-side bridge mechanism landed — plugin-side MCP handler + subprocess-side AgentSideConnection bridge remain as follow-ups.
+- Phase 9 baseline: 384 pass / 0 fail / 20 E2E filtered, 47 test files, 935 expect calls (on P9.5 close; no test-count delta vs. Phase 8 — Phase 9 shipped the v0.1.0 draft release, `docs/join.md` cross-bridge skill, README "Join the bridge" section, and the CHANGELOG release-date flip. P9.4 scaffold landed but the live-systems manual verification transcript is the maintainer's before the final publish). v0.1.0 tag pushed to GitHub; draft release at <github.com/firstintent/a2a-bridge/releases/tag/v0.1.0> carries the tarball. Remaining human-gated work: publish the GitHub draft, run `npm publish`, submit the Claude Code marketplace entry, and open the ACP registry PR — all steps enumerated in `docs/release/publish.md`.
 
 ## v0.1 starting baseline
 

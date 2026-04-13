@@ -1,48 +1,44 @@
 /**
- * `a2a-bridge acp` CLI subcommand (P5.6).
+ * `a2a-bridge acp` CLI subcommand.
  *
  * Speaks ACP over `process.stdin` / `process.stdout` using
- * `AcpInboundService`. Auto-starts the long-running daemon (same
- * heuristic the `claude` / `codex` subcommands use) so any future
- * gateway wiring that relies on the daemon's control plane has a
- * live target to talk to.
+ * `AcpInboundService`.  The default (production) path relays every
+ * turn through the daemon's control plane via `DaemonProxyGateway`
+ * so the ACP client gets real Claude Code output, not an echo.
  *
- * v0.1 note: the subcommand ships with an in-process **echo gateway**
- * that replies `Echo: <user text>` so clients get a deterministic
- * round-trip. Daemon-backed ACP routing (ACP → daemon → CC) is a
- * post-v0.1 item; it'll replace the echo gateway with a
- * `DaemonProxyGateway` that forwards turns over the control plane.
+ * When the daemon is unreachable the subcommand fails loudly — it
+ * throws `DaemonUnreachableError`, which the CLI entry point renders
+ * as a friendly two-line error and exits non-zero.  Silent fall-back
+ * to echo was a v0.1 pre-release behaviour (Phase 8 removes it;
+ * `EchoGateway` now lives only in test code).
+ *
+ * Tests drive `runAcp` with an injected gateway so they can exercise
+ * the ACP surface without a running daemon.
  */
 
-import { EventEmitter } from "node:events";
 import { DaemonLifecycle } from "@shared/daemon-lifecycle";
 import { StateDirResolver } from "@shared/state-dir";
 import { AcpInboundService } from "@daemon/inbound/acp";
-import type {
-  ClaudeCodeGateway,
-  ClaudeCodeTurn,
-} from "@daemon/inbound/a2a-http/claude-code-gateway";
+import { DaemonProxyGateway } from "@daemon/inbound/acp/daemon-proxy-gateway";
+import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
 import type { AcpStdioPair } from "@daemon/inbound/acp/connection";
-
-class EchoTurn extends EventEmitter implements ClaudeCodeTurn {
-  cancel(): void {}
-}
-
-class EchoGateway implements ClaudeCodeGateway {
-  startTurn(userText: string): ClaudeCodeTurn {
-    const turn = new EchoTurn();
-    // Emit async so the handler has its listeners wired up.
-    setImmediate(() => {
-      turn.emit("chunk", `Echo: ${userText}`);
-      turn.emit("complete");
-    });
-    return turn;
-  }
-}
+import {
+  DaemonUnreachableError,
+  renderFriendlyError,
+} from "./errors";
 
 export interface RunAcpOptions {
+  /** stdio pair for the ACP agent. Defaults to `process.stdin` / `process.stdout`. */
   stdio?: AcpStdioPair;
+  /** When false, skip the daemon-lifecycle check (auto-start). */
   ensureDaemon?: boolean;
+  /** Override the daemon control-plane WebSocket URL. */
+  controlWsUrl?: string;
+  /**
+   * Test-only escape hatch: when provided, skips the daemon entirely
+   * and uses this gateway directly.  Production callers never set this.
+   */
+  gateway?: ClaudeCodeGateway;
 }
 
 export async function runAcp(
@@ -51,33 +47,71 @@ export async function runAcp(
 ): Promise<AcpInboundService> {
   void args;
 
+  const stdio = options.stdio ?? defaultStdio();
+  const gateway = await resolveGateway(options);
+
+  const service = new AcpInboundService({ stdio, gateway });
+  await service.start();
+  return service;
+}
+
+async function resolveGateway(options: RunAcpOptions): Promise<ClaudeCodeGateway> {
+  if (options.gateway) return options.gateway;
+
+  const controlPort = parseInt(process.env.A2A_BRIDGE_CONTROL_PORT ?? "4512", 10);
+  const controlWsUrl = options.controlWsUrl ?? `ws://127.0.0.1:${controlPort}/ws`;
+
   const ensureDaemon =
     options.ensureDaemon ?? process.env.A2A_BRIDGE_ACP_SKIP_DAEMON !== "1";
+
   if (ensureDaemon) {
     const stateDir = new StateDirResolver();
-    const controlPort = parseInt(process.env.A2A_BRIDGE_CONTROL_PORT ?? "4512", 10);
     const lifecycle = new DaemonLifecycle({
       stateDir,
       controlPort,
-      log: (msg) => console.error(`[a2a-bridge] ${msg}`),
+      log: (msg) => console.error(`[a2a-bridge acp] ${msg}`),
     });
     try {
       await lifecycle.ensureRunning();
     } catch (err) {
-      // The daemon is a nice-to-have for future wiring; don't block the
-      // ACP server from running with the echo gateway if it's down.
-      const reason = err instanceof Error ? err.message : String(err);
-      console.error(`[a2a-bridge acp] daemon unavailable (${reason}); continuing with echo gateway`);
+      throw new DaemonUnreachableError(
+        controlWsUrl,
+        err instanceof Error ? err : new Error(String(err)),
+      );
     }
   }
 
-  const stdio = options.stdio ?? defaultStdio();
-  const service = new AcpInboundService({
-    stdio,
-    gateway: new EchoGateway(),
+  const gateway = new DaemonProxyGateway({
+    url: controlWsUrl,
+    log: (msg) => console.error(`[a2a-bridge acp] ${msg}`),
   });
-  await service.start();
-  return service;
+  try {
+    await gateway.connect();
+  } catch (err) {
+    throw new DaemonUnreachableError(
+      controlWsUrl,
+      err instanceof Error ? err : new Error(String(err)),
+    );
+  }
+  return gateway;
+}
+
+/**
+ * Entry-point wrapper used by the CLI dispatcher.  Catches
+ * `DaemonUnreachableError`, prints the friendly error block, and
+ * exits non-zero so ACP clients see a clean failure instead of a
+ * zombie subprocess echoing their input.
+ */
+export async function runAcpCli(args: string[]): Promise<void> {
+  try {
+    await runAcp(args);
+  } catch (err) {
+    if (err instanceof DaemonUnreachableError) {
+      console.error(renderFriendlyError(err.friendly));
+      process.exit(1);
+    }
+    throw err;
+  }
 }
 
 function defaultStdio(): AcpStdioPair {

@@ -30,6 +30,7 @@ import {
   createClaudeCodeExecutor,
   createEchoExecutor,
 } from "@daemon/inbound/a2a-http/handlers/message-stream";
+import { AcpTurnHandler } from "@daemon/inbound/acp/turn-handler";
 
 interface ControlClientMeta {
   clientId: number;
@@ -71,6 +72,12 @@ const inboundGateway = new DaemonClaudeCodeGateway({
   },
   log: (msg) => log(`[A2aGateway] ${msg}`),
 });
+
+// Daemon-side handler for ACP turn relay (P8.2). Handles acp_turn_start /
+// acp_turn_cancel messages from `a2a-bridge acp` subprocesses.
+const acpTurnHandler = new AcpTurnHandler(inboundGateway, (msg) =>
+  log(`[AcpTurnHandler] ${msg}`),
+);
 
 // One daemon-wide task log; every Room tracks through this shared store
 // (rows are scoped by the room_id column).
@@ -297,6 +304,7 @@ async function startControlServer() {
       if (wasAttached) {
         detachClaude(conn, "frontend socket closed");
       }
+      acpTurnHandler.onConnectionClose(conn);
     });
 
     conn.on("error", (err) => {
@@ -330,6 +338,44 @@ function handleControlMessage(conn: Connection, raw: string) {
       return;
     case "status":
       sendStatus(conn);
+      return;
+    case "acp_turn_start":
+      acpTurnHandler.handleTurnStart(conn, message);
+      return;
+    case "acp_turn_cancel":
+      acpTurnHandler.handleTurnCancel(conn, message);
+      return;
+    case "plugin_permission_request": {
+      // Policy (architecture.md §"Permission-relay policy for ACP-originated
+      // turns"): forward the verdict request to the ACP client that owns
+      // the active turn; auto-deny when no ACP turn is active.
+      const { requestId } = message;
+      acpTurnHandler
+        .routePermissionRequest({
+          requestId,
+          toolName: message.toolName,
+          description: message.description,
+          inputPreview: message.inputPreview,
+        })
+        .then((outcome) => {
+          sendProtocolMessage(conn, {
+            type: "plugin_permission_response",
+            requestId,
+            outcome,
+          });
+        })
+        .catch((err: Error) => {
+          log(`Permission routing failed for ${requestId}: ${err.message}`);
+          sendProtocolMessage(conn, {
+            type: "plugin_permission_response",
+            requestId,
+            outcome: "deny",
+          });
+        });
+      return;
+    }
+    case "acp_permission_response":
+      acpTurnHandler.handlePermissionResponse(conn, message);
       return;
     case "claude_to_codex": {
       if (message.message.source !== "claude") {
@@ -703,9 +749,15 @@ async function bootInbound() {
     return;
   }
 
-  // `A2A_BRIDGE_INBOUND_ECHO=1` swaps the Claude Code executor for the
-  // built-in echo executor so the wire contract can be smoke-tested
-  // without a Claude Code session attached (used by `scripts/smoke-e2e.sh`).
+  // `A2A_BRIDGE_INBOUND_ECHO=1` is a **test/debug-only knob**: it swaps
+  // the A2A HTTP inbound's Claude Code executor for an in-process echo
+  // executor so the A2A wire contract can be exercised without a real
+  // Claude Code session attached. `scripts/smoke-e2e.sh` uses it for its
+  // A2A half; the ACP half attaches a real stub CC via DaemonClient and
+  // does NOT depend on this hook.  Do not document this env var in any
+  // user-facing runbook or advertise it as a production fallback — the
+  // `a2a-bridge acp` subcommand fails loudly when the daemon has no CC
+  // attached (P8.4).
   const echoMode = process.env.A2A_BRIDGE_INBOUND_ECHO === "1";
   const routedConfig = echoMode
     ? { messageStreamExecutor: createEchoExecutor() }

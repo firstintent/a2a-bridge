@@ -40,8 +40,8 @@ async function main() {
       await runCodex(restArgs);
       break;
     case "acp":
-      const { runAcp } = await import("./acp");
-      await runAcp(restArgs);
+      const { runAcpCli } = await import("./acp");
+      await runAcpCli(restArgs);
       break;
     case "doctor":
       const { runDoctor } = await import("./doctor");

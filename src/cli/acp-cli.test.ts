@@ -1,17 +1,31 @@
-import { describe, test, expect } from "bun:test";
-import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { describe, test, expect, afterEach } from "bun:test";
+import {
+  ClientSideConnection,
+  ndJsonStream,
+  PROTOCOL_VERSION,
+} from "@agentclientprotocol/sdk";
 import { runAcp } from "./acp";
+import { DaemonUnreachableError } from "./errors";
+import { WebSocketListener } from "@transport/websocket";
+import type { Connection } from "@transport/listener";
+import type {
+  ControlClientMessage,
+  ControlServerMessage,
+} from "@transport/control-protocol";
 
 /**
- * E2E: `a2a-bridge acp` round-trip (P5.6).
+ * E2E: `a2a-bridge acp` CLI round-trip against a fake daemon (P8.4).
  *
- * Filtered out of the default `test:unit` run by the `E2E:` prefix in
- * the test name — CI executes it only when explicitly requested.
+ * These tests exercise the production code path that lands after P8.4:
+ * `runAcp` constructs a `DaemonProxyGateway`, sends each ACP `prompt`
+ * through the daemon control plane, and streams chunks back.  The
+ * fake daemon replies with a deterministic "daemon:" prefix so the
+ * assertion makes the contrast with the old EchoGateway explicit —
+ * a regression that silently falls back to echo would print "Echo:"
+ * and the test would fail.
  *
- * Drives `runAcp()` with an in-memory stdio pair (same technique the
- * unit tests use), so we exercise the CLI entrypoint without spawning
- * a real subprocess. Asserts the full ACP initialize → newSession →
- * prompt → reply round trip against the v0.1 echo gateway.
+ * Filtered out of `test:unit` by the `E2E:` prefix — CI executes them
+ * under `check:ci` alongside the rest of the E2E matrix.
  */
 
 interface CapturedUpdate {
@@ -20,8 +34,92 @@ interface CapturedUpdate {
   text?: string;
 }
 
+const cleanups: Array<() => Promise<void> | void> = [];
+
+afterEach(async () => {
+  while (cleanups.length) {
+    try {
+      await cleanups.pop()!();
+    } catch {}
+  }
+});
+
+function register(fn: () => Promise<void> | void) {
+  cleanups.push(fn);
+}
+
+function randomPort(): number {
+  return 49000 + Math.floor(Math.random() * 1000);
+}
+
+/**
+ * Fake daemon that replies to every `acp_turn_start` with one chunk
+ * echoing the text back with a `daemon:` prefix, then `acp_turn_complete`.
+ * The prefix makes the reply provenance observable — an echo-gateway
+ * regression would produce `Echo:` instead.
+ */
+async function bootFakeDaemon(port: number): Promise<void> {
+  const listener = new WebSocketListener({ port, path: "/ws" });
+  register(() => listener.close());
+
+  listener.on("connection", (conn: Connection) => {
+    conn.on("message", (raw: string) => {
+      let frame: ControlClientMessage;
+      try {
+        frame = JSON.parse(raw) as ControlClientMessage;
+      } catch {
+        return;
+      }
+      if (frame.type !== "acp_turn_start") return;
+      const reply: ControlServerMessage = {
+        type: "acp_turn_chunk",
+        turnId: frame.turnId,
+        text: `daemon: ${frame.userText}`,
+      };
+      conn.send(JSON.stringify(reply));
+      const done: ControlServerMessage = {
+        type: "acp_turn_complete",
+        turnId: frame.turnId,
+      };
+      conn.send(JSON.stringify(done));
+    });
+  });
+  await listener.listen();
+}
+
+function makeRecordingClient(updates: CapturedUpdate[]) {
+  return {
+    async sessionUpdate(params: {
+      sessionId: string;
+      update: { sessionUpdate: string; content?: { type: string; text: string } };
+    }): Promise<void> {
+      const text =
+        params.update.content?.type === "text"
+          ? params.update.content.text
+          : undefined;
+      updates.push({
+        sessionId: params.sessionId,
+        kind: params.update.sessionUpdate,
+        text,
+      });
+    },
+    async requestPermission(): Promise<never> {
+      throw new Error("unexpected requestPermission");
+    },
+    async readTextFile(): Promise<never> {
+      throw new Error("unexpected readTextFile");
+    },
+    async writeTextFile(): Promise<never> {
+      throw new Error("unexpected writeTextFile");
+    },
+  };
+}
+
 describe("E2E: a2a-bridge acp CLI subcommand", () => {
-  test("initialize → newSession → prompt returns echo reply end-to-end", async () => {
+  test("prompt returns a daemon-originated reply, not an echo", async () => {
+    const port = randomPort();
+    await bootFakeDaemon(port);
+
     const clientToAgent = new TransformStream<Uint8Array, Uint8Array>();
     const agentToClient = new TransformStream<Uint8Array, Uint8Array>();
 
@@ -31,34 +129,12 @@ describe("E2E: a2a-bridge acp CLI subcommand", () => {
         output: agentToClient.writable,
       },
       ensureDaemon: false,
+      controlWsUrl: `ws://127.0.0.1:${port}/ws`,
     });
+    register(() => service.stop());
 
     const updates: CapturedUpdate[] = [];
-    const recordingClient = {
-      async sessionUpdate(params: {
-        sessionId: string;
-        update: { sessionUpdate: string; content?: { type: string; text: string } };
-      }): Promise<void> {
-        const text =
-          params.update.content?.type === "text"
-            ? params.update.content.text
-            : undefined;
-        updates.push({
-          sessionId: params.sessionId,
-          kind: params.update.sessionUpdate,
-          text,
-        });
-      },
-      async requestPermission(): Promise<never> {
-        throw new Error("unexpected requestPermission");
-      },
-      async readTextFile(): Promise<never> {
-        throw new Error("unexpected readTextFile");
-      },
-      async writeTextFile(): Promise<never> {
-        throw new Error("unexpected writeTextFile");
-      },
-    };
+    const recordingClient = makeRecordingClient(updates);
 
     const client = new ClientSideConnection(
       () =>
@@ -81,7 +157,6 @@ describe("E2E: a2a-bridge acp CLI subcommand", () => {
       cwd: "/tmp/acp-cli-e2e",
       mcpServers: [],
     });
-    expect(typeof session.sessionId).toBe("string");
 
     const resp = await client.prompt({
       sessionId: session.sessionId,
@@ -89,14 +164,36 @@ describe("E2E: a2a-bridge acp CLI subcommand", () => {
     });
     expect(resp.stopReason).toBe("end_turn");
 
-    // Let the final sessionUpdate notification flush.
+    // Let the sessionUpdate notifications flush.
     await new Promise((r) => setImmediate(r));
-    const echoed = updates.find(
-      (u) => u.kind === "agent_message_chunk" && u.text === "Echo: hello acp cli",
-    );
-    expect(echoed).toBeDefined();
-    expect(echoed!.sessionId).toBe(session.sessionId);
 
-    await service.stop();
+    const daemonReply = updates.find(
+      (u) => u.kind === "agent_message_chunk" && u.text === "daemon: hello acp cli",
+    );
+    expect(daemonReply).toBeDefined();
+    expect(daemonReply!.sessionId).toBe(session.sessionId);
+
+    // Explicitly assert the old echo path is gone.
+    const echoed = updates.find(
+      (u) => u.kind === "agent_message_chunk" && u.text?.startsWith("Echo:"),
+    );
+    expect(echoed).toBeUndefined();
+  });
+
+  test("runAcp throws DaemonUnreachableError when the daemon is not listening", async () => {
+    // Port 1 is reserved and almost never listening.
+    const clientToAgent = new TransformStream<Uint8Array, Uint8Array>();
+    const agentToClient = new TransformStream<Uint8Array, Uint8Array>();
+
+    await expect(
+      runAcp([], {
+        stdio: {
+          input: clientToAgent.readable,
+          output: agentToClient.writable,
+        },
+        ensureDaemon: false,
+        controlWsUrl: "ws://127.0.0.1:1/ws",
+      }),
+    ).rejects.toBeInstanceOf(DaemonUnreachableError);
   });
 });

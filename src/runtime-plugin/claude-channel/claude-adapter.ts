@@ -22,6 +22,15 @@ import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import type { BridgeMessage } from "@messages/types";
+// Channels-reference pattern: advertise the real package name + version
+// to Claude Code so the MCP Server info matches the shipped tarball
+// rather than a stale hardcode. Matches the telegram reference plugin
+// (references/claude-plugins-official/external_plugins/telegram/server.ts:370).
+import pkg from "../../../package.json" with { type: "json" };
+export const PLUGIN_SERVER_INFO = {
+  name: pkg.name.split("/").pop() ?? "a2a-bridge",
+  version: pkg.version,
+} as const;
 
 export type ReplySender = (msg: BridgeMessage, requireReply?: boolean) => Promise<{ success: boolean; error?: string }>;
 export type DeliveryMode = "push" | "pull" | "auto";
@@ -86,7 +95,7 @@ export class ClaudeAdapter extends EventEmitter {
     this.maxBufferedMessages = parseInt(process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);
 
     this.server = new Server(
-      { name: "a2a-bridge", version: "0.1.0" },
+      PLUGIN_SERVER_INFO,
       {
         capabilities: {
           experimental: { "claude/channel": {} },
