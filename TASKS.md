@@ -79,7 +79,7 @@ once that phase lands.
   Acceptance: `skills/parallel/SKILL.md` shows the spawn-N-peers
   pattern for genuinely independent subtasks. README links to it.
 
-- [/] **P3.8 — Token-cost reporting on A2A responses.**
+- [x] **P3.8 — Token-cost reporting on A2A responses.**
   Acceptance: every terminal `status-update` carries
   `metadata.tokenUsage: { promptTokens, completionTokens, totalTokens }`
   when the executor supplies it. Unit test asserts the field
