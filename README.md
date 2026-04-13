@@ -291,6 +291,26 @@ For end-to-end runnable `curl` + SDK examples of all three patterns
 concurrent sessions and what survives a restart, see
 [`docs/rooms.md`](./docs/rooms.md).
 
+## Releasing
+
+Maintainers cutting a release follow
+[`docs/release/PUBLISH.md`](./docs/release/PUBLISH.md) — the
+11-step runbook covering bump check → CHANGELOG → tag push →
+`release.yml` → manual `npm publish --otp` → marketplace form →
+ACP registry PR → post-release smoke.
+
+Before opening the tag, run the pre-release gate:
+
+```bash
+bash scripts/check-release-ready.sh
+```
+
+It asserts version alignment across all manifests, that
+`CHANGELOG.md` has an entry for the current version, that
+`bun run check:ci` is green, and that every artifact under
+`release/` and `docs/release/` the runbook needs is present.
+Exits non-zero on any failure.
+
 ## License
 
 MIT. See [`LICENSE`](./LICENSE) and [`NOTICE`](./NOTICE).
