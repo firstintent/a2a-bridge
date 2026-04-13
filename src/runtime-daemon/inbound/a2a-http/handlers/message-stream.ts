@@ -1,6 +1,10 @@
 import type { JsonRpcId } from "@daemon/inbound/a2a-http/jsonrpc";
 import type { Task, TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
 import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
+import {
+  serializeVerdictArtifact,
+  type VerificationArtifact,
+} from "@daemon/inbound/a2a-http/verdict";
 
 /**
  * `message/stream` SSE handler.
@@ -79,6 +83,12 @@ export type StreamEvent =
       text: string;
       append?: boolean;
       lastChunk?: boolean;
+    }
+  | {
+      kind: "artifact-update";
+      verdict: VerificationArtifact;
+      artifactId?: string;
+      lastChunk?: boolean;
     };
 
 export interface HandleMessageStreamOptions {
@@ -147,6 +157,18 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
           if (event.final) {
             terminated = true;
           }
+        } else if ("verdict" in event) {
+          const envelope = serializeVerdictArtifact(event.verdict, {
+            artifactId: event.artifactId,
+          });
+          write({
+            kind: "artifact-update",
+            taskId,
+            contextId,
+            artifact: envelope,
+            append: false,
+            lastChunk: event.lastChunk ?? true,
+          });
         } else {
           write({
             kind: "artifact-update",

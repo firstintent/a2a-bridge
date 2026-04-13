@@ -4,6 +4,11 @@ import {
   handleMessageStream,
 } from "@daemon/inbound/a2a-http/handlers/message-stream";
 import { TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
+import {
+  parseVerdict,
+  VERDICT_MIME_TYPE,
+  type VerificationArtifact,
+} from "@daemon/inbound/a2a-http/verdict";
 
 type SseFrame = { jsonrpc: "2.0"; id: string | number | null; result: Record<string, unknown> };
 
@@ -300,6 +305,67 @@ describe("handleMessageStream", () => {
     await run({ return_format: "bogus" });
     await run({ return_format: 123 });
     expect(captured).toEqual(["full", "full", "full"]);
+  });
+
+  test("emits a verdict artifact with the stable mime type when the executor emits { verdict }", async () => {
+    const verdict: VerificationArtifact = {
+      verdict: "pass",
+      reasoning: "All assertions held.",
+      evidence: [{ claim: "Tests green", source: "src/foo.test.ts:42" }],
+      followups: [],
+    };
+    const { idFactory } = deterministicIds();
+    const resp = handleMessageStream({
+      rpcId: "verdict-1",
+      params: {
+        message: {
+          parts: [{ kind: "text", text: "verify this" }],
+          metadata: { return_format: "verdict" },
+        },
+      },
+      executor: ({ returnFormat, emit }) => {
+        expect(returnFormat).toBe("verdict");
+        emit({ kind: "status-update", state: "working" });
+        emit({ kind: "artifact-update", verdict });
+        emit({
+          kind: "status-update",
+          state: "completed",
+          final: true,
+          message: {
+            kind: "message",
+            messageId: idFactory(),
+            role: "agent",
+            parts: [{ kind: "text", text: "verdict attached" }],
+          },
+        });
+      },
+      idFactory,
+    });
+
+    const frames = await readSseFrames(resp);
+    const artifactFrame = frames.find(
+      (f) => (f.result as { kind?: string }).kind === "artifact-update",
+    );
+    expect(artifactFrame).toBeDefined();
+    const artifact = (
+      artifactFrame!.result as {
+        artifact: {
+          artifactId: string;
+          parts: Array<{ kind: string; mimeType?: string; data?: unknown }>;
+        };
+      }
+    ).artifact;
+    expect(artifact.artifactId).toBeTruthy();
+    const part = artifact.parts[0]!;
+    expect(part.kind).toBe("data");
+    expect(part.mimeType).toBe(VERDICT_MIME_TYPE);
+
+    // Survive a JSON round-trip, then parse back into a VerificationVerdict.
+    const roundTripped = JSON.parse(JSON.stringify(part.data));
+    const parsed = parseVerdict(roundTripped);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value).toEqual(verdict);
   });
 
   test("each SSE record is terminated by a blank line", async () => {

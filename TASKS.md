@@ -56,7 +56,7 @@ once that phase lands.
   `kind: "data"`, `mimeType: "application/vnd.a2a-bridge.verdict+json"`,
   and `data: <verdict>`. Unit test round-trips through `parseVerdict`.
 
-- [ ] **P3.4 — Wire verdict path into `message/stream`.**
+- [/] **P3.4 — Wire verdict path into `message/stream`.**
   Acceptance: when `ctx.returnFormat === "verdict"`, the executor may
   call a new `emit({ kind: "artifact-update", verdict: <obj> })`
   variant; the handler emits the artifact built by
