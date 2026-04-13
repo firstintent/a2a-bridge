@@ -205,7 +205,7 @@ once that phase lands.
   ClaudeCodeTurn. Pending `prompt` resolves with
   `stopReason: "cancelled"`. Unit test covers the cancel path.
 
-- [/] **P5.6 — `a2a-bridge acp` CLI subcommand.**
+- [x] **P5.6 — `a2a-bridge acp` CLI subcommand.**
   Acceptance: `src/cli/cli.ts` recognizes `acp` as a subcommand that
   starts an `AcpInboundService` over `process.stdin` /
   `process.stdout`. Connects to the long-running daemon via the
