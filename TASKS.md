@@ -474,7 +474,7 @@ once that phase lands.
 > AI self-installs its side of the bridge. This is the
 > developer-facing payoff of the whole v0.1 body of work.
 
-- [/] **P9.1 — Cut a draft GitHub release with the tarball.**
+- [x] **P9.1 — Cut a draft GitHub release with the tarball.**
   Acceptance: tag `v0.1.0` pushed to GitHub; `release.yml` runs
   green on the matrix; the resulting draft release at
   `github.com/firstintent/a2a-bridge/releases/tag/v0.1.0` carries
