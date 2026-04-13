@@ -164,7 +164,7 @@ once that phase lands.
   on the original task id still returns the latest state from
   SQLite. `bun run check:ci` green.
 
-- [/] **P4.12 — Document the concurrency model.**
+- [x] **P4.12 — Document the concurrency model.**
   Acceptance: `docs/rooms.md` covers RoomId derivation,
   multi-session semantics, TaskLog persistence guarantees, and the
   per-Room adapter lifecycle. Linked from README.
