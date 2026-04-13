@@ -57,6 +57,19 @@ export class RoomRouter {
     return this.rooms.get(id);
   }
 
+  /**
+   * Seed the router with a pre-built Room so subsequent `getOrCreate(id)`
+   * calls return it without re-invoking the factory. Throws if a Room is
+   * already cached for `room.id` — seeding is only appropriate at boot.
+   */
+  adopt(room: Room): void {
+    this.ensureLive();
+    if (this.rooms.has(room.id)) {
+      throw new Error(`RoomRouter: room ${room.id} already adopted`);
+    }
+    this.rooms.set(room.id, room);
+  }
+
   /** Snapshot count of live Rooms. */
   get size(): number {
     return this.rooms.size;

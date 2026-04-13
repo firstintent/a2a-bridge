@@ -19,7 +19,7 @@ function stubTurn(): ClaudeCodeTurn {
 void stubTurn;
 
 function makeAdapter(name: string, onDispose?: () => Promise<void> | void): PeerAdapter {
-  return { name, dispose: onDispose };
+  return { peerName: name, dispose: onDispose };
 }
 
 describe("Room", () => {
@@ -42,7 +42,7 @@ describe("Room", () => {
       peers: [makeAdapter("codex"), makeAdapter("openclaw")],
     });
     expect(room.peerNames()).toEqual(["codex", "openclaw"]);
-    expect(room.getPeer("codex")?.name).toBe("codex");
+    expect(room.getPeer("codex")?.peerName).toBe("codex");
   });
 
   test("attachPeer rejects duplicate names", () => {

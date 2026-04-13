@@ -17,10 +17,15 @@ import type { RoomId } from "@daemon/rooms/room-id";
 /**
  * Minimum contract every peer adapter must satisfy for Room's
  * lifecycle logic (lint:deps keeps concrete adapter imports out of
- * rooms/ so we depend only on this shape).
+ * rooms/ so we depend only on this shape). Matches the `peerName`
+ * field on `IPeerAdapter`; concrete adapters (CodexAdapter,
+ * OpenClawAdapter, ...) already expose it.
+ *
+ * `dispose` is optional; `stop()` / `close()` aliases are fine on
+ * adapters, but the Room's teardown path only ever calls `dispose`.
  */
 export interface PeerAdapter {
-  readonly name: string;
+  readonly peerName: string;
   dispose?: () => Promise<void> | void;
 }
 
@@ -49,10 +54,10 @@ export class Room {
   /** Register an outbound peer adapter under this room. Names must be unique. */
   attachPeer(adapter: PeerAdapter): void {
     this.ensureLive();
-    if (this.peers.has(adapter.name)) {
-      throw new Error(`Room ${this.id}: peer "${adapter.name}" already attached`);
+    if (this.peers.has(adapter.peerName)) {
+      throw new Error(`Room ${this.id}: peer "${adapter.peerName}" already attached`);
     }
-    this.peers.set(adapter.name, adapter);
+    this.peers.set(adapter.peerName, adapter);
   }
 
   /** Return the attached adapter, or undefined if none was registered under the name. */

@@ -1579,10 +1579,10 @@ class Room {
   }
   attachPeer(adapter) {
     this.ensureLive();
-    if (this.peers.has(adapter.name)) {
-      throw new Error(`Room ${this.id}: peer "${adapter.name}" already attached`);
+    if (this.peers.has(adapter.peerName)) {
+      throw new Error(`Room ${this.id}: peer "${adapter.peerName}" already attached`);
     }
-    this.peers.set(adapter.name, adapter);
+    this.peers.set(adapter.peerName, adapter);
   }
   getPeer(name) {
     return this.peers.get(name);
@@ -1644,6 +1644,13 @@ class RoomRouter {
   get(id) {
     return this.rooms.get(id);
   }
+  adopt(room) {
+    this.ensureLive();
+    if (this.rooms.has(room.id)) {
+      throw new Error(`RoomRouter: room ${room.id} already adopted`);
+    }
+    this.rooms.set(room.id, room);
+  }
   get size() {
     return this.rooms.size;
   }
@@ -1671,13 +1678,6 @@ class RoomRouter {
   }
 }
 
-// src/runtime-daemon/tasks/task-log.ts
-import { Database } from "bun:sqlite";
-import { EventEmitter as EventEmitter4 } from "events";
-import { readFileSync as readFileSync3 } from "fs";
-import { fileURLToPath as fileURLToPath2 } from "url";
-import { dirname as dirname2, join as join3 } from "path";
-
 // src/runtime-daemon/rooms/room-id.ts
 var DEFAULT_ROOM_ID = "default";
 var ROOM_ENV_VAR = "A2A_BRIDGE_ROOM";
@@ -1694,6 +1694,11 @@ function deriveRoomId(input = {}) {
 }
 
 // src/runtime-daemon/tasks/task-log.ts
+import { Database } from "bun:sqlite";
+import { EventEmitter as EventEmitter4 } from "events";
+import { readFileSync as readFileSync3 } from "fs";
+import { fileURLToPath as fileURLToPath2 } from "url";
+import { dirname as dirname2, join as join3 } from "path";
 var schemaPath = join3(dirname2(fileURLToPath2(import.meta.url)), "task-log-schema.sql");
 var cachedSchema;
 function loadSchema() {
@@ -2363,8 +2368,6 @@ var A2A_INBOUND_HOST = process.env.A2A_BRIDGE_A2A_HOST ?? "127.0.0.1";
 var A2A_INBOUND_TOKEN = process.env.A2A_BRIDGE_BEARER_TOKEN ?? "";
 var A2A_INBOUND_PUBLIC_CARD = process.env.A2A_BRIDGE_PUBLIC_AGENT_CARD !== "false";
 var daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
-var codex = new CodexAdapter(CODEX_APP_PORT, CODEX_PROXY_PORT);
-var attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
 var controlListener = null;
 var a2aInboundServer = null;
 var attachedClaude = null;
@@ -2377,7 +2380,16 @@ var inboundGateway = new DaemonClaudeCodeGateway({
   log: (msg) => log(`[A2aGateway] ${msg}`)
 });
 var sharedTaskStore = SqliteTaskLog.open(stateDir.taskLogFile);
+var defaultRoom = new Room({
+  id: DEFAULT_ROOM_ID,
+  gateway: inboundGateway,
+  registry: sharedTaskStore,
+  peers: [new CodexAdapter(CODEX_APP_PORT, CODEX_PROXY_PORT)]
+});
+var codex = defaultRoom.getPeer("codex");
+var attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
 var inboundRoomRouter = new RoomRouter((id) => new Room({ id, gateway: inboundGateway, registry: sharedTaskStore }));
+inboundRoomRouter.adopt(defaultRoom);
 var nextSystemMessageId = 0;
 var codexBootstrapped = false;
 var attentionWindowTimer = null;

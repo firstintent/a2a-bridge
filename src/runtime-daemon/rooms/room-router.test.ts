@@ -82,7 +82,7 @@ describe("RoomRouter", () => {
         registry: new TaskRegistry(),
         peers: [
           {
-            name: "p",
+            peerName: "p",
             dispose: () => {
               disposed = true;
             },
@@ -124,7 +124,7 @@ describe("RoomRouter", () => {
         id,
         gateway: stubGateway(),
         registry: new TaskRegistry(),
-        peers: [{ name: "p", dispose: () => void disposed.push(id) }],
+        peers: [{ peerName: "p", dispose: () => void disposed.push(id) }],
       });
     const router = new RoomRouter(factory);
     await router.getOrCreate("a" as RoomId);
