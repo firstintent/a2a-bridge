@@ -253,7 +253,7 @@ once that phase lands.
   the running daemon's pid + ports. `logs` tails the state-dir log
   file. Unit tests with injected lifecycle.
 
-- [ ] **P6.4 — Friendly error messages for common failures.**
+- [/] **P6.4 — Friendly error messages for common failures.**
   Acceptance: dedicated error helpers for bind-EADDRINUSE, missing
   bearer token, missing CC plugin, ACP SDK missing. Each prints a
   one-line cause + a recommended fix. Unit tests exercise each
