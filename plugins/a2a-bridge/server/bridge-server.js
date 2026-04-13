@@ -14375,6 +14375,9 @@ class StateDirResolver {
   get killedFile() {
     return join(this.stateDir, "killed");
   }
+  get taskLogFile() {
+    return join(this.stateDir, "tasks.db");
+  }
 }
 
 // src/shared/config-service.ts

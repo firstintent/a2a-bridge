@@ -1,10 +1,10 @@
 import type { JsonRpcId } from "@daemon/inbound/a2a-http/jsonrpc";
-import type { Task, TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
 import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
 import {
   serializeVerdictArtifact,
   type VerificationArtifact,
 } from "@daemon/inbound/a2a-http/verdict";
+import type { ITaskStore, InitialTask } from "@daemon/tasks/task-store";
 
 /**
  * `message/stream` SSE handler.
@@ -119,7 +119,7 @@ export interface HandleMessageStreamOptions {
    * listens for `cancel` events so `tasks/cancel` can terminate the
    * stream with a final status-update(canceled).
    */
-  registry?: TaskRegistry;
+  registry?: ITaskStore;
 }
 
 /** Build an SSE `Response` for a single `message/stream` request. */
@@ -133,7 +133,7 @@ export function handleMessageStream(opts: HandleMessageStreamOptions): Response 
   const encoder = new TextEncoder();
 
   const registry = opts.registry;
-  const initialTask: Task = {
+  const initialTask: InitialTask = {
     id: taskId,
     contextId,
     kind: "task",

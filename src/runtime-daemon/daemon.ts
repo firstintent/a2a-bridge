@@ -678,6 +678,7 @@ async function bootInbound() {
         url: `http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}/a2a`,
       },
       messageStreamExecutor: createClaudeCodeExecutor({ gateway: inboundGateway }),
+      taskLogPath: stateDir.taskLogFile,
       logger: (msg) => log(`[A2aInbound] ${msg}`),
     });
     log(

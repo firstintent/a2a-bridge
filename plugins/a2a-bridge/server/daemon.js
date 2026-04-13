@@ -1286,6 +1286,9 @@ class StateDirResolver {
   get killedFile() {
     return join(this.stateDir, "killed");
   }
+  get taskLogFile() {
+    return join(this.stateDir, "tasks.db");
+  }
 }
 
 // src/shared/config-service.ts
@@ -1725,48 +1728,133 @@ function normalizeId(id) {
   return null;
 }
 
-// src/runtime-daemon/inbound/a2a-http/task-registry.ts
+// src/runtime-daemon/tasks/task-log.ts
+import { Database } from "bun:sqlite";
 import { EventEmitter as EventEmitter4 } from "events";
+import { readFileSync as readFileSync3 } from "fs";
+import { fileURLToPath as fileURLToPath2 } from "url";
+import { dirname as dirname2, join as join3 } from "path";
 
-class TaskRegistry extends EventEmitter4 {
-  tasks = new Map;
-  create(task) {
-    if (this.tasks.has(task.id)) {
-      throw new Error(`TaskRegistry: task ${task.id} already registered`);
+// src/runtime-daemon/rooms/room-id.ts
+var DEFAULT_ROOM_ID = "default";
+
+// src/runtime-daemon/tasks/task-log.ts
+var schemaPath = join3(dirname2(fileURLToPath2(import.meta.url)), "task-log-schema.sql");
+var cachedSchema;
+function loadSchema() {
+  if (cachedSchema === undefined) {
+    cachedSchema = readFileSync3(schemaPath, "utf8");
+  }
+  return cachedSchema;
+}
+function migrateTaskLogSchema(db) {
+  db.exec(loadSchema());
+}
+class SqliteTaskLog extends EventEmitter4 {
+  db;
+  now;
+  constructor(db, options = {}) {
+    super();
+    this.db = db;
+    this.now = options.now ?? (() => Date.now());
+  }
+  static open(path, options = {}) {
+    const db = new Database(path);
+    migrateTaskLogSchema(db);
+    return new SqliteTaskLog(db, options);
+  }
+  create(input) {
+    const now = this.now();
+    const status = input.status ?? { state: "submitted" };
+    const roomId = input.roomId ?? DEFAULT_ROOM_ID;
+    const row = {
+      id: input.id,
+      roomId,
+      contextId: input.contextId,
+      kind: "task",
+      status,
+      createdAt: now,
+      updatedAt: now
+    };
+    try {
+      this.db.prepare("INSERT INTO tasks (id, room_id, context_id, state, status_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(row.id, roomId, row.contextId, status.state, JSON.stringify(status), now, now);
+    } catch (err) {
+      throw new Error(`SqliteTaskLog: task ${input.id} already registered`, {
+        cause: err
+      });
     }
-    this.tasks.set(task.id, task);
+    return row;
   }
   get(id) {
-    return this.tasks.get(id);
+    const row = this.db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
+    if (!row)
+      return;
+    return this.rowToStoredTask(row);
   }
   updateStatus(id, status) {
-    const task = this.tasks.get(id);
-    if (!task)
-      return;
-    task.status = status;
+    const now = this.now();
+    this.db.prepare("UPDATE tasks SET state = ?, status_json = ?, updated_at = ? WHERE id = ?").run(status.state, JSON.stringify(status), now, id);
   }
   cancel(id) {
-    const task = this.tasks.get(id);
-    if (!task)
+    const now = this.now();
+    const canceled = { state: "canceled" };
+    const changes = this.db.prepare("UPDATE tasks SET state = ?, status_json = ?, updated_at = ? WHERE id = ?").run(canceled.state, JSON.stringify(canceled), now, id);
+    if (changes.changes === 0)
       return;
-    task.status = { state: "canceled" };
     this.emit("cancel", id);
-    return task;
+    return this.get(id);
   }
   delete(id) {
-    this.tasks.delete(id);
+    this.db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+  }
+  listByRoom(roomId) {
+    const rows = this.db.prepare("SELECT * FROM tasks WHERE room_id = ? ORDER BY updated_at DESC").all(roomId);
+    return rows.map((r) => this.rowToStoredTask(r));
   }
   get size() {
-    return this.tasks.size;
+    const row = this.db.prepare("SELECT COUNT(*) AS c FROM tasks").get();
+    return row.c;
+  }
+  close() {
+    this.db.close();
+  }
+  rowToStoredTask(row) {
+    return {
+      id: row.id,
+      roomId: row.room_id,
+      contextId: row.context_id,
+      kind: "task",
+      status: JSON.parse(row.status_json),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
   }
 }
 
+// src/runtime-daemon/inbound/a2a-http/verdict.ts
+var VERDICT_MIME_TYPE = "application/vnd.a2a-bridge.verdict+json";
+var VERDICT_ARTIFACT_ID = "verification-verdict";
+function serializeVerdictArtifact(verdict, options = {}) {
+  return {
+    artifactId: options.artifactId ?? VERDICT_ARTIFACT_ID,
+    parts: [
+      {
+        kind: "data",
+        mimeType: VERDICT_MIME_TYPE,
+        data: verdict
+      }
+    ]
+  };
+}
+
 // src/runtime-daemon/inbound/a2a-http/handlers/message-stream.ts
+var KNOWN_RETURN_FORMATS = ["full", "summary", "verdict"];
 function handleMessageStream(opts) {
   const makeId = opts.idFactory ?? (() => crypto.randomUUID());
   const taskId = makeId();
   const contextId = opts.params.message.contextId ?? makeId();
   const userText = extractText(opts.params.message);
+  const returnFormat = extractReturnFormat(opts.params.message.metadata);
   const encoder = new TextEncoder;
   const registry = opts.registry;
   const initialTask = {
@@ -1793,16 +1881,32 @@ function handleMessageStream(opts) {
         if (event.kind === "status-update") {
           const status = event.message ? { state: event.state, message: event.message } : { state: event.state };
           registry?.updateStatus(taskId, status);
-          write({
+          const frame = {
             kind: "status-update",
             taskId,
             contextId,
             status,
             final: event.final ?? false
-          });
+          };
+          if (event.tokenUsage) {
+            frame.metadata = { tokenUsage: event.tokenUsage };
+          }
+          write(frame);
           if (event.final) {
             terminated = true;
           }
+        } else if ("verdict" in event) {
+          const envelope = serializeVerdictArtifact(event.verdict, {
+            artifactId: event.artifactId
+          });
+          write({
+            kind: "artifact-update",
+            taskId,
+            contextId,
+            artifact: envelope,
+            append: false,
+            lastChunk: event.lastChunk ?? true
+          });
         } else {
           write({
             kind: "artifact-update",
@@ -1839,7 +1943,7 @@ function handleMessageStream(opts) {
       registry?.on("cancel", onRegistryCancel);
       const run = async () => {
         try {
-          await opts.executor({ taskId, contextId, userText, emit });
+          await opts.executor({ taskId, contextId, userText, returnFormat, emit });
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err);
           emit({
@@ -1945,6 +2049,10 @@ function createClaudeCodeExecutor(opts) {
 function extractText(msg) {
   return (msg.parts ?? []).filter((p) => p.kind === "text").map((p) => p.text).join("");
 }
+function extractReturnFormat(metadata) {
+  const raw = metadata?.return_format;
+  return typeof raw === "string" && KNOWN_RETURN_FORMATS.includes(raw) ? raw : "full";
+}
 
 // src/runtime-daemon/inbound/a2a-http/handlers/tasks-get.ts
 var TASK_NOT_FOUND = -32001;
@@ -2000,7 +2108,7 @@ async function startA2AServer(config) {
   const log = config.logger ?? createLogger({ tag: "A2aHttpServer", filePath: config.logFilePath });
   const card = buildAgentCard(config.agentCard);
   const rpcPath = extractPath(card.url);
-  const registry = config.registry ?? new TaskRegistry;
+  const registry = config.registry ?? SqliteTaskLog.open(config.taskLogPath ?? ":memory:");
   const executor = config.messageStreamExecutor ?? createEchoExecutor();
   const handlers = {
     "tasks/get": createTasksGetHandler(registry),
@@ -2621,6 +2729,7 @@ async function bootInbound() {
         url: `http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}/a2a`
       },
       messageStreamExecutor: createClaudeCodeExecutor({ gateway: inboundGateway }),
+      taskLogPath: stateDir.taskLogFile,
       logger: (msg) => log(`[A2aInbound] ${msg}`)
     });
     log(`A2A inbound server listening on http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}${a2aInboundServer.rpcPath}`);

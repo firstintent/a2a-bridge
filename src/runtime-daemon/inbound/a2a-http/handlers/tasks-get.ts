@@ -2,7 +2,7 @@ import {
   JsonRpcMethodError,
   type JsonRpcHandler,
 } from "@daemon/inbound/a2a-http/jsonrpc";
-import type { TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
+import type { ITaskStore } from "@daemon/tasks/task-store";
 
 /**
  * A2A-reserved error code for "task not found" (the SDK's
@@ -11,14 +11,14 @@ import type { TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
 export const TASK_NOT_FOUND = -32001;
 
 /**
- * Build the `tasks/get` handler bound to a TaskRegistry.
+ * Build the `tasks/get` handler bound to an `ITaskStore`.
  *
- * When no registry is supplied, every call surfaces the
+ * When no store is supplied, every call surfaces the
  * `-32001 TaskNotFound` error — the P2.12 stub behavior, preserved so
- * early wiring (e.g. server boot before the registry instance is ready)
+ * early wiring (e.g. server boot before the store instance is ready)
  * still reports the spec-accurate code instead of crashing.
  */
-export function createTasksGetHandler(registry?: TaskRegistry): JsonRpcHandler {
+export function createTasksGetHandler(registry?: ITaskStore): JsonRpcHandler {
   return (params) => {
     const id = extractTaskId(params);
     if (!id) {

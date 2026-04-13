@@ -2,21 +2,21 @@ import {
   JsonRpcMethodError,
   type JsonRpcHandler,
 } from "@daemon/inbound/a2a-http/jsonrpc";
-import type { TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
+import type { ITaskStore } from "@daemon/tasks/task-store";
 import { TASK_NOT_FOUND } from "@daemon/inbound/a2a-http/handlers/tasks-get";
 
 /**
- * Build the `tasks/cancel` handler bound to a TaskRegistry.
+ * Build the `tasks/cancel` handler bound to an `ITaskStore`.
  *
  * Cancellation semantics:
  * - Unknown task id → `-32001 TaskNotFound`, matching `tasks/get`.
- * - Known id → registry.cancel() flips the task's state and fires a
+ * - Known id → store.cancel() flips the task's state and fires a
  *   `cancel` event that the active `message/stream` handler uses to
  *   emit its terminal SSE frame to the client.
  * - The handler's return value is the post-cancellation Task snapshot,
  *   the same payload shape A2A's `tasks/cancel` response advertises.
  */
-export function createTasksCancelHandler(registry: TaskRegistry): JsonRpcHandler {
+export function createTasksCancelHandler(registry: ITaskStore): JsonRpcHandler {
   return (params) => {
     const id = extractTaskId(params);
     if (!id) {

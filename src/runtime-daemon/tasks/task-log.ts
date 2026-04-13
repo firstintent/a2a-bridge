@@ -18,7 +18,13 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import type { RoomId } from "@daemon/rooms/room-id";
+import { DEFAULT_ROOM_ID, type RoomId } from "@daemon/rooms/room-id";
+import type {
+  ITaskStore,
+  InitialTask,
+  TaskSnapshot,
+  TaskStatus as ITaskStatus,
+} from "@daemon/tasks/task-store";
 
 /** Minimal shape of `bun:sqlite`'s Database needed by the migrator. */
 export interface SqliteDatabaseLike {
@@ -60,16 +66,18 @@ export interface StoredTask {
   updatedAt: number;
 }
 
-export interface TaskStatus {
-  state: string;
-  /** A2A `Message` payload the client treats as the terminal narrative. */
-  message?: unknown;
-}
+export type TaskStatus = ITaskStatus;
 
+/**
+ * Superset of `ITaskStore`'s `InitialTask`: the caller can pass either
+ * the lean `{ id, contextId, kind, status, roomId? }` shape (what the
+ * handler uses today) or the full record with status already built.
+ */
 export interface TaskCreateInput {
   id: string;
-  roomId: RoomId;
+  roomId?: RoomId;
   contextId: string;
+  kind?: "task";
   status?: TaskStatus;
 }
 
@@ -97,7 +105,9 @@ export interface SqliteTaskLogOptions {
  * callers should route through the one SqliteTaskLog the daemon opens at
  * its state-dir path.
  */
-export class SqliteTaskLog extends EventEmitter<SqliteTaskLogEvents> {
+export class SqliteTaskLog
+  extends EventEmitter<SqliteTaskLogEvents>
+  implements ITaskStore {
   private readonly db: Database;
   private readonly now: () => number;
 
@@ -114,13 +124,20 @@ export class SqliteTaskLog extends EventEmitter<SqliteTaskLogEvents> {
     return new SqliteTaskLog(db, options);
   }
 
-  /** Register a freshly-minted task. Throws if the id is already present. */
-  create(input: TaskCreateInput): StoredTask {
+  /**
+   * Register a freshly-minted task. Throws if the id is already present.
+   * Accepts both the lean `InitialTask` shape (handler callers) and the
+   * fuller shape with explicit `roomId`. `roomId` defaults to
+   * `DEFAULT_ROOM_ID` until P4.7 threads the real room through the
+   * handler.
+   */
+  create(input: TaskCreateInput | InitialTask): StoredTask {
     const now = this.now();
-    const status = input.status ?? { state: "submitted" };
+    const status: TaskStatus = input.status ?? { state: "submitted" };
+    const roomId: RoomId = input.roomId ?? DEFAULT_ROOM_ID;
     const row: StoredTask = {
       id: input.id,
-      roomId: input.roomId,
+      roomId,
       contextId: input.contextId,
       kind: "task",
       status,
@@ -134,7 +151,7 @@ export class SqliteTaskLog extends EventEmitter<SqliteTaskLogEvents> {
         )
         .run(
           row.id,
-          row.roomId,
+          roomId,
           row.contextId,
           status.state,
           JSON.stringify(status),

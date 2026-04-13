@@ -11,7 +11,8 @@ import {
   type JsonRpcHandlers,
   type JsonRpcResponse,
 } from "@daemon/inbound/a2a-http/jsonrpc";
-import { TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
+import type { ITaskStore } from "@daemon/tasks/task-store";
+import { SqliteTaskLog } from "@daemon/tasks/task-log";
 import {
   createEchoExecutor,
   handleMessageStream,
@@ -48,10 +49,18 @@ export interface A2aServerConfig {
    */
   messageStreamExecutor?: MessageStreamExecutor;
   /**
-   * Shared task registry. Created internally when omitted; callers that
-   * want to inspect task state in tests pass their own.
+   * Shared task store. Callers supply an `ITaskStore` (either the
+   * in-memory `TaskRegistry` or a `SqliteTaskLog`); when omitted a
+   * `SqliteTaskLog` opens at `taskLogPath` (or `":memory:"` when that's
+   * also absent) so tests don't require a state-dir.
    */
-  registry?: TaskRegistry;
+  registry?: ITaskStore;
+  /**
+   * Path passed to `SqliteTaskLog.open()` when `registry` is omitted.
+   * Default `":memory:"` keeps unit tests ephemeral; `daemon.ts` passes
+   * `stateDir.taskLogFile` for persistent behaviour.
+   */
+  taskLogPath?: string;
   /**
    * Extra non-streaming JSON-RPC handlers, merged with the built-in
    * tasks/* handlers. Caller handlers override on name clash.
@@ -77,7 +86,8 @@ export async function startA2AServer(config: A2aServerConfig): Promise<A2aServer
 
   const card: AgentCard = buildAgentCard(config.agentCard);
   const rpcPath = extractPath(card.url);
-  const registry = config.registry ?? new TaskRegistry();
+  const registry: ITaskStore =
+    config.registry ?? SqliteTaskLog.open(config.taskLogPath ?? ":memory:");
   const executor = config.messageStreamExecutor ?? createEchoExecutor();
 
   const handlers: JsonRpcHandlers = {

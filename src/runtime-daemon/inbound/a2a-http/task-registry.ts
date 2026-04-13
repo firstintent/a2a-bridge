@@ -1,46 +1,44 @@
 import { EventEmitter } from "node:events";
+import type {
+  ITaskStore,
+  InitialTask,
+  TaskSnapshot,
+  TaskStatus as ITaskStatus,
+} from "@daemon/tasks/task-store";
 
 /**
- * In-memory store of live A2A tasks.
+ * In-memory `ITaskStore` implementation. Paired with `SqliteTaskLog`
+ * for the persistent variant — both satisfy the same interface so the
+ * A2A handlers swap transparently.
  *
- * Scope is one registry per running A2A service instance. SQLite-backed
- * persistence lands in Phase 4 alongside `RoomRouter`; until then we
- * accept that tasks are lost on daemon restart — the P2 ship criterion
- * (a Gemini CLI driving a single CC session) does not require history
- * survival.
- *
+ * Scope is one registry per running A2A service instance.
  * `message/stream` calls `create()` when it mints a new task;
  * `tasks/get` reads through this; `tasks/cancel` flips `state` to
  * `canceled` and emits a `cancel` event that the active SSE stream
  * listens for so it can deliver the terminal frame to the client.
  */
 
-export interface TaskStatus {
-  state: string;
-  /** A2A `Message` payload the client treats as the terminal narrative. */
-  message?: unknown;
-}
+export type TaskStatus = ITaskStatus;
 
-export interface Task {
-  id: string;
-  contextId: string;
-  kind: "task";
-  status: TaskStatus;
-}
+export type Task = TaskSnapshot;
 
 interface TaskRegistryEvents {
   cancel: [taskId: string];
 }
 
-export class TaskRegistry extends EventEmitter<TaskRegistryEvents> {
+export class TaskRegistry extends EventEmitter<TaskRegistryEvents> implements ITaskStore {
   private readonly tasks = new Map<string, Task>();
 
   /** Register a freshly-minted task. Throws if the id is already present. */
-  create(task: Task): void {
+  create(task: InitialTask): void {
     if (this.tasks.has(task.id)) {
       throw new Error(`TaskRegistry: task ${task.id} already registered`);
     }
-    this.tasks.set(task.id, task);
+    // Store the caller's object so referential checks in tests still hold.
+    // Extra fields (e.g. roomId from the InitialTask shape) are ignored at
+    // the TaskSnapshot type boundary and remain as harmless extras at
+    // runtime.
+    this.tasks.set(task.id, task as Task);
   }
 
   /** Return the current task snapshot, or undefined if it was never registered. */
