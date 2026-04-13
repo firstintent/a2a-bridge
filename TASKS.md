@@ -349,11 +349,31 @@ once that phase lands.
 > still use fakes; the CLI default path must never short-circuit to
 > a mock or echo reply.
 
+> **Plugin↔CC contract reference.** The a2a-bridge plugin is itself
+> a Channel (MCP `claude/channel` capability). As Phase 8 wires ACP
+> turns through the plugin, the plugin must keep emitting
+> `notifications/claude/channel` with **identifier-safe meta keys**
+> (`[a-z0-9_]+` only — hyphens and other non-word chars are silently
+> dropped by Claude Code), keep its reply tool registered via
+> `ListToolsRequestSchema` / `CallToolRequestSchema`, and keep an
+> `instructions` string telling Claude how to route replies back.
+> Source of truth: <https://code.claude.com/docs/en/channels-reference>.
+> Full production reference: `references/claude-plugins-official/external_plugins/telegram/server.ts`
+> (capability declaration at L369–396; permission_request handler at
+> L405–430; reply / react / edit tool schemas at L432–504). Any
+> Phase 8 change that alters plugin↔CC wire shape must be audited
+> against both.
+
 - [ ] **P8.1 — Control-plane wire format for ACP turns.**
   Acceptance: new message variants in `transport/` (or the
   daemon's control-message types) covering `acp_turn_start`,
   `acp_turn_chunk`, `acp_turn_complete`, `acp_turn_error`, and
   `acp_turn_cancel`. Typed on both ends; round-trip unit tests.
+  Any meta / context fields on these frames that are eventually
+  forwarded to `notifications/claude/channel` use identifier-safe
+  keys only (`[a-z0-9_]+`); unit test rejects hyphenated or
+  otherwise non-identifier keys at the boundary so CC never
+  silently drops them.
 
 - [ ] **P8.2 — Daemon-side handler for ACP turns.**
   Acceptance: when an attached client sends `acp_turn_start`, the
@@ -365,13 +385,34 @@ once that phase lands.
   test drives the handler with a stub gateway and asserts the
   frame sequence.
 
+- [ ] **P8.2a — Permission-relay policy for ACP-triggered turns.**
+  Acceptance: decide and document how the plugin's
+  `notifications/claude/channel/permission_request` handler
+  behaves when the in-flight turn originated from an ACP client
+  (ACP has no "chat to reply in" analogue for the five-letter
+  verdict dance Channels specifies). Pick one and write the
+  rationale into `docs/design/architecture.md`:
+  (a) auto-allow, gated by a daemon-side policy flag such as
+  `A2A_BRIDGE_ACP_AUTO_PERMISSION`;
+  (b) bridge to ACP `session/request_permission` (if the SDK
+  exposes it) so the ACP client is prompted;
+  (c) auto-deny, turn ends with `stopReason: "refusal"`.
+  Integration test exercises a turn that triggers a tool-use
+  permission prompt and asserts the chosen behavior end-to-end.
+  References: [Channels §Relay permission prompts](https://code.claude.com/docs/en/channels-reference#relay-permission-prompts);
+  telegram reference handler at
+  `references/claude-plugins-official/external_plugins/telegram/server.ts:405-430`.
+
 - [ ] **P8.3 — `DaemonProxyGateway` in `runtime-daemon/inbound/acp/`.**
   Acceptance: new class implementing `ClaudeCodeGateway` that
   opens a control-plane WS connection to the daemon and uses the
   Phase-8.1 wire format to relay turns. `startTurn(text)` returns
   a `ClaudeCodeTurn` whose `chunk` / `complete` / `error` events
   come straight from the WS frames. Reconnect logic mirrors the
-  plugin-side `DaemonClient`.
+  plugin-side `DaemonClient`. The `chunk` events that eventually
+  propagate to the plugin's `notifications/claude/channel`
+  emitter must round-trip without lossy key renaming — meta keys
+  stay identifier-safe end-to-end.
 
 - [ ] **P8.4 — Wire `runAcp()` onto `DaemonProxyGateway` (no echo
   fallback).**
@@ -406,7 +447,16 @@ once that phase lands.
   Acceptance: the ACP `initialize` response advertises the real
   package version (via the same JSON-import trick
   `src/cli/cli.ts` uses). Unit test asserts the response's
-  `agentInfo.version` matches `package.json`.
+  `agentInfo.version` matches `package.json`. The same fix
+  applies plugin-side: the MCP `Server({ name, version }, ...)`
+  constructor in `src/runtime-plugin/bridge.ts` (or wherever the
+  plugin instantiates its `Server`) must pull `name` and
+  `version` from `package.json` rather than hardcoding — this
+  matches the Channels-reference example and the telegram
+  reference (`server.ts:370`: `{ name: 'telegram', version: '1.0.0' }`
+  is explicit and maintained in `package.json`). Unit test
+  covers both the ACP `initialize` response and the plugin's
+  advertised `Server` info.
 
 - [ ] **P8.8 — Documentation sweep: no more "post-v0.1" caveats
   on ACP → CC.**
