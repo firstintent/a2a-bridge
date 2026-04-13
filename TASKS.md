@@ -246,7 +246,7 @@ once that phase lands.
   Exits non-zero if any required check fails. Unit tests with
   injected dependencies cover each branch.
 
-- [ ] **P6.3 — `a2a-bridge daemon` lifecycle subcommands.**
+- [/] **P6.3 — `a2a-bridge daemon` lifecycle subcommands.**
   Acceptance: `daemon start | stop | status | logs` subcommands.
   `start` launches the daemon (with A2A inbound enabled if token
   present). `stop` sends SIGTERM via the pid file. `status` prints

@@ -48,6 +48,13 @@ async function main() {
         if (result.exitCode !== 0) process.exit(result.exitCode);
       }
       break;
+    case "daemon":
+      const { runDaemon } = await import("./daemon");
+      {
+        const result = await runDaemon(restArgs);
+        if (result.exitCode !== 0) process.exit(result.exitCode);
+      }
+      break;
     case "kill":
       const { runKill } = await import("./kill");
       await runKill();
@@ -83,6 +90,7 @@ Commands:
   codex [args...]   Start Codex TUI connected to A2aBridge daemon
   acp [args...]     Start ACP-over-stdio server (for Zed / OpenClaw / VS Code)
   doctor            Run preflight checks (bun, ports, SDK, plugin, state-dir)
+  daemon <cmd>      start | stop | status | logs  (daemon lifecycle)
   kill              Force kill all A2aBridge processes
 
 Options:
