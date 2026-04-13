@@ -135,6 +135,9 @@ and a worked example.
   push a long log dig, audit, or transcript analysis to a peer with
   `return_format: "summary"` and keep the primary session's context
   focused on the conclusion.
+- [`skills/parallel/SKILL.md`](./skills/parallel/SKILL.md) — spawn N
+  peers on genuinely independent subtasks (different files, modules,
+  or investigations), await all of them, and merge.
 
 ## License
 

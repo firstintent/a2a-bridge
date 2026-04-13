@@ -75,7 +75,7 @@ once that phase lands.
   a long log dig to a peer with `return_format: "summary"`. README
   links to it.
 
-- [ ] **P3.7 — Parallel-work skill template.**
+- [/] **P3.7 — Parallel-work skill template.**
   Acceptance: `skills/parallel/SKILL.md` shows the spawn-N-peers
   pattern for genuinely independent subtasks. README links to it.
 
