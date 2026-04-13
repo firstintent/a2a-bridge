@@ -330,7 +330,7 @@ once that phase lands.
   registry PR, post-release smoke test against the published
   package. Total length under 400 lines.
 
-- [ ] **P7.6 — `scripts/check-release-ready.sh`.**
+- [x] **P7.6 — `scripts/check-release-ready.sh`.**
   Acceptance: shell script (Bun-friendly) that asserts: version
   alignment across all manifests, CHANGELOG has an entry for the
   current version, `bun run check:ci` green, tarball builds and
@@ -346,7 +346,7 @@ once that phase lands.
 - Phase 4 baseline: 293 pass / 0 fail / 19 E2E filtered, 35 test files, 739 expect calls (on P4.12 close; Phase 4 opened with the 240-pass baseline carried from Phase 3).
 - Phase 5 baseline: 304 pass / 0 fail / 20 E2E filtered, 38 test files, 768 expect calls (on P5.8 close; Phase 5 opened with the 293-pass baseline carried from Phase 4).
 - Phase 6 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P6.10 close; Phase 6 opened with the 304-pass baseline carried from Phase 5).
-- Phase 7 baseline:
+- Phase 7 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P7.6 close; Phase 7 opened with the 339-pass baseline carried from Phase 6). v0.1 complete — every P3–P7 task is [x]; remaining release steps (`npm publish`, marketplace form, ACP registry PR) require human credentials per ROADMAP and are documented in `docs/release/PUBLISH.md`.
 
 ## v0.1 starting baseline
 
