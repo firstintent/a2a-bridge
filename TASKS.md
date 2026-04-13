@@ -310,7 +310,7 @@ once that phase lands.
   npm-publish step gated on a manual `production` environment
   approval. Does NOT publish unattended.
 
-- [ ] **P7.3 — ACP registry submission package.**
+- [x] **P7.3 — ACP registry submission package.**
   Acceptance: `release/acp-registry/agent.json` + `icon.svg`
   conforming to the public ACP registry schema. README at
   `release/acp-registry/README.md` explains the PR process the user
