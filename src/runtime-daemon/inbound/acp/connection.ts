@@ -1,18 +1,20 @@
 /**
- * ACP inbound — `AgentSideConnection` glue (placeholder, P5.2).
+ * ACP inbound — `AgentSideConnection` glue.
  *
- * Real wiring lands in P5.3 (initialize + newSession) and P5.4 (prompt
- * → ClaudeCodeGateway). This module exists now so future ACP files
- * have a stable home for the `@agentclientprotocol/sdk` adapter.
- *
- * Minimal stdio-pair shape — lets callers supply any Node `Readable`
- * in and `Writable` out (stdin/stdout in production, in-memory pipes
- * in unit tests). P5.3 will bind this to `AgentSideConnection`.
+ * Callers supply an in-memory Web-stream pair (TransformStream-based
+ * pipes in unit tests, Bun's `stdin.stream()` / stdout-writer in the
+ * CLI). `ndJsonStream` wraps the pair into the JSON-RPC `Stream` the
+ * ACP SDK expects.
  */
 
-import type { Readable, Writable } from "node:stream";
+import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 
 export interface AcpStdioPair {
-  input: Readable;
-  output: Writable;
+  input: ReadableStream<Uint8Array>;
+  output: WritableStream<Uint8Array>;
+}
+
+/** Build the SDK's JSON-RPC `Stream` from a raw byte pair. */
+export function buildAcpStream(pair: AcpStdioPair): Stream {
+  return ndJsonStream(pair.output, pair.input);
 }

@@ -183,7 +183,7 @@ once that phase lands.
   glue). `inbound-factory.ts` gains an `"acp-stdio"` kind that
   constructs `AcpInboundService`. lint:deps green; no behavior yet.
 
-- [ ] **P5.3 — Implement the ACP `initialize` + `newSession` handlers.**
+- [/] **P5.3 — Implement the ACP `initialize` + `newSession` handlers.**
   Acceptance: `AcpInboundService.start(stream)` opens an
   `AgentSideConnection` over the supplied stdio pair, advertises
   the agent's `protocolVersion` and minimum capabilities, and
