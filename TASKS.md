@@ -442,7 +442,7 @@ once that phase lands.
   the stub's reply (not `Echo: ...`). The env-var hook stays but
   is documented as a test/debug only knob.
 
-- [ ] **P8.7 — Fix hardcoded `agentInfo.version: "0.0.1"` in
+- [x] **P8.7 — Fix hardcoded `agentInfo.version: "0.0.1"` in
   `src/runtime-daemon/inbound/acp/index.ts`.**
   Acceptance: the ACP `initialize` response advertises the real
   package version (via the same JSON-import trick
