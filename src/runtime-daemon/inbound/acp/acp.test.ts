@@ -119,6 +119,20 @@ describe("AcpInboundService handshake (P5.3)", () => {
     expect(resp.agentCapabilities?.loadSession).toBe(false);
   });
 
+  test("initialize advertises the live package.json version (P8.7)", async () => {
+    const pkg = (await import("../../../../package.json", {
+      with: { type: "json" },
+    })).default as { version: string };
+    const { client } = buildInMemoryPair();
+    const resp = await client.initialize({
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: {},
+    });
+    expect(resp.agentInfo?.version).toBe(pkg.version);
+    // Regression guard: the prior hardcoded "0.0.1" must never come back.
+    expect(resp.agentInfo?.version).not.toBe("0.0.1");
+  });
+
   test("initialize still negotiates when the client advertises a different version", async () => {
     const { client } = buildInMemoryPair();
     const resp = await client.initialize({

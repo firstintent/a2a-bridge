@@ -253,3 +253,17 @@ describe("Dual-mode transport: reply pending hint", () => {
     expect(result.content[0].text).toContain("bridge not initialized");
   });
 });
+
+describe("ClaudeAdapter.Server info (P8.7)", () => {
+  test("PLUGIN_SERVER_INFO name + version match package.json", async () => {
+    const { PLUGIN_SERVER_INFO } = await import("@plugin/claude-channel/claude-adapter");
+    const pkg = (await import("../../../package.json", {
+      with: { type: "json" },
+    })).default as { name: string; version: string };
+    const expectedName = pkg.name.split("/").pop() ?? "a2a-bridge";
+    expect(PLUGIN_SERVER_INFO.version).toBe(pkg.version);
+    expect(PLUGIN_SERVER_INFO.name).toBe(expectedName);
+    // Regression guard: the old hardcoded literal must never come back.
+    expect(PLUGIN_SERVER_INFO.version).not.toBe("0.0.1");
+  });
+});

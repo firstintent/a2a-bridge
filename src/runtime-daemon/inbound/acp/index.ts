@@ -24,6 +24,10 @@ import {
   type SessionId,
   type StopReason,
 } from "@agentclientprotocol/sdk";
+// Read the advertised version from package.json (same trick as
+// `src/cli/cli.ts`) so ACP clients see a live version that matches the
+// shipped tarball, not a hardcoded placeholder.
+import pkg from "../../../../package.json" with { type: "json" };
 import type { IInboundService } from "@daemon/inbound/inbound-service";
 import type {
   ClaudeCodeGateway,
@@ -127,7 +131,7 @@ export class AcpInboundService implements IInboundService {
             : PROTOCOL_VERSION;
         return {
           protocolVersion: negotiated,
-          agentInfo: { name: "a2a-bridge", version: "0.0.1" },
+          agentInfo: { name: pkg.name.split("/").pop() ?? "a2a-bridge", version: pkg.version },
           // Minimum capabilities — no tool-calling or resume surfaces
           // advertised until later tasks fill them in.
           agentCapabilities: {
