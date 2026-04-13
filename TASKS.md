@@ -34,7 +34,7 @@ once that phase lands.
   Acceptance: `bun run check:ci` passes; record `N pass / 0 fail` in
   this file's footer for Phase 3. No other changes.
 
-- [ ] **P3.1 — Define the verification artifact schema.**
+- [/] **P3.1 — Define the verification artifact schema.**
   Acceptance: `src/runtime-daemon/inbound/a2a-http/verdict.ts`
   exports `VerificationVerdict` (the literal union `"pass" | "fail" |
   "needs-info"`), `VerificationEvidence`, and `VerificationArtifact`
