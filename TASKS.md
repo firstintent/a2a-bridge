@@ -434,7 +434,7 @@ once that phase lands.
   `session/update` text equals the stub CC reply verbatim. Runs
   under `check:ci`; covers the full real wire end-to-end.
 
-- [ ] **P8.6 — Update `smoke-e2e.sh` to exercise the real ACP → CC
+- [x] **P8.6 — Update `smoke-e2e.sh` to exercise the real ACP → CC
   path.**
   Acceptance: the ACP half of `scripts/smoke-e2e.sh` no longer
   runs with `A2A_BRIDGE_INBOUND_ECHO=1`; it attaches a stub CC
