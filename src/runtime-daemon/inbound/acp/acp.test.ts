@@ -1,33 +1,80 @@
 import { describe, test, expect } from "bun:test";
+import { EventEmitter } from "node:events";
 import {
   ClientSideConnection,
   ndJsonStream,
   PROTOCOL_VERSION,
 } from "@agentclientprotocol/sdk";
 import { AcpInboundService } from "@daemon/inbound/acp";
+import type {
+  ClaudeCodeGateway,
+  ClaudeCodeTurn,
+} from "@daemon/inbound/a2a-http/claude-code-gateway";
 
 /**
  * Minimal ACP client stub — the ACP SDK requires callers to implement
  * the full `Client` surface, but our tests only consume the agent's
  * side so every method can no-op / throw.
  */
-const noopClient = {
-  async sessionUpdate(): Promise<void> {},
-  async requestPermission(): Promise<never> {
-    throw new Error("test client: requestPermission not implemented");
-  },
-  async readTextFile(): Promise<never> {
-    throw new Error("test client: readTextFile not implemented");
-  },
-  async writeTextFile(): Promise<never> {
-    throw new Error("test client: writeTextFile not implemented");
-  },
-};
+interface SessionUpdateRecord {
+  sessionId: string;
+  kind: string;
+  text?: string;
+}
 
-function buildInMemoryPair(): {
-  service: AcpInboundService;
-  client: ClientSideConnection;
-} {
+function makeRecordingClient() {
+  const updates: SessionUpdateRecord[] = [];
+  const client = {
+    async sessionUpdate(params: {
+      sessionId: string;
+      update: { sessionUpdate: string; content?: { type: string; text: string } };
+    }): Promise<void> {
+      const kind = params.update.sessionUpdate;
+      const text =
+        params.update.content?.type === "text"
+          ? params.update.content.text
+          : undefined;
+      updates.push({ sessionId: params.sessionId, kind, text });
+    },
+    async requestPermission(): Promise<never> {
+      throw new Error("test client: requestPermission not implemented");
+    },
+    async readTextFile(): Promise<never> {
+      throw new Error("test client: readTextFile not implemented");
+    },
+    async writeTextFile(): Promise<never> {
+      throw new Error("test client: writeTextFile not implemented");
+    },
+  };
+  return { client, updates };
+}
+
+const noopClient = makeRecordingClient().client;
+
+class StubTurn extends EventEmitter implements ClaudeCodeTurn {
+  cancel(): void {}
+}
+
+class StubGateway implements ClaudeCodeGateway {
+  readonly turns: StubTurn[] = [];
+  startTurn(_userText: string): ClaudeCodeTurn {
+    const turn = new StubTurn();
+    this.turns.push(turn);
+    return turn;
+  }
+  emitOn(turnIndex: number, event: "chunk" | "complete" | "error", payload?: unknown): void {
+    const turn = this.turns[turnIndex];
+    if (!turn) throw new Error(`no turn at index ${turnIndex}`);
+    if (event === "chunk") turn.emit("chunk", payload as string);
+    else if (event === "complete") turn.emit("complete");
+    else turn.emit("error", payload as Error);
+  }
+}
+
+function buildInMemoryPair(options: {
+  gateway?: ClaudeCodeGateway;
+  clientImpl?: unknown;
+} = {}) {
   const clientToAgent = new TransformStream<Uint8Array, Uint8Array>();
   const agentToClient = new TransformStream<Uint8Array, Uint8Array>();
 
@@ -36,12 +83,19 @@ function buildInMemoryPair(): {
       input: clientToAgent.readable,
       output: agentToClient.writable,
     },
+    gateway: options.gateway,
   });
 
   void service.start();
 
+  const clientImpl = options.clientImpl ?? noopClient;
   const client = new ClientSideConnection(
-    () => noopClient as unknown as ConstructorParameters<typeof ClientSideConnection>[0] extends (c: unknown) => infer R ? R : never,
+    () =>
+      clientImpl as unknown as ConstructorParameters<
+        typeof ClientSideConnection
+      >[0] extends (c: unknown) => infer R
+        ? R
+        : never,
     ndJsonStream(clientToAgent.writable, agentToClient.readable),
   );
 
@@ -103,5 +157,92 @@ describe("AcpInboundService handshake (P5.3)", () => {
     // Re-arm start — defaultStdio isn't reusable in real code, but the
     // guard should trip before we try.
     await expect(service.start()).rejects.toThrow(/already started/);
+  });
+});
+
+describe("AcpInboundService prompt → ClaudeCodeGateway (P5.4)", () => {
+  test("streams each gateway chunk as an agent_message_chunk session/update and ends with end_turn", async () => {
+    const recorder = makeRecordingClient();
+    const gateway = new StubGateway();
+    const { client } = buildInMemoryPair({
+      gateway,
+      clientImpl: recorder.client,
+    });
+
+    const session = await client.newSession({
+      cwd: "/tmp/acp-prompt",
+      mcpServers: [],
+    });
+
+    const promptPromise = client.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "hello gateway" }],
+    });
+
+    // Yield so the ACP agent's prompt handler has called startTurn.
+    while (gateway.turns.length === 0) {
+      await new Promise((r) => setImmediate(r));
+    }
+    gateway.emitOn(0, "chunk", "first ");
+    gateway.emitOn(0, "chunk", "second");
+    gateway.emitOn(0, "complete");
+
+    const resp = await promptPromise;
+    expect(resp.stopReason).toBe("end_turn");
+
+    // Yield once more so the final sessionUpdate notifications flush.
+    await new Promise((r) => setImmediate(r));
+    const texts = recorder.updates
+      .filter((u) => u.kind === "agent_message_chunk")
+      .map((u) => u.text);
+    expect(texts).toEqual(["first ", "second"]);
+    expect(recorder.updates.every((u) => u.sessionId === session.sessionId)).toBe(true);
+  });
+
+  test("gateway error surfaces as stopReason: refusal with the message in a session/update", async () => {
+    const recorder = makeRecordingClient();
+    const gateway = new StubGateway();
+    const { client } = buildInMemoryPair({
+      gateway,
+      clientImpl: recorder.client,
+    });
+    const session = await client.newSession({
+      cwd: "/tmp/acp-err",
+      mcpServers: [],
+    });
+
+    const promptPromise = client.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "will fail" }],
+    });
+    while (gateway.turns.length === 0) {
+      await new Promise((r) => setImmediate(r));
+    }
+    gateway.emitOn(0, "error", new Error("boom"));
+
+    const resp = await promptPromise;
+    expect(resp.stopReason).toBe("refusal");
+
+    await new Promise((r) => setImmediate(r));
+    const refusalText = recorder.updates.find(
+      (u) => u.kind === "agent_message_chunk" && u.text?.includes("boom"),
+    );
+    expect(refusalText).toBeDefined();
+  });
+
+  test("no gateway configured → prompt refuses with an explanatory chunk", async () => {
+    const recorder = makeRecordingClient();
+    const { client } = buildInMemoryPair({ clientImpl: recorder.client });
+    const session = await client.newSession({
+      cwd: "/tmp/acp-nogw",
+      mcpServers: [],
+    });
+    const resp = await client.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "hello" }],
+    });
+    expect(resp.stopReason).toBe("refusal");
+    const refusal = recorder.updates.find((u) => u.text?.includes("no ClaudeCodeGateway"));
+    expect(refusal).toBeDefined();
   });
 });

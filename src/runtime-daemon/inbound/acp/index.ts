@@ -14,14 +14,18 @@ import {
   type AuthenticateRequest,
   type AuthenticateResponse,
   type CancelNotification,
+  type ContentBlock,
   type InitializeRequest,
   type InitializeResponse,
   type NewSessionRequest,
   type NewSessionResponse,
   type PromptRequest,
   type PromptResponse,
+  type SessionId,
+  type StopReason,
 } from "@agentclientprotocol/sdk";
 import type { IInboundService } from "@daemon/inbound/inbound-service";
+import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
 import {
   buildAcpStream,
   type AcpStdioPair,
@@ -34,6 +38,12 @@ export interface AcpInboundConfig {
    * can inject `Bun.stdin.stream()` / a stdout writer at boot.
    */
   stdio?: AcpStdioPair;
+  /**
+   * Gateway the `prompt` handler forwards turns into. When absent, a
+   * prompt call returns `stopReason: "refusal"` with an explanatory
+   * message — keeps P5.2 smoke tests usable before gateway wiring.
+   */
+  gateway?: ClaudeCodeGateway;
 }
 
 type AgentFactory = (conn: AgentSideConnection) => Agent;
@@ -47,12 +57,14 @@ export class AcpInboundService implements IInboundService {
   readonly kind = "acp-stdio";
 
   private readonly defaultStdio?: AcpStdioPair;
+  private readonly gateway?: ClaudeCodeGateway;
   private connection: AgentSideConnection | null = null;
   private activeSessions = new Map<string, { cwd: string }>();
   private readonly makeSessionId: () => string;
 
   constructor(config: AcpInboundConfig) {
     this.defaultStdio = config.stdio;
+    this.gateway = config.gateway;
     this.makeSessionId = () => crypto.randomUUID();
   }
 
@@ -92,7 +104,7 @@ export class AcpInboundService implements IInboundService {
     return this.activeSessions.size;
   }
 
-  private buildAgent: AgentFactory = () => {
+  private buildAgent: AgentFactory = (conn) => {
     const self = this;
     const agent: Agent = {
       async initialize(params: InitializeRequest): Promise<InitializeResponse> {
@@ -122,8 +134,13 @@ export class AcpInboundService implements IInboundService {
       async authenticate(_: AuthenticateRequest): Promise<AuthenticateResponse> {
         throw NOT_IMPLEMENTED("authenticate");
       },
-      async prompt(_: PromptRequest): Promise<PromptResponse> {
-        throw NOT_IMPLEMENTED("prompt");
+      async prompt(params: PromptRequest): Promise<PromptResponse> {
+        return runPromptTurn({
+          conn,
+          gateway: self.gateway,
+          sessionId: params.sessionId,
+          userText: extractUserText(params.prompt),
+        });
       },
       async cancel(_: CancelNotification): Promise<void> {
         throw NOT_IMPLEMENTED("cancel");
@@ -131,4 +148,91 @@ export class AcpInboundService implements IInboundService {
     };
     return agent;
   };
+}
+
+function extractUserText(blocks: ContentBlock[]): string {
+  return blocks
+    .filter((b): b is ContentBlock & { type: "text"; text: string } => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+}
+
+interface RunPromptArgs {
+  conn: AgentSideConnection;
+  gateway: ClaudeCodeGateway | undefined;
+  sessionId: SessionId;
+  userText: string;
+}
+
+/**
+ * Drive one ACP `prompt` turn: spawn a gateway turn, rebroadcast each
+ * chunk as an `agent_message_chunk` `session/update`, and resolve with
+ * the terminal stop reason. Extracted out of the Agent factory so the
+ * event-listener closure doesn't have to juggle `this` references.
+ */
+function runPromptTurn(args: RunPromptArgs): Promise<PromptResponse> {
+  const { conn, gateway, sessionId, userText } = args;
+
+  if (!gateway) {
+    // No gateway wired — surface a refusal so the client gets a
+    // deterministic response instead of the SDK timing out waiting.
+    return (async () => {
+      await conn.sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: {
+            type: "text",
+            text: "a2a-bridge ACP inbound: no ClaudeCodeGateway configured; refusing prompt.",
+          },
+        },
+      });
+      return { stopReason: "refusal" as StopReason };
+    })();
+  }
+
+  return new Promise<PromptResponse>((resolve) => {
+    const turn = gateway.startTurn(userText);
+    let settled = false;
+
+    const finish = (stopReason: StopReason) => {
+      if (settled) return;
+      settled = true;
+      turn.off("chunk", onChunk);
+      turn.off("complete", onComplete);
+      turn.off("error", onError);
+      resolve({ stopReason });
+    };
+
+    const onChunk = (text: string) => {
+      if (!text) return;
+      void conn.sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text },
+        },
+      });
+    };
+
+    const onComplete = () => finish("end_turn");
+
+    const onError = (err: Error) => {
+      void conn.sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: {
+            type: "text",
+            text: `ClaudeCodeGateway error: ${err.message}`,
+          },
+        },
+      });
+      finish("refusal");
+    };
+
+    turn.on("chunk", onChunk);
+    turn.on("complete", onComplete);
+    turn.on("error", onError);
+  });
 }
