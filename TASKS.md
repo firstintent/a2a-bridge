@@ -158,7 +158,7 @@ once that phase lands.
   history and the other's events do not leak. `bun run check:ci`
   green with the test included.
 
-- [/] **P4.11 — Plugin-reconnect task survival test.**
+- [x] **P4.11 — Plugin-reconnect task survival test.**
   Acceptance: integration test starts a turn, crashes the simulated
   plugin connection mid-turn, restarts it, and confirms `tasks/get`
   on the original task id still returns the latest state from
