@@ -47,6 +47,29 @@ export function formatMissingAcpSdk(): FriendlyError {
   };
 }
 
+export function formatDaemonUnreachable(url: string): FriendlyError {
+  return {
+    cause: `a2a-bridge acp cannot reach the daemon at ${url}.`,
+    fix: "Run `a2a-bridge daemon start` (or `a2a-bridge init` for a first-time setup) and retry.",
+  };
+}
+
 export function renderFriendlyError(err: FriendlyError): string {
   return `error: ${err.cause}\n  fix: ${err.fix}`;
+}
+
+/**
+ * Error thrown by `runAcp()` when the daemon cannot be reached.  The CLI
+ * entry point catches this, renders `friendly` to stderr, and exits
+ * non-zero; tests catch it to assert the failure mode without tripping
+ * `process.exit`.
+ */
+export class DaemonUnreachableError extends Error {
+  readonly friendly: FriendlyError;
+  constructor(url: string, cause?: Error) {
+    const friendly = formatDaemonUnreachable(url);
+    super(friendly.cause + (cause ? ` (${cause.message})` : ""));
+    this.name = "DaemonUnreachableError";
+    this.friendly = friendly;
+  }
 }
