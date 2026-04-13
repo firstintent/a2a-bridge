@@ -122,6 +122,16 @@ After restarting Gemini CLI, `@a2a-bridge` in a prompt routes the
 message to the paired Claude Code session; the streamed reply comes
 back as A2A `artifact-update` events.
 
+## Skill templates
+
+Copy-pasteable prompt scaffolds for the multi-agent patterns a2a-bridge
+is designed for. Each skill documents when to use it, the wire protocol,
+and a worked example.
+
+- [`skills/verify/SKILL.md`](./skills/verify/SKILL.md) — delegate a
+  check to a peer agent and receive a structured pass/fail/needs-info
+  verdict instead of free-form text.
+
 ## License
 
 MIT. See [`LICENSE`](./LICENSE) and [`NOTICE`](./NOTICE).
