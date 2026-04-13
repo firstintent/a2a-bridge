@@ -125,7 +125,7 @@ once that phase lands.
   swap. Uses Bun's built-in `bun:sqlite`. Unit tests cover each
   method against an in-memory sqlite instance.
 
-- [/] **P4.6 — Migrate `TaskRegistry` consumers to `SqliteTaskLog`.**
+- [x] **P4.6 — Migrate `TaskRegistry` consumers to `SqliteTaskLog`.**
   Acceptance: `message/stream`, `tasks/get`, `tasks/cancel` accept
   either implementation through a shared interface (`ITaskStore`).
   Default wiring in `startA2AServer` constructs `SqliteTaskLog` at a
