@@ -323,7 +323,7 @@ once that phase lands.
   artifacts exist in the repo or have placeholder paths flagged
   for the user.
 
-- [ ] **P7.5 — `docs/release/PUBLISH.md` runbook.**
+- [x] **P7.5 — `docs/release/PUBLISH.md` runbook.**
   Acceptance: step-by-step guide covering: bump check, CHANGELOG
   finalization, tag creation, GitHub Actions release run, manual
   npm publish (with `--otp` reminder), marketplace submission, ACP
