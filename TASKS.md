@@ -139,7 +139,7 @@ once that phase lands.
   both inbound surfaces. Integration test: two A2A clients with
   different `contextId`s do not see each other's events.
 
-- [/] **P4.8 — Migrate Codex adapter into per-Room ownership.**
+- [x] **P4.8 — Migrate Codex adapter into per-Room ownership.**
   Acceptance: `daemon.ts` no longer holds a module-level `codex`
   singleton; each Room owns its peer adapter set. The default room
   spawns a Codex adapter on demand (preserving today's single-CC
