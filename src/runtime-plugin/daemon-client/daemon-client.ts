@@ -46,8 +46,17 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
       const ws = new WebSocket(this.url);
       let settled = false;
 
-      ws.onopen = () => {
+      const timer = setTimeout(() => {
+        if (settled) return;
         settled = true;
+        try { ws.close(); } catch {}
+        reject(new Error(`Connection to A2aBridge daemon at ${this.url} timed out`));
+      }, 10_000);
+
+      ws.onopen = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         this.ws = ws;
         this.wsId = socketId;
         this.attachSocketHandlers(ws, socketId);
@@ -58,12 +67,14 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
       ws.onerror = () => {
         if (settled) return;
         settled = true;
+        clearTimeout(timer);
         reject(new Error(`Failed to connect to A2aBridge daemon at ${this.url}`));
       };
 
       ws.onclose = () => {
         if (settled) return;
         settled = true;
+        clearTimeout(timer);
         reject(new Error(`A2aBridge daemon closed the connection during startup (${this.url})`));
       };
     });

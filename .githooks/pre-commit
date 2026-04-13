@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# a2a-bridge pre-commit guard.
+# Refuses the commit unless `bun run check:ci` passes (typecheck +
+# dependency-cruiser + unit tests + plugin build).
+#
+# Bypass only with explicit user intent: `git commit --no-verify`.
+
+set -e
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "pre-commit: bun not found on PATH; skipping check:ci." >&2
+  exit 0
+fi
+
+echo "pre-commit: running bun run check:ci ..."
+bun run check:ci

@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { appendFileSync } from "node:fs";
-import type { ServerWebSocket } from "bun";
 import { CodexAdapter } from "@daemon/peers/codex/codex-adapter";
 import {
   BRIDGE_CONTRACT_REMINDER,
@@ -14,10 +13,18 @@ import { TuiConnectionState } from "@daemon/peers/codex/tui-connection-state";
 import { DaemonLifecycle } from "@shared/daemon-lifecycle";
 import { StateDirResolver } from "@shared/state-dir";
 import { ConfigService } from "@shared/config-service";
+import type { Connection } from "@transport/listener";
+import { WebSocketListener } from "@transport/websocket";
 import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "@transport/control-protocol";
 import type { BridgeMessage } from "@messages/types";
+import { DaemonClaudeCodeGateway } from "@daemon/inbound/daemon-claude-code-gateway";
+import {
+  startA2AServer,
+  type A2aServerHandle,
+} from "@daemon/inbound/a2a-http/server";
+import { createClaudeCodeExecutor } from "@daemon/inbound/a2a-http/handlers/message-stream";
 
-interface ControlSocketData {
+interface ControlClientMeta {
   clientId: number;
   attached: boolean;
 }
@@ -38,14 +45,28 @@ const FILTER_MODE: FilterMode =
 const IDLE_SHUTDOWN_MS = parseInt(process.env.A2A_BRIDGE_IDLE_SHUTDOWN_MS ?? String(config.idleShutdownSeconds * 1000), 10);
 const ATTENTION_WINDOW_MS = parseInt(process.env.A2A_BRIDGE_ATTENTION_WINDOW_MS ?? String(config.turnCoordination.attentionWindowSeconds * 1000), 10);
 
+const A2A_INBOUND_PORT = parseInt(process.env.A2A_BRIDGE_A2A_PORT ?? "4520", 10);
+const A2A_INBOUND_HOST = process.env.A2A_BRIDGE_A2A_HOST ?? "127.0.0.1";
+const A2A_INBOUND_TOKEN = process.env.A2A_BRIDGE_BEARER_TOKEN ?? "";
+const A2A_INBOUND_PUBLIC_CARD = process.env.A2A_BRIDGE_PUBLIC_AGENT_CARD !== "false";
+
 const daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
 
 const codex = new CodexAdapter(CODEX_APP_PORT, CODEX_PROXY_PORT);
 const attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
 
-let controlServer: ReturnType<typeof Bun.serve> | null = null;
-let attachedClaude: ServerWebSocket<ControlSocketData> | null = null;
+let controlListener: WebSocketListener | null = null;
+let a2aInboundServer: A2aServerHandle | null = null;
+let attachedClaude: Connection | null = null;
+const controlClientMeta = new WeakMap<Connection, ControlClientMeta>();
 let nextControlClientId = 0;
+
+const inboundGateway = new DaemonClaudeCodeGateway({
+  sendToClaude: (text) => {
+    emitToClaude(systemMessage("a2a_inbound", text));
+  },
+  log: (msg) => log(`[A2aGateway] ${msg}`),
+});
 let nextSystemMessageId = 0;
 let codexBootstrapped = false;
 let attentionWindowTimer: ReturnType<typeof setTimeout> | null = null;
@@ -215,52 +236,60 @@ codex.on("exit", (code: number | null) => {
   broadcastStatus();
 });
 
-function startControlServer() {
-  controlServer = Bun.serve({
+async function startControlServer() {
+  const listener = new WebSocketListener({
     port: CONTROL_PORT,
     hostname: "127.0.0.1",
-    fetch(req, server) {
+    path: "/ws",
+    idleTimeoutSec: 960, // 16 minutes — prevent premature idle disconnects
+    sendPings: true,
+    httpHandler: (req) => {
       const url = new URL(req.url);
-
       if (url.pathname === "/healthz") {
         return Response.json(currentStatus());
       }
-
       if (url.pathname === "/readyz") {
         return Response.json(currentStatus(), { status: codexBootstrapped ? 200 : 503 });
       }
-
-      if (url.pathname === "/ws" && server.upgrade(req, { data: { clientId: 0, attached: false } })) {
-        return undefined;
-      }
-
-      return new Response("A2aBridge daemon");
-    },
-    websocket: {
-      idleTimeout: 960, // 16 minutes — prevent premature idle disconnects
-      sendPings: true,
-      open: (ws: ServerWebSocket<ControlSocketData>) => {
-        ws.data.clientId = ++nextControlClientId;
-        log(`Frontend socket opened (#${ws.data.clientId})`);
-      },
-      close: (ws: ServerWebSocket<ControlSocketData>, code: number, reason: string) => {
-        log(`Frontend socket closed (#${ws.data.clientId}, code=${code}, reason=${reason || "none"}, wasAttached=${attachedClaude === ws})`);
-        if (attachedClaude === ws) {
-          detachClaude(ws, "frontend socket closed");
-        }
-      },
-      message: (ws: ServerWebSocket<ControlSocketData>, raw) => {
-        handleControlMessage(ws, raw);
-      },
+      return undefined;
     },
   });
+
+  listener.on("connection", (conn: Connection) => {
+    const clientId = ++nextControlClientId;
+    controlClientMeta.set(conn, { clientId, attached: false });
+    log(`Frontend socket opened (#${clientId})`);
+
+    conn.on("message", (raw) => {
+      handleControlMessage(conn, raw);
+    });
+
+    conn.on("close", () => {
+      const meta = controlClientMeta.get(conn);
+      const wasAttached = attachedClaude === conn;
+      log(`Frontend socket closed (#${meta?.clientId ?? "?"}, wasAttached=${wasAttached})`);
+      if (wasAttached) {
+        detachClaude(conn, "frontend socket closed");
+      }
+    });
+
+    conn.on("error", (err) => {
+      log(`Frontend socket error (#${clientId}): ${err.message}`);
+    });
+  });
+
+  listener.on("error", (err) => {
+    log(`Control listener error: ${err.message}`);
+  });
+
+  controlListener = listener;
+  await listener.listen();
 }
 
-function handleControlMessage(ws: ServerWebSocket<ControlSocketData>, raw: string | Buffer) {
+function handleControlMessage(conn: Connection, raw: string) {
   let message: ControlClientMessage;
   try {
-    const text = typeof raw === "string" ? raw : raw.toString();
-    message = JSON.parse(text);
+    message = JSON.parse(raw);
   } catch (e: any) {
     log(`Failed to parse control message: ${e.message}`);
     return;
@@ -268,17 +297,17 @@ function handleControlMessage(ws: ServerWebSocket<ControlSocketData>, raw: strin
 
   switch (message.type) {
     case "claude_connect":
-      attachClaude(ws);
+      attachClaude(conn);
       return;
     case "claude_disconnect":
-      detachClaude(ws, "frontend requested disconnect");
+      detachClaude(conn, "frontend requested disconnect");
       return;
     case "status":
-      sendStatus(ws);
+      sendStatus(conn);
       return;
     case "claude_to_codex": {
       if (message.message.source !== "claude") {
-        sendProtocolMessage(ws, {
+        sendProtocolMessage(conn, {
           type: "claude_to_codex_result",
           requestId: message.requestId,
           success: false,
@@ -287,8 +316,21 @@ function handleControlMessage(ws: ServerWebSocket<ControlSocketData>, raw: strin
         return;
       }
 
+      // If an A2A inbound turn is in flight, the reply belongs to it,
+      // not to Codex. Delivers the chunk + completes the turn.
+      if (inboundGateway.interceptReply(message.message.content)) {
+        log(`Claude reply consumed by inbound A2A turn (${message.message.content.length} chars)`);
+        clearAttentionWindow();
+        sendProtocolMessage(conn, {
+          type: "claude_to_codex_result",
+          requestId: message.requestId,
+          success: true,
+        });
+        return;
+      }
+
       if (!tuiConnectionState.canReply()) {
-        sendProtocolMessage(ws, {
+        sendProtocolMessage(conn, {
           type: "claude_to_codex_result",
           requestId: message.requestId,
           success: false,
@@ -312,7 +354,7 @@ function handleControlMessage(ws: ServerWebSocket<ControlSocketData>, raw: strin
           ? "Codex is busy executing a turn. Wait for it to finish before sending another message."
           : "Injection failed: no active thread or WebSocket not connected.";
         log(`Injection rejected: ${reason}`);
-        sendProtocolMessage(ws, {
+        sendProtocolMessage(conn, {
           type: "claude_to_codex_result",
           requestId: message.requestId,
           success: false,
@@ -321,7 +363,7 @@ function handleControlMessage(ws: ServerWebSocket<ControlSocketData>, raw: strin
         return;
       }
       clearAttentionWindow(); // Claude successfully replied, end attention window
-      sendProtocolMessage(ws, {
+      sendProtocolMessage(conn, {
         type: "claude_to_codex_result",
         requestId: message.requestId,
         success: true,
@@ -331,31 +373,33 @@ function handleControlMessage(ws: ServerWebSocket<ControlSocketData>, raw: strin
   }
 }
 
-function attachClaude(ws: ServerWebSocket<ControlSocketData>) {
-  if (attachedClaude && attachedClaude !== ws) {
-    attachedClaude.close(4001, "replaced by a newer Claude session");
+function attachClaude(conn: Connection) {
+  if (attachedClaude && attachedClaude !== conn) {
+    attachedClaude.close();
   }
 
+  const meta = controlClientMeta.get(conn);
+
   clearPendingClaudeDisconnect("Claude frontend attached");
-  attachedClaude = ws;
-  ws.data.attached = true;
+  attachedClaude = conn;
+  if (meta) meta.attached = true;
   cancelIdleShutdown();
-  log(`Claude frontend attached (#${ws.data.clientId})`);
+  log(`Claude frontend attached (#${meta?.clientId ?? "?"})`);
 
   statusBuffer.flush("claude reconnected");
-  sendStatus(ws);
+  sendStatus(conn);
 
   const now = Date.now();
   const isRapidReattach = now - lastAttachStatusSentTs < ATTACH_STATUS_COOLDOWN_MS;
 
   if (bufferedMessages.length > 0) {
-    flushBufferedMessages(ws);
+    flushBufferedMessages(conn);
   } else if (!isRapidReattach) {
     // Only send status messages if this is not a rapid reattach (avoid flooding Claude)
     if (tuiConnectionState.canReply()) {
-      sendBridgeMessage(ws, systemMessage("system_ready", currentReadyMessage()));
+      sendBridgeMessage(conn, systemMessage("system_ready", currentReadyMessage()));
     } else if (codexBootstrapped) {
-      sendBridgeMessage(ws, systemMessage("system_waiting", currentWaitingMessage()));
+      sendBridgeMessage(conn, systemMessage("system_waiting", currentWaitingMessage()));
     }
   }
 
@@ -366,14 +410,15 @@ function attachClaude(ws: ServerWebSocket<ControlSocketData>) {
   }
 }
 
-function detachClaude(ws: ServerWebSocket<ControlSocketData>, reason: string) {
-  if (attachedClaude !== ws) return;
+function detachClaude(conn: Connection, reason: string) {
+  if (attachedClaude !== conn) return;
 
+  const meta = controlClientMeta.get(conn);
   attachedClaude = null;
-  ws.data.attached = false;
-  log(`Claude frontend detached (#${ws.data.clientId}, ${reason})`);
+  if (meta) meta.attached = false;
+  log(`Claude frontend detached (#${meta?.clientId ?? "?"}, ${reason})`);
 
-  scheduleClaudeDisconnectNotification(ws.data.clientId);
+  scheduleClaudeDisconnectNotification(meta?.clientId ?? -1);
 
   scheduleIdleShutdown();
 }
@@ -472,7 +517,7 @@ function scheduleClaudeDisconnectNotification(clientId: number) {
 }
 
 function emitToClaude(message: BridgeMessage) {
-  if (attachedClaude && attachedClaude.readyState === WebSocket.OPEN) {
+  if (attachedClaude && attachedClaude.isOpen) {
     if (trySendBridgeMessage(attachedClaude, message)) return;
     // Send failed — fall through to buffer
     log("Send to Claude failed, buffering message for retry on reconnect");
@@ -486,13 +531,9 @@ function emitToClaude(message: BridgeMessage) {
   }
 }
 
-function trySendBridgeMessage(ws: ServerWebSocket<ControlSocketData>, message: BridgeMessage): boolean {
+function trySendBridgeMessage(conn: Connection, message: BridgeMessage): boolean {
   try {
-    const result = ws.send(JSON.stringify({ type: "codex_to_claude", message } satisfies ControlServerMessage));
-    if (typeof result === "number" && result <= 0) {
-      log(`Bridge message send returned ${result} (0=dropped, -1=backpressure)`);
-      return false;
-    }
+    conn.send(JSON.stringify({ type: "codex_to_claude", message } satisfies ControlServerMessage));
     return true;
   } catch (err: any) {
     log(`Failed to send bridge message: ${err.message}`);
@@ -500,13 +541,13 @@ function trySendBridgeMessage(ws: ServerWebSocket<ControlSocketData>, message: B
   }
 }
 
-function flushBufferedMessages(ws: ServerWebSocket<ControlSocketData>) {
+function flushBufferedMessages(conn: Connection) {
   const messages = bufferedMessages.splice(0, bufferedMessages.length);
-  for (const message of messages) {
-    if (!trySendBridgeMessage(ws, message)) {
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]!;
+    if (!trySendBridgeMessage(conn, message)) {
       // Re-buffer this and all remaining messages on failure
-      const failedIndex = messages.indexOf(message);
-      const remaining = messages.slice(failedIndex);
+      const remaining = messages.slice(i);
       bufferedMessages.unshift(...remaining);
       log(`Flush interrupted: re-buffered ${remaining.length} message(s) after send failure`);
       return;
@@ -514,12 +555,12 @@ function flushBufferedMessages(ws: ServerWebSocket<ControlSocketData>) {
   }
 }
 
-function sendBridgeMessage(ws: ServerWebSocket<ControlSocketData>, message: BridgeMessage) {
-  trySendBridgeMessage(ws, message);
+function sendBridgeMessage(conn: Connection, message: BridgeMessage) {
+  trySendBridgeMessage(conn, message);
 }
 
-function sendStatus(ws: ServerWebSocket<ControlSocketData>) {
-  sendProtocolMessage(ws, { type: "status", status: currentStatus() });
+function sendStatus(conn: Connection) {
+  sendProtocolMessage(conn, { type: "status", status: currentStatus() });
 }
 
 function broadcastStatus() {
@@ -527,9 +568,9 @@ function broadcastStatus() {
   sendStatus(attachedClaude);
 }
 
-function sendProtocolMessage(ws: ServerWebSocket<ControlSocketData>, message: ControlServerMessage) {
+function sendProtocolMessage(conn: Connection, message: ControlServerMessage) {
   try {
-    ws.send(JSON.stringify(message));
+    conn.send(JSON.stringify(message));
   } catch (err: any) {
     log(`Failed to send control message: ${err.message}`);
   }
@@ -621,14 +662,42 @@ async function bootCodex() {
   }
 }
 
+async function bootInbound() {
+  if (!A2A_INBOUND_TOKEN) {
+    log("A2A inbound disabled (set A2A_BRIDGE_BEARER_TOKEN to enable)");
+    return;
+  }
+
+  try {
+    a2aInboundServer = await startA2AServer({
+      host: A2A_INBOUND_HOST,
+      port: A2A_INBOUND_PORT,
+      bearerToken: A2A_INBOUND_TOKEN,
+      publicAgentCard: A2A_INBOUND_PUBLIC_CARD,
+      agentCard: {
+        url: `http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}/a2a`,
+      },
+      messageStreamExecutor: createClaudeCodeExecutor({ gateway: inboundGateway }),
+      logger: (msg) => log(`[A2aInbound] ${msg}`),
+    });
+    log(
+      `A2A inbound server listening on http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}${a2aInboundServer.rpcPath}`,
+    );
+  } catch (err: any) {
+    log(`Failed to start A2A inbound server: ${err?.message ?? err}`);
+  }
+}
+
 function shutdown(reason: string) {
   if (shuttingDown) return;
   shuttingDown = true;
   log(`Shutting down daemon (${reason})...`);
   tuiConnectionState.dispose(`daemon shutdown (${reason})`);
   clearPendingClaudeDisconnect(`daemon shutdown (${reason})`);
-  controlServer?.stop();
-  controlServer = null;
+  void controlListener?.close();
+  controlListener = null;
+  void a2aInboundServer?.shutdown();
+  a2aInboundServer = null;
   codex.stop();
   removePidFile();
   removeStatusFile();
@@ -662,5 +731,6 @@ if (daemonLifecycle.wasKilled()) {
 }
 
 writePidFile();
-startControlServer();
+void startControlServer();
 void bootCodex();
+void bootInbound();
