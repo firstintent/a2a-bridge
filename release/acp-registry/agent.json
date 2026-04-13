@@ -1,0 +1,17 @@
+{
+  "$schema": "https://cdn.agentclientprotocol.com/registry/v1/latest/agent.schema.json",
+  "id": "a2a-bridge",
+  "name": "a2a-bridge",
+  "version": "0.1.0",
+  "description": "Bridge Claude Code to ACP editors (Zed, OpenClaw, VS Code). Exposes Claude Code as an ACP agent over stdio; also runs as an A2A server for Gemini CLI and any Agent2Agent client.",
+  "repository": "https://github.com/firstintent/a2a-bridge",
+  "website": "https://github.com/firstintent/a2a-bridge#readme",
+  "authors": ["FirstIntent"],
+  "license": "MIT",
+  "distribution": {
+    "npx": {
+      "package": "@firstintent/a2a-bridge@0.1.0",
+      "args": ["acp"]
+    }
+  }
+}
