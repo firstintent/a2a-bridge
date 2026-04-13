@@ -171,7 +171,7 @@ once that phase lands.
 
 ## Phase 5 — ACP inbound (multi-client reach)
 
-- [ ] **P5.1 — Add `@agentclientprotocol/sdk` dependency.**
+- [/] **P5.1 — Add `@agentclientprotocol/sdk` dependency.**
   Acceptance: `bun add @agentclientprotocol/sdk`; pinned version in
   `package.json` and `bun.lock`. `bun run typecheck` and `bun run
   lint:deps` green. No imports yet.
