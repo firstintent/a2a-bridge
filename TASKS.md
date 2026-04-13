@@ -85,7 +85,7 @@ once that phase lands.
   when the executor supplies it. Unit test asserts the field
   round-trips through SSE and parses back via the SDK.
 
-- [/] **P3.9 — Pattern cookbook documentation.**
+- [x] **P3.9 — Pattern cookbook documentation.**
   Acceptance: `docs/cookbook.md` documents the three canonical
   patterns (verification, context-protection, parallel) with
   end-to-end runnable examples (curl + SDK). Each example links to
