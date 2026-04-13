@@ -148,6 +148,7 @@ Per-iteration checklist the loop follows, top of file:
 Upstream repos cloned under the parent workspace's `references/` directory:
 
 - `references/agent-bridge` — the CC↔Codex prototype we are generalizing
-- `references/cc-plugins-official` — Anthropic's official channel plugin examples (telegram, fakechat are the best references)
+- `references/claude-plugins-official` — Anthropic's official channel plugin examples (telegram, fakechat are the best references)
+- `references/gemini-cli` — Gemini CLI source (A2A client consumer)
 - `references/openclaw` — OpenClaw source (peer adapter target)
 - `references/hermes-agent` — Hermes ACP source (peer adapter target)
