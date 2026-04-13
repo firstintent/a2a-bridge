@@ -176,7 +176,7 @@ once that phase lands.
   `package.json` and `bun.lock`. `bun run typecheck` and `bun run
   lint:deps` green. No imports yet.
 
-- [/] **P5.2 — Scaffold `runtime-daemon/inbound/acp/` layout.**
+- [x] **P5.2 — Scaffold `runtime-daemon/inbound/acp/` layout.**
   Acceptance: new files `acp/index.ts` (stub
   `AcpInboundService implements IInboundService`),
   `acp/connection.ts` (placeholder for the AgentSideConnection
