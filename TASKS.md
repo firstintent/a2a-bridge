@@ -291,7 +291,7 @@ once that phase lands.
   ACP inbound, RoomRouter + TaskLog, verification artifact, init /
   doctor / daemon UX. No internal-only entries.
 
-- [ ] **P6.10 — Version bump to 0.1.0.**
+- [x] **P6.10 — Version bump to 0.1.0.**
   Acceptance: `package.json`, `plugins/a2a-bridge/.claude-plugin/plugin.json`,
   and `.claude-plugin/marketplace.json` bumped to 0.1.0.
   `bun scripts/check-plugin-versions.js` passes. ARCHITECTURE.md
@@ -345,7 +345,7 @@ once that phase lands.
 - Phase 3 baseline: 240 pass / 0 fail / 19 E2E filtered, 28 test files, 579 expect calls (on P3.9 close; P3.0 sanity-check started at 223 pass).
 - Phase 4 baseline: 293 pass / 0 fail / 19 E2E filtered, 35 test files, 739 expect calls (on P4.12 close; Phase 4 opened with the 240-pass baseline carried from Phase 3).
 - Phase 5 baseline: 304 pass / 0 fail / 20 E2E filtered, 38 test files, 768 expect calls (on P5.8 close; Phase 5 opened with the 293-pass baseline carried from Phase 4).
-- Phase 6 baseline:
+- Phase 6 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P6.10 close; Phase 6 opened with the 304-pass baseline carried from Phase 5).
 - Phase 7 baseline:
 
 ## v0.1 starting baseline
