@@ -214,7 +214,7 @@ once that phase lands.
   `test:unit`) spawns the subcommand and exercises the full ACP
   initialize → prompt → reply round trip via the SDK client.
 
-- [/] **P5.7 — README "Connect ACP clients" section.**
+- [x] **P5.7 — README "Connect ACP clients" section.**
   Acceptance: README gets a new section after "Connect Gemini CLI"
   with copy-paste config snippets for OpenClaw (`acpx.config.agents`),
   Zed (`agent_servers`), and VS Code's ACP plugin. Each snippet
