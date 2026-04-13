@@ -98,9 +98,12 @@ Bun process, optionally on a different host. Owns:
 
 - **Listeners** (one per transport in use): stdio for the plugin,
   unix-socket for same-host agents, TLS TCP for remote.
-- **InboundService** — A2A server implementation. HTTPS + SSE.
-  Routes A2A tasks to a Room which feeds the Claude Code channel
-  plugin. Minimum surface defined below. Phase 2.
+- **InboundServices** — multi-protocol shims that all converge on a
+  shared `ClaudeCodeGateway`:
+  - A2A InboundService (HTTP + JSON-RPC + SSE) — Phase 2
+  - ACP InboundService (stdio JSON-RPC, via `a2a-bridge acp`
+    subcommand) — Phase 5
+  - MCP InboundService (HTTP/SSE/stdio) — v0.2
 - **PeerAdapter instances** — one `IPeerAdapter` per active peer
   connection. Adapters translate per-peer wire formats into
   `PeerAdapterEvents` and consume `injectMessage(text)`.
@@ -108,8 +111,9 @@ Bun process, optionally on a different host. Owns:
   Claude Code connection slot, peer adapter set, message log, and
   subscriber list. Room isolation prevents task cross-talk across
   concurrent Claude Code sessions. Phase 4.
-- **TaskLog** — SQLite persistence of in-flight and recent A2A
-  tasks so that Claude Code restarts do not lose context. Phase 4.
+- **TaskLog** — SQLite persistence of in-flight and recent tasks
+  (across all inbound protocols) so that Claude Code restarts do not
+  lose context. Phase 4.
 
 ### Peer adapter contract (`IPeerAdapter`)
 
@@ -123,18 +127,25 @@ private to the implementations.
 
 ## Protocol matrix
 
-| Counterparty     | Native wire                        | a2a-bridge module | Direction         | Phase |
-|------------------|------------------------------------|-------------------|-------------------|-------|
-| Claude Code      | MCP Channels (stdio)               | channel plugin    | ↔ (always)        | 1     |
-| Codex            | App-server JSON-RPC over WebSocket | CodexAdapter      | ↔                 | 1     |
-| Any A2A client   | A2A (JSON-RPC + SSE)               | InboundService    | client → CC       | 2     |
-| OpenClaw         | Gateway WS + Ed25519 handshake     | OpenClawAdapter   | ↔                 | 5     |
-| Hermes           | Zed ACP (JSON-RPC 2.0 over stdio)  | HermesAdapter     | CC → Hermes only  | 6     |
+| Counterparty       | Native wire                        | a2a-bridge module    | Direction         | Phase |
+|--------------------|------------------------------------|----------------------|-------------------|-------|
+| Claude Code        | MCP Channels (stdio)               | channel plugin       | ↔ (always)        | 1     |
+| Codex              | App-server JSON-RPC over WebSocket | CodexAdapter         | ↔                 | 1     |
+| Any A2A client     | A2A (JSON-RPC + SSE)               | A2A InboundService   | client → CC       | 2     |
+| OpenClaw / Zed /   | ACP (JSON-RPC 2.0 over stdio)      | ACP InboundService   | client → CC       | 5     |
+|  VS Code / Hermes  |                                    | (`a2a-bridge acp`)   |                   |       |
+| MCP clients        | MCP (HTTP/SSE/stdio)               | MCP InboundService   | client → CC       | v0.2  |
+|  (Cursor, Claude   |                                    |                      |                   |       |
+|   Desktop)         |                                    |                      |                   |       |
+| OpenClaw (peer)    | Gateway WS + Ed25519 handshake     | OpenClawAdapter      | ↔                 | v0.2  |
+| Hermes (peer)      | Zed ACP (JSON-RPC 2.0 over stdio)  | HermesAdapter        | CC → Hermes only  | v0.2  |
 
 a2a-bridge does not run A2A to its Codex/OpenClaw/Hermes peers —
-those have their own protocols and no A2A support. a2a-bridge
-itself is the A2A boundary: **inbound A2A for clients, native
-protocol outbound for peers.**
+those have their own protocols and no A2A support. a2a-bridge is the
+**multi-protocol inbound boundary**: A2A, ACP, MCP shims each accept
+client traffic and dispatch through a shared `ClaudeCodeGateway` into
+the same plugin → Claude Code pipeline. Outbound stays per-peer
+native protocol.
 
 ## InboundService: minimum A2A server surface
 
@@ -199,6 +210,53 @@ Terminal states the client recognizes: `completed`, `failed`,
 - Do not emit proto snake-case aliases — camelCase only.
 - No push-notification config; no `tasks/resubscribe`; no
   non-streaming `message/send` in the primary flow.
+
+## InboundService: ACP server surface
+
+Aligned with `@agentclientprotocol/sdk` v0.5+ — what Zed, VS Code,
+OpenClaw (`acpx`), and Hermes call when they spawn an ACP agent
+subprocess.
+
+### Transport
+
+- stdio JSON-RPC (the canonical ACP transport per the spec). The
+  client launches `a2a-bridge acp` as a subprocess; framing is
+  newline-delimited JSON-RPC 2.0.
+- HTTP transport is a draft in the ACP spec; not implemented here.
+- The `a2a-bridge acp` subcommand is a thin process — it connects to
+  the long-running daemon over the unix-socket control plane (Phase 4)
+  and forwards ACP sessions through the shared
+  `ClaudeCodeGateway`.
+
+### Required methods
+
+The minimum surface clients call:
+
+- `initialize` — protocol handshake; agent advertises its
+  `protocolVersion` and `capabilities`.
+- `newSession` / `loadSession` — open a session that maps 1:1 to a
+  `Room` in the daemon.
+- `prompt` (a.k.a. `session/prompt`) — user turn; response streams
+  back as `session/update` notifications carrying assistant chunks
+  plus a final `session/turnComplete`.
+- `cancel` — abort the active turn; bridges to `Room.cancel`.
+
+### Authentication
+
+ACP runs as a subprocess of the client, so the trust boundary is the
+local user. `a2a-bridge acp` inherits the user's filesystem identity;
+no bearer tokens are exchanged on the stdio link. Authentication for
+the underlying daemon control plane is filesystem-permissioned on
+the unix socket.
+
+## InboundService: MCP server surface (deferred to v0.2)
+
+Will mirror the ACP shape: a `runtime-daemon/inbound/mcp/` directory
+with a server that implements the MCP `tools/list` and `tools/call`
+methods. One tool — `claude_code` — accepts a prompt and streams the
+reply via MCP's standard SSE pattern. Same `ClaudeCodeGateway`
+underneath. Targets Cursor, Claude Desktop, and other MCP-only
+clients.
 
 ## Pattern contracts
 

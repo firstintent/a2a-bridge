@@ -57,14 +57,28 @@ gates. Orchestration belongs in the caller or in a separate tool
 built on top of a2a-bridge. Keeping this boundary honest prevents
 scope creep and keeps the bridge composable.
 
-### 6. Uniform inbound, per-peer outbound
+### 6. Multi-protocol inbound, per-peer outbound
 
-Inbound (external → Claude Code) standardizes on A2A because there is
-a genuine open spec with real clients (Gemini CLI). Outbound (Claude
-Code → peer) does **not** force A2A — the peers we care about today
-(Codex, OpenClaw, Hermes) each speak their own wire protocol, and
-per-peer adapters translate. Forcing A2A outbound would mean waiting
-for peers to adopt A2A or building unreliable protocol proxies.
+Inbound (external → Claude Code) supports multiple protocols because
+real clients today are split across three open specs:
+
+- **A2A** (HTTP + JSON-RPC + SSE) — Gemini CLI today, future A2A
+  agents.
+- **ACP** (stdio JSON-RPC subprocess) — Zed, VS Code, OpenClaw,
+  Hermes when calling out.
+- **MCP** (HTTP/SSE/stdio) — Cursor, Claude Desktop. Deferred to
+  v0.2.
+
+Each protocol gets a thin shim over a shared internal
+`ClaudeCodeGateway`. Picking only one inbound spec would mean waiting
+for ecosystem convergence; supporting two now reaches every editor
+and agent we care about for v0.1.
+
+Outbound (Claude Code → peer) does **not** force one protocol either
+— the peers we care about today (Codex, OpenClaw, Hermes) each speak
+their own wire protocol, and per-peer adapters translate. Forcing one
+outbound protocol would mean waiting for peers to adopt it or
+building unreliable protocol proxies.
 
 ### 7. Honest cost accounting
 

@@ -96,53 +96,98 @@ daemon, task history that survives plugin restarts.
 daemon run in parallel without cross-talk; a task survives a plugin
 reconnect.
 
-## Phase 5 — OpenClawAdapter (cross-machine peer)
+## Phase 5 — ACP inbound (multi-client reach)
 
-**Why after the patterns layer.** OpenClaw brings real multi-machine
-value and a non-trivial handshake (Ed25519 device identity, synthesized
-turn events). Until the patterns layer exists, adding this peer is
-premature; once Phase 3 is in, OpenClaw unlocks the
-context-protection and parallel patterns at datacenter scale.
+**Why next, ahead of outbound peers.** Phase 2 covered the A2A
+inbound surface that Gemini CLI (and future A2A peers) speak. The
+other dominant client family today — editor-style consumers (Zed, VS
+Code, OpenClaw via `acpx`, Hermes) — does not speak A2A; it speaks
+ACP. Adding an ACP inbound shim on the same `ClaudeCodeGateway`
+multiplies our reachable client base for the price of one stdio
+server. Outbound peer adapters (OpenClaw, Hermes) need live
+infrastructure (Ed25519 gateway, Hermes binary) the autonomous loop
+cannot provision; they move to v0.2.
 
-- Ed25519 device handshake against the OpenClaw gateway protocol.
-- `OpenClawAdapter` implementing `IPeerAdapter`, with synthesized
-  `turnStarted` / `turnCompleted` (debounce + `sessions.changed` +
-  tool signals).
-- Persist the device keypair in the daemon state directory.
-- Cross-host integration test: daemon on host A, OpenClaw gateway on
-  host B.
+- Add `@agentclientprotocol/sdk` and an `acp/` inbound subdirectory
+  under `runtime-daemon/inbound/`.
+- `ACPInboundService` implements the minimum ACP surface (initialize,
+  newSession, prompt with streaming session/update notifications,
+  cancel) over stdio JSON-RPC.
+- `a2a-bridge acp` CLI subcommand starts the ACP server, connecting
+  to the long-running daemon over its unix-socket control plane.
+- Bridge each ACP `prompt` into the shared `ClaudeCodeGateway`; CC
+  reply chunks stream back as `session/update` notifications.
 
-**Ship criterion:** Claude Code delegates a task to a remote
-OpenClaw and receives assistant messages back.
+**Ship criterion:** OpenClaw, Zed, and VS Code users can each
+register `a2a-bridge acp` as a custom ACP agent and have Claude Code
+answering their prompts end-to-end with streamed replies.
 
-## Phase 6 — HermesAdapter (local ACP)
+## Phase 6 — Distribution and UX polish
 
-**Why last.** Hermes is a narrower fit — its built-in support for
-calling Claude Code is the primary pairing direction, so CC →
-Hermes is a secondary use case. Hermes also ships no inbound bridge,
-so cross-host Hermes requires an external ACP proxy we do not
-control. Valuable for local demos and as an ACP reference
-implementation, but not on the critical path.
+**Why before release packaging.** The build chain produces a tarball
+today, but first-run UX still requires reading source. Shipping v0.1
+means a user can `npm i -g`, run a single command, and have a
+functioning daemon plus correctly-formatted client config snippets
+for every supported integration.
 
-- Use `@zed-industries/agent-client-protocol` for stdio framing.
-- `HermesAdapter` against `IPeerAdapter`; synthesize `turnStarted`
-  at `session/prompt` send time; treat the `PromptResponse.stopReason`
-  as `turnCompleted`.
-- Surface `agent_thought_chunk` as `agentThought` events.
+- `a2a-bridge init` — generate a bearer token, write a default config
+  file, print the per-client config snippets.
+- `a2a-bridge doctor` — preflight checks (port collisions, CC plugin
+  install, ACP SDK availability, bun version, file permissions).
+- `a2a-bridge daemon start|stop|status|logs` — full lifecycle.
+- Friendly error messages on common failures (token missing, port
+  busy, CC plugin not installed).
+- README rewrite: install, configure, connect Gemini CLI / OpenClaw /
+  Zed / VS Code (each as a copy-pasteable section).
+- `npm pack` smoke test plus end-to-end script that exercises both
+  A2A and ACP paths against a freshly-installed tarball.
+- CHANGELOG.md 0.1.0 block; version bump 0.0.1 → 0.1.0 across all
+  manifests.
 
-**Ship criterion:** a user can delegate a task to a local Hermes
-subprocess and receive streamed output.
+**Ship criterion:** `npm pack && npm i -g ./*.tgz && a2a-bridge init
+&& a2a-bridge daemon start` works, with all four client integrations
+documented and locally verified.
 
-## Phase 7 — Hardening and release
+## Phase 7 — Release packaging
 
-- Daemon routes every peer through `peer-factory`; delete remaining
-  Codex-specific coupling from daemon orchestration code.
-- CI matrix: each peer tested in mocked mode (no external CLI
-  required) plus one live test per peer gated on credentials.
-- Publish `@firstintent/a2a-bridge` to npm; submit plugin to the
-  Claude Code marketplace.
-- Documentation sweep: install paths, auth setup, deployment shapes,
-  peer adapter authoring guide, pattern cookbook.
+**Why this seam.** v0.1 release requires steps the autonomous loop
+cannot fully execute — npm publish, marketplace submission, registry
+PRs all need credentials or third-party approval. This phase prepares
+every artifact those steps need so the human-side work is a checklist,
+not a research project.
+
+- CI workflow: typecheck + lint:deps + test + smoke-tarball on every
+  PR; release workflow on tag (npm publish requires manual approve).
+- ACP registry submission package: `agent.json`, `icon.svg`, README
+  stub the user attaches to a registry PR.
+- Claude Code marketplace submission package: required artifacts and
+  a step-by-step submit guide.
+- `docs/release/PUBLISH.md` runbook covering the credential-gated
+  steps the user runs locally.
+- `scripts/check-release-ready.sh` script that verifies version
+  alignment, CHANGELOG presence, tarball integrity, and lists any
+  pending manual steps before tagging.
+
+**Ship criterion:** the user can `npm publish` and submit the two
+marketplace packages by following one runbook, with no further code
+changes required.
+
+## v0.2 backlog — outbound peers, MCP inbound
+
+These move out of the v0.1 path because they require live external
+infrastructure (gateway endpoints, peer binaries, MCP host
+applications) that the autonomous loop cannot provision in CI.
+
+- **OpenClaw outbound adapter** — Ed25519 device handshake against
+  the OpenClaw gateway protocol. `OpenClawAdapter` implementing
+  `IPeerAdapter` with synthesized turn events. Cross-host integration
+  test once a gateway endpoint is available.
+- **Hermes outbound adapter** — `HermesAdapter` over Zed ACP for
+  Hermes-as-peer (the rarer direction; Hermes already ships native CC
+  calling). Synthesized `turnStarted` at `session/prompt` send.
+- **MCP inbound** — `runtime-daemon/inbound/mcp/` shim mirroring the
+  ACP shape. Targets Cursor and Claude Desktop. Same
+  `ClaudeCodeGateway` underneath.
 
 ## Explicitly deferred
 
@@ -151,7 +196,5 @@ subprocess and receive streamed output.
 - Push-notification variants of A2A. Not used by today's A2A
   clients.
 - gRPC transport for A2A. JSON-RPC + SSE covers the field.
-- Multi-protocol inbound (e.g. MCP-over-HTTP inbound). Only add when
-  a concrete caller needs it.
 - Per-peer prompt templates for roles beyond verification.
   Orchestration framework territory; see `POSITIONING.md`.
