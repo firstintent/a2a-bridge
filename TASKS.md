@@ -239,7 +239,7 @@ once that phase lands.
   Unit tests cover first-run, idempotent re-run, and explicit
   `--force` overwrite.
 
-- [ ] **P6.2 — `a2a-bridge doctor` command.**
+- [/] **P6.2 — `a2a-bridge doctor` command.**
   Acceptance: prints a checklist with pass/fail/warn for: bun
   version >= 1.3, A2A port free, ACP SDK installed, CC channel
   plugin discoverable, state-dir writable, `init` already run.

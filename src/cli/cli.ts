@@ -41,6 +41,13 @@ async function main() {
       const { runAcp } = await import("./acp");
       await runAcp(restArgs);
       break;
+    case "doctor":
+      const { runDoctor } = await import("./doctor");
+      {
+        const result = await runDoctor();
+        if (result.exitCode !== 0) process.exit(result.exitCode);
+      }
+      break;
     case "kill":
       const { runKill } = await import("./kill");
       await runKill();
@@ -75,6 +82,7 @@ Commands:
   claude [args...]  Start Claude Code with push channel enabled
   codex [args...]   Start Codex TUI connected to A2aBridge daemon
   acp [args...]     Start ACP-over-stdio server (for Zed / OpenClaw / VS Code)
+  doctor            Run preflight checks (bun, ports, SDK, plugin, state-dir)
   kill              Force kill all A2aBridge processes
 
 Options:
