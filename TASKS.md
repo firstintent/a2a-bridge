@@ -112,7 +112,7 @@ once that phase lands.
   `RoomRouter` with `getOrCreate(roomId)` and `dispose(roomId)`.
   Tests for the two paths plus `Map<RoomId, Room>` size accounting.
 
-- [ ] **P4.4 — SQLite TaskLog schema.**
+- [/] **P4.4 — SQLite TaskLog schema.**
   Acceptance: `src/runtime-daemon/tasks/task-log-schema.sql` defines
   `tasks(id PK, room_id, context_id, state, status_json, created_at,
   updated_at)`. Migration helper in `task-log.ts` runs the schema
