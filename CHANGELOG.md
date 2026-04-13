@@ -25,9 +25,11 @@ Agent Client Protocol (ACP) editor can drive against Claude Code.
   VS Code ACP extension can register a2a-bridge as an agent with
   `command: "a2a-bridge", args: ["acp"]`. Implements the
   `initialize` / `session/new` / `session/prompt` / `cancel`
-  surface against the shared Claude Code gateway. v0.1 ships an
-  in-process echo reply so the wire can be validated before
-  daemon-backed ACP → CC routing lands post-v0.1.
+  surface against a `DaemonProxyGateway` that relays each turn to
+  the attached Claude Code session through the daemon's
+  control-plane WS. The subprocess fails loudly if no daemon is
+  reachable — there is no silent echo fallback in the production
+  path.
 - **Verification artifact type.** New A2A artifact with MIME type
   `application/vnd.a2a-bridge.verdict+json` carries a
   `pass | fail | needs-info` verdict plus structured evidence.

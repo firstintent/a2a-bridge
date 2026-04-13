@@ -13,11 +13,15 @@ genuinely insufficient.
 
 ## Status
 
-**v0.1 (shipped).** Phases 1–7 complete. A2A + ACP inbound, Codex
-outbound, RoomRouter + SQLite TaskLog, verification artifact +
-`return_format` hint, `a2a-bridge init / doctor / daemon` UX, CI +
-release workflow, marketplace + ACP-registry submission packages.
-See [`CHANGELOG.md`](../../CHANGELOG.md).
+**v0.1 (dev — Phases 1–7 on `dev`, Phases 8–9 in flight).** A2A +
+ACP inbound, Codex outbound, RoomRouter + SQLite TaskLog,
+verification artifact + `return_format` hint, `a2a-bridge init /
+doctor / daemon` UX, CI + release workflow, marketplace +
+ACP-registry submission packages. The ACP inbound currently binds
+to an in-process echo reply; Phases 8 and 9 land the real
+Claude-Code routing and the cross-bridge join skill before the
+first public publish. See [`CHANGELOG.md`](../../CHANGELOG.md) and
+[`../../TASKS.md`](../../TASKS.md).
 
 **v0.2 (planned).** Outbound OpenClaw + Hermes adapters, MCP
 inbound, TLS listener. Each item needs live external infrastructure
@@ -184,6 +188,65 @@ not a research project.
 **Ship criterion:** the user can `npm publish` and submit the two
 marketplace packages by following one runbook, with no further code
 changes required.
+
+## Phase 8 — Real ACP → Claude Code routing (no mock)
+
+**Why before release.** Phase 5 built the ACP inbound wire; v0.1
+shipped it against an in-process echo reply to validate the
+handshake. Before any OpenClaw / Zed / VS Code user can actually
+drive Claude Code through `a2a-bridge acp`, the subprocess needs to
+reach the attached CC session through the daemon. Tests may use
+fakes; the CLI default path may not short-circuit to a mock.
+
+- `DaemonProxyGateway` replaces `EchoGateway` in the `runAcp()`
+  default path. `a2a-bridge acp` connects to the daemon over its
+  control-plane WS and forwards each ACP `prompt` into the shared
+  `DaemonClaudeCodeGateway`.
+- New control-plane message variants carry ACP-originated
+  `turn_start` / `turn_chunk` / `turn_complete` / `turn_cancel`
+  frames in both directions.
+- `a2a-bridge acp` fails loudly when the daemon is unreachable
+  (non-zero exit + friendly error helper) rather than silently
+  degrading to echo.
+- Integration test boots the real daemon + a stub CC channel
+  client; drives ACP via the SDK; asserts the `session/update`
+  text is the stub CC's reply verbatim. `scripts/smoke-e2e.sh`
+  exercises the same path under `check:ci`.
+
+**Ship criterion:** the existing SDK-level ACP integration test
+(and `smoke-e2e.sh`) pass against the real routing — no
+`A2A_BRIDGE_INBOUND_ECHO=1` in the production code path.
+
+## Phase 9 — Join skill + first public release
+
+**Why this caps v0.1.** Once ACP → CC is real, the developer-facing
+payoff is a one-URL cross-bridge skill: a user hands the same
+document to Claude Code and to OpenClaw, each AI self-installs its
+side, and OpenClaw can then drive Claude Code end-to-end.
+
+- Cut a draft GitHub release at `v0.1.0` with the tarball attached
+  via `release.yml`. The tarball URL is what the skill will
+  reference for `npm i -g`.
+- `docs/join.md` — a single self-contained Markdown skill that
+  detects the host environment (asks the AI what it is) and runs
+  the matching installer plus a post-install smoke. Claude Code
+  side installs + `a2a-bridge init` + `daemon start`. OpenClaw
+  side installs + registers the ACP agent in `acpx.config.agents`
+  + round-trips a prompt to verify the reply is not echo.
+- README gains a "Join the bridge" section showing the one-line
+  "Read <skill-url> and follow it" invocation for each AI, linking
+  to `docs/join.md` for the full document.
+- Manual end-to-end verification on the maintainer's machine
+  against a live Claude Code + live OpenClaw; transcript saved
+  under `docs/release/verified-joins/` as evidence for publish.
+- `CHANGELOG.md`'s `[0.1.0]` header flips from `— Unreleased` to
+  the release date.
+
+**Ship criterion:** a fresh OpenClaw session, having followed the
+Join skill, can drive a non-trivial prompt through to Claude Code
+and receive Claude Code's actual reply. The maintainer takes over
+for `npm publish`, marketplace form submission, and the ACP
+registry PR.
 
 ## v0.2 backlog — outbound peers, MCP inbound
 
