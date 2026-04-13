@@ -141,7 +141,9 @@ and a worked example.
 
 For end-to-end runnable `curl` + SDK examples of all three patterns
 (plus a rough token-cost reference), see
-[`docs/cookbook.md`](./docs/cookbook.md).
+[`docs/cookbook.md`](./docs/cookbook.md). For how the daemon isolates
+concurrent sessions and what survives a restart, see
+[`docs/rooms.md`](./docs/rooms.md).
 
 ## License
 

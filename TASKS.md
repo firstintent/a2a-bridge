@@ -164,7 +164,7 @@ once that phase lands.
   on the original task id still returns the latest state from
   SQLite. `bun run check:ci` green.
 
-- [ ] **P4.12 — Document the concurrency model.**
+- [/] **P4.12 — Document the concurrency model.**
   Acceptance: `docs/rooms.md` covers RoomId derivation,
   multi-session semantics, TaskLog persistence guarantees, and the
   per-Room adapter lifecycle. Linked from README.
@@ -343,7 +343,7 @@ once that phase lands.
 ## Phase footers (filled by the loop)
 
 - Phase 3 baseline: 240 pass / 0 fail / 19 E2E filtered, 28 test files, 579 expect calls (on P3.9 close; P3.0 sanity-check started at 223 pass).
-- Phase 4 baseline:
+- Phase 4 baseline: 293 pass / 0 fail / 19 E2E filtered, 35 test files, 739 expect calls (on P4.12 close; Phase 4 opened with the 240-pass baseline carried from Phase 3).
 - Phase 5 baseline:
 - Phase 6 baseline:
 - Phase 7 baseline:
