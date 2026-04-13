@@ -94,7 +94,7 @@ once that phase lands.
 
 ## Phase 4 — RoomRouter and TaskLog
 
-- [ ] **P4.1 — Define `RoomId` and derivation rules.**
+- [/] **P4.1 — Define `RoomId` and derivation rules.**
   Acceptance: `src/runtime-daemon/rooms/room-id.ts` exports
   `RoomId` (branded string) and `deriveRoomId({ contextId?, env? })`
   that returns the room id for an inbound request: `contextId` when
