@@ -221,7 +221,7 @@ once that phase lands.
   references `a2a-bridge acp` as the command. No other README
   sections touched.
 
-- [ ] **P5.8 — SDK-level ACP integration test.**
+- [/] **P5.8 — SDK-level ACP integration test.**
   Acceptance: new test in `src/cli/acp-inbound.test.ts` boots the
   ACP service against an in-memory stdio pair using the SDK's
   `ClientSideConnection`, sends a `prompt`, and asserts the client
@@ -344,7 +344,7 @@ once that phase lands.
 
 - Phase 3 baseline: 240 pass / 0 fail / 19 E2E filtered, 28 test files, 579 expect calls (on P3.9 close; P3.0 sanity-check started at 223 pass).
 - Phase 4 baseline: 293 pass / 0 fail / 19 E2E filtered, 35 test files, 739 expect calls (on P4.12 close; Phase 4 opened with the 240-pass baseline carried from Phase 3).
-- Phase 5 baseline:
+- Phase 5 baseline: 304 pass / 0 fail / 20 E2E filtered, 38 test files, 768 expect calls (on P5.8 close; Phase 5 opened with the 293-pass baseline carried from Phase 4).
 - Phase 6 baseline:
 - Phase 7 baseline:
 
