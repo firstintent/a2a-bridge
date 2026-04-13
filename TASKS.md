@@ -285,7 +285,7 @@ once that phase lands.
   one prompt → one streamed update → one terminal response. Cleans
   up daemon on exit. `bun run check:ci` invokes it.
 
-- [/] **P6.9 — CHANGELOG.md 0.1.0 block.**
+- [x] **P6.9 — CHANGELOG.md 0.1.0 block.**
   Acceptance: new `CHANGELOG.md` (or new top section) with a 0.1.0
   block summarizing user-facing changes since 0.0.1: A2A inbound,
   ACP inbound, RoomRouter + TaskLog, verification artifact, init /
