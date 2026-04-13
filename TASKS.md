@@ -259,7 +259,7 @@ once that phase lands.
   one-line cause + a recommended fix. Unit tests exercise each
   helper.
 
-- [/] **P6.5 — README rewrite with all four client install paths.**
+- [x] **P6.5 — README rewrite with all four client install paths.**
   Acceptance: README sections — Install (npm), Configure (init +
   doctor), Connect Gemini CLI, Connect OpenClaw, Connect Zed,
   Connect VS Code, Troubleshooting. Each Connect block is
