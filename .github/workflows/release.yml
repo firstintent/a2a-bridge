@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Releases are intentionally NOT published unattended. The workflow
+# runs full CI, builds the tarball, attaches it to a **draft** GitHub
+# release, and then stops at the `publish-npm` job until a maintainer
+# approves the `production` environment in the GitHub Actions UI.
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: Full check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: check:ci (typecheck + lint:deps + test:unit + build + smoke)
+        run: bun run check:ci
+
+  draft-release:
+    name: Draft GitHub release
+    needs: check
+    runs-on: ubuntu-latest
+    outputs:
+      tarball-path: ${{ steps.pack.outputs.tarball-path }}
+      version: ${{ steps.pack.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build and pack tarball
+        id: pack
+        run: |
+          bun run build:cli
+          bun run build:plugin
+          TARBALL=$(npm pack --silent | tail -n 1)
+          echo "tarball-path=$(pwd)/$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Create draft release with tarball attached
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: |
+            a2a-bridge ${{ github.ref_name }}.
+
+            See [`CHANGELOG.md`](./CHANGELOG.md) for the full list of
+            changes in this release.
+          files: ${{ steps.pack.outputs.tarball-path }}
+
+  publish-npm:
+    name: Publish to npm (requires manual approval)
+    needs: draft-release
+    runs-on: ubuntu-latest
+    # `production` is a GitHub Actions deployment environment; configure
+    # required reviewers on it (Settings → Environments → production)
+    # so this job pauses until a maintainer approves the run.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build artifacts
+        run: bun run prepublishOnly
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Publish
+        run: npm publish --access=public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
