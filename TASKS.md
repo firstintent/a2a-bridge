@@ -507,7 +507,7 @@ once that phase lands.
   Short two-sentence intro on what happens after both sides run
   the skill. Links to `docs/join.md` for the full text.
 
-- [ ] **P9.4 — End-to-end manual verification of the cross-bridge
+- [/] **P9.4 — End-to-end manual verification of the cross-bridge
   loop.**
   Acceptance: on the maintainer's machine, execute the skill
   against a live Claude Code session and a live OpenClaw session,
@@ -516,7 +516,7 @@ once that phase lands.
   the transcript under `docs/release/verified-joins/<date>.md`
   (or similar) as evidence for the first publish.
 
-- [ ] **P9.5 — Bump + CHANGELOG close for the first publish.**
+- [/] **P9.5 — Bump + CHANGELOG close for the first publish.**
   Acceptance: `CHANGELOG.md`'s `## [0.1.0]` header flips from
   `— Unreleased` to the release date. `docs/release/publish.md`
   remains the runbook; the maintainer takes over from there for
@@ -532,6 +532,7 @@ once that phase lands.
 - Phase 6 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P6.10 close; Phase 6 opened with the 304-pass baseline carried from Phase 5).
 - Phase 7 baseline: 339 pass / 0 fail / 20 E2E filtered, 42 test files, 868 expect calls (on P7.6 close; Phase 7 opened with the 339-pass baseline carried from Phase 6). v0.1 complete — every P3–P7 task is [x]; remaining release steps (`npm publish`, marketplace form, ACP registry PR) require human credentials per ROADMAP and are documented in `docs/release/publish.md`.
 - Phase 8 baseline: 384 pass / 0 fail / 20 E2E filtered, 47 test files, 935 expect calls (on P8.8 close; Phase 8 opened with the 339-pass baseline carried from Phase 7). Real ACP → Claude Code routing via DaemonProxyGateway lands end-to-end; `a2a-bridge acp` no longer falls back to the echo gateway in production. Permission-relay policy documented in `docs/design/architecture.md` §"Permission-relay policy for ACP-originated turns" (option b: bridge to ACP `session/request_permission`); daemon-side bridge mechanism landed — plugin-side MCP handler + subprocess-side AgentSideConnection bridge remain as follow-ups.
+- Phase 9 baseline: 384 pass / 0 fail / 20 E2E filtered, 47 test files, 935 expect calls (on P9.5 close; no test-count delta vs. Phase 8 — Phase 9 shipped the v0.1.0 draft release, `docs/join.md` cross-bridge skill, README "Join the bridge" section, and the CHANGELOG release-date flip. P9.4 scaffold landed but the live-systems manual verification transcript is the maintainer's before the final publish). v0.1.0 tag pushed to GitHub; draft release at <github.com/firstintent/a2a-bridge/releases/tag/v0.1.0> carries the tarball. Remaining human-gated work: publish the GitHub draft, run `npm publish`, submit the Claude Code marketplace entry, and open the ACP registry PR — all steps enumerated in `docs/release/publish.md`.
 
 ## v0.1 starting baseline
 
