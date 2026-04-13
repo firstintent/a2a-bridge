@@ -18,6 +18,9 @@ import { WebSocketListener } from "@transport/websocket";
 import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "@transport/control-protocol";
 import type { BridgeMessage } from "@messages/types";
 import { DaemonClaudeCodeGateway } from "@daemon/inbound/daemon-claude-code-gateway";
+import { Room } from "@daemon/rooms/room";
+import { RoomRouter } from "@daemon/rooms/room-router";
+import { SqliteTaskLog } from "@daemon/tasks/task-log";
 import {
   startA2AServer,
   type A2aServerHandle,
@@ -67,6 +70,15 @@ const inboundGateway = new DaemonClaudeCodeGateway({
   },
   log: (msg) => log(`[A2aGateway] ${msg}`),
 });
+
+// One daemon-wide task log; every Room tracks through this shared store
+// (rows are scoped by the room_id column). Rooms themselves only need a
+// reference to satisfy the current Room ctor signature; P4.8 migrates
+// the gateway into per-Room ownership.
+const sharedTaskStore = SqliteTaskLog.open(stateDir.taskLogFile);
+const inboundRoomRouter = new RoomRouter(
+  (id) => new Room({ id, gateway: inboundGateway, registry: sharedTaskStore }),
+);
 let nextSystemMessageId = 0;
 let codexBootstrapped = false;
 let attentionWindowTimer: ReturnType<typeof setTimeout> | null = null;
@@ -677,8 +689,9 @@ async function bootInbound() {
       agentCard: {
         url: `http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}/a2a`,
       },
-      messageStreamExecutor: createClaudeCodeExecutor({ gateway: inboundGateway }),
-      taskLogPath: stateDir.taskLogFile,
+      roomRouter: inboundRoomRouter,
+      executorFactory: (gateway) => createClaudeCodeExecutor({ gateway }),
+      registry: sharedTaskStore,
       logger: (msg) => log(`[A2aInbound] ${msg}`),
     });
     log(

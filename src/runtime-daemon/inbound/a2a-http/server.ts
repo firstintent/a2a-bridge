@@ -13,6 +13,9 @@ import {
 } from "@daemon/inbound/a2a-http/jsonrpc";
 import type { ITaskStore } from "@daemon/tasks/task-store";
 import { SqliteTaskLog } from "@daemon/tasks/task-log";
+import type { RoomRouter } from "@daemon/rooms/room-router";
+import { deriveRoomId } from "@daemon/rooms/room-id";
+import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
 import {
   createEchoExecutor,
   handleMessageStream,
@@ -46,8 +49,22 @@ export interface A2aServerConfig {
   /**
    * Executor that drives `message/stream`. Defaults to `createEchoExecutor`
    * so the server is usable in smoke tests before a peer is wired.
+   * Ignored when `roomRouter` is supplied — routing picks a per-room
+   * executor through `executorFactory` instead.
    */
   messageStreamExecutor?: MessageStreamExecutor;
+  /**
+   * When supplied, every inbound `message/stream` turn is routed through
+   * the router: the room id comes from `deriveRoomId({ contextId, env })`,
+   * and the room's `ClaudeCodeGateway` feeds `executorFactory` to build
+   * the per-request executor. ACP inbound (P5) takes the same router.
+   */
+  roomRouter?: RoomRouter;
+  /**
+   * Builds a `MessageStreamExecutor` from the selected room's gateway.
+   * Required when `roomRouter` is supplied; ignored otherwise.
+   */
+  executorFactory?: (gateway: ClaudeCodeGateway) => MessageStreamExecutor;
   /**
    * Shared task store. Callers supply an `ITaskStore` (either the
    * in-memory `TaskRegistry` or a `SqliteTaskLog`); when omitted a
@@ -88,7 +105,14 @@ export async function startA2AServer(config: A2aServerConfig): Promise<A2aServer
   const rpcPath = extractPath(card.url);
   const registry: ITaskStore =
     config.registry ?? SqliteTaskLog.open(config.taskLogPath ?? ":memory:");
-  const executor = config.messageStreamExecutor ?? createEchoExecutor();
+  const defaultExecutor = config.messageStreamExecutor ?? createEchoExecutor();
+  const roomRouter = config.roomRouter;
+  const executorFactory = config.executorFactory;
+  if (roomRouter && !executorFactory) {
+    throw new Error(
+      "startA2AServer: roomRouter requires executorFactory so each per-room gateway can drive its own message/stream executor",
+    );
+  }
 
   const handlers: JsonRpcHandlers = {
     "tasks/get": createTasksGetHandler(registry),
@@ -141,10 +165,19 @@ export async function startA2AServer(config: A2aServerConfig): Promise<A2aServer
         }
 
         if (methodName === "message/stream") {
+          const params = extractParams(body);
+          let requestExecutor: MessageStreamExecutor = defaultExecutor;
+          if (roomRouter && executorFactory) {
+            const roomId = deriveRoomId({
+              contextId: params.message.contextId,
+            });
+            const room = await roomRouter.getOrCreate(roomId);
+            requestExecutor = executorFactory(room.gateway);
+          }
           return handleMessageStream({
             rpcId: normalizeId(rpcId),
-            params: extractParams(body),
-            executor,
+            params,
+            executor: requestExecutor,
             registry,
           });
         }

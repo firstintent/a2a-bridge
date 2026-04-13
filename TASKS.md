@@ -132,7 +132,7 @@ once that phase lands.
   daemon-state-dir path. Existing in-memory tests pass against both
   implementations.
 
-- [ ] **P4.7 — Route inbound requests through `RoomRouter`.**
+- [/] **P4.7 — Route inbound requests through `RoomRouter`.**
   Acceptance: `startA2AServer` and the ACP inbound (Phase 5) accept
   a `RoomRouter` and route every inbound turn to the room derived
   from `contextId`. Daemon instantiates one `RoomRouter` shared by

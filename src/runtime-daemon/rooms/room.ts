@@ -11,7 +11,7 @@
  */
 
 import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
-import type { TaskRegistry } from "@daemon/inbound/a2a-http/task-registry";
+import type { ITaskStore } from "@daemon/tasks/task-store";
 import type { RoomId } from "@daemon/rooms/room-id";
 
 /**
@@ -27,7 +27,7 @@ export interface PeerAdapter {
 export interface RoomInit {
   id: RoomId;
   gateway: ClaudeCodeGateway;
-  registry: TaskRegistry;
+  registry: ITaskStore;
   /** Initial adapter set. Further adapters may be attached later. */
   peers?: PeerAdapter[];
 }
@@ -35,7 +35,7 @@ export interface RoomInit {
 export class Room {
   readonly id: RoomId;
   readonly gateway: ClaudeCodeGateway;
-  readonly registry: TaskRegistry;
+  readonly registry: ITaskStore;
   private readonly peers: Map<string, PeerAdapter> = new Map();
   private disposed = false;
 

@@ -1563,6 +1563,229 @@ class DaemonClaudeCodeGateway {
   }
 }
 
+// src/runtime-daemon/rooms/room.ts
+class Room {
+  id;
+  gateway;
+  registry;
+  peers = new Map;
+  disposed = false;
+  constructor(init) {
+    this.id = init.id;
+    this.gateway = init.gateway;
+    this.registry = init.registry;
+    for (const adapter of init.peers ?? [])
+      this.attachPeer(adapter);
+  }
+  attachPeer(adapter) {
+    this.ensureLive();
+    if (this.peers.has(adapter.name)) {
+      throw new Error(`Room ${this.id}: peer "${adapter.name}" already attached`);
+    }
+    this.peers.set(adapter.name, adapter);
+  }
+  getPeer(name) {
+    return this.peers.get(name);
+  }
+  peerNames() {
+    return Array.from(this.peers.keys());
+  }
+  get isDisposed() {
+    return this.disposed;
+  }
+  async dispose() {
+    if (this.disposed)
+      return;
+    this.disposed = true;
+    const adapters = Array.from(this.peers.values());
+    this.peers.clear();
+    for (const adapter of adapters) {
+      if (!adapter.dispose)
+        continue;
+      try {
+        await adapter.dispose();
+      } catch {}
+    }
+  }
+  ensureLive() {
+    if (this.disposed) {
+      throw new Error(`Room ${this.id}: cannot mutate a disposed room`);
+    }
+  }
+}
+
+// src/runtime-daemon/rooms/room-router.ts
+class RoomRouter {
+  rooms = new Map;
+  pending = new Map;
+  factory;
+  disposed = false;
+  constructor(factory) {
+    this.factory = factory;
+  }
+  async getOrCreate(id) {
+    this.ensureLive();
+    const cached = this.rooms.get(id);
+    if (cached && !cached.isDisposed)
+      return cached;
+    const inflight = this.pending.get(id);
+    if (inflight)
+      return inflight;
+    const build = (async () => {
+      const room = await this.factory(id);
+      this.rooms.set(id, room);
+      return room;
+    })().finally(() => {
+      this.pending.delete(id);
+    });
+    this.pending.set(id, build);
+    return build;
+  }
+  get(id) {
+    return this.rooms.get(id);
+  }
+  get size() {
+    return this.rooms.size;
+  }
+  async dispose(id) {
+    const room = this.rooms.get(id);
+    if (!room)
+      return;
+    this.rooms.delete(id);
+    await room.dispose();
+  }
+  async disposeAll() {
+    this.disposed = true;
+    const rooms = Array.from(this.rooms.values());
+    this.rooms.clear();
+    for (const room of rooms) {
+      try {
+        await room.dispose();
+      } catch {}
+    }
+  }
+  ensureLive() {
+    if (this.disposed) {
+      throw new Error("RoomRouter: cannot use a router after disposeAll()");
+    }
+  }
+}
+
+// src/runtime-daemon/tasks/task-log.ts
+import { Database } from "bun:sqlite";
+import { EventEmitter as EventEmitter4 } from "events";
+import { readFileSync as readFileSync3 } from "fs";
+import { fileURLToPath as fileURLToPath2 } from "url";
+import { dirname as dirname2, join as join3 } from "path";
+
+// src/runtime-daemon/rooms/room-id.ts
+var DEFAULT_ROOM_ID = "default";
+var ROOM_ENV_VAR = "A2A_BRIDGE_ROOM";
+function deriveRoomId(input = {}) {
+  const contextId = input.contextId?.trim();
+  if (contextId && contextId.length > 0) {
+    return contextId;
+  }
+  const envRoom = (input.env ?? process.env)[ROOM_ENV_VAR]?.trim();
+  if (envRoom && envRoom.length > 0) {
+    return envRoom;
+  }
+  return DEFAULT_ROOM_ID;
+}
+
+// src/runtime-daemon/tasks/task-log.ts
+var schemaPath = join3(dirname2(fileURLToPath2(import.meta.url)), "task-log-schema.sql");
+var cachedSchema;
+function loadSchema() {
+  if (cachedSchema === undefined) {
+    cachedSchema = readFileSync3(schemaPath, "utf8");
+  }
+  return cachedSchema;
+}
+function migrateTaskLogSchema(db) {
+  db.exec(loadSchema());
+}
+class SqliteTaskLog extends EventEmitter4 {
+  db;
+  now;
+  constructor(db, options = {}) {
+    super();
+    this.db = db;
+    this.now = options.now ?? (() => Date.now());
+  }
+  static open(path, options = {}) {
+    const db = new Database(path);
+    migrateTaskLogSchema(db);
+    return new SqliteTaskLog(db, options);
+  }
+  create(input) {
+    const now = this.now();
+    const status = input.status ?? { state: "submitted" };
+    const roomId = input.roomId ?? DEFAULT_ROOM_ID;
+    const row = {
+      id: input.id,
+      roomId,
+      contextId: input.contextId,
+      kind: "task",
+      status,
+      createdAt: now,
+      updatedAt: now
+    };
+    try {
+      this.db.prepare("INSERT INTO tasks (id, room_id, context_id, state, status_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(row.id, roomId, row.contextId, status.state, JSON.stringify(status), now, now);
+    } catch (err) {
+      throw new Error(`SqliteTaskLog: task ${input.id} already registered`, {
+        cause: err
+      });
+    }
+    return row;
+  }
+  get(id) {
+    const row = this.db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
+    if (!row)
+      return;
+    return this.rowToStoredTask(row);
+  }
+  updateStatus(id, status) {
+    const now = this.now();
+    this.db.prepare("UPDATE tasks SET state = ?, status_json = ?, updated_at = ? WHERE id = ?").run(status.state, JSON.stringify(status), now, id);
+  }
+  cancel(id) {
+    const now = this.now();
+    const canceled = { state: "canceled" };
+    const changes = this.db.prepare("UPDATE tasks SET state = ?, status_json = ?, updated_at = ? WHERE id = ?").run(canceled.state, JSON.stringify(canceled), now, id);
+    if (changes.changes === 0)
+      return;
+    this.emit("cancel", id);
+    return this.get(id);
+  }
+  delete(id) {
+    this.db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+  }
+  listByRoom(roomId) {
+    const rows = this.db.prepare("SELECT * FROM tasks WHERE room_id = ? ORDER BY updated_at DESC").all(roomId);
+    return rows.map((r) => this.rowToStoredTask(r));
+  }
+  get size() {
+    const row = this.db.prepare("SELECT COUNT(*) AS c FROM tasks").get();
+    return row.c;
+  }
+  close() {
+    this.db.close();
+  }
+  rowToStoredTask(row) {
+    return {
+      id: row.id,
+      roomId: row.room_id,
+      contextId: row.context_id,
+      kind: "task",
+      status: JSON.parse(row.status_json),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+}
+
 // src/shared/logger.ts
 import { appendFileSync as appendFileSync2 } from "fs";
 function createLogger(opts) {
@@ -1726,109 +1949,6 @@ function normalizeId(id) {
   if (typeof id === "string" || typeof id === "number")
     return id;
   return null;
-}
-
-// src/runtime-daemon/tasks/task-log.ts
-import { Database } from "bun:sqlite";
-import { EventEmitter as EventEmitter4 } from "events";
-import { readFileSync as readFileSync3 } from "fs";
-import { fileURLToPath as fileURLToPath2 } from "url";
-import { dirname as dirname2, join as join3 } from "path";
-
-// src/runtime-daemon/rooms/room-id.ts
-var DEFAULT_ROOM_ID = "default";
-
-// src/runtime-daemon/tasks/task-log.ts
-var schemaPath = join3(dirname2(fileURLToPath2(import.meta.url)), "task-log-schema.sql");
-var cachedSchema;
-function loadSchema() {
-  if (cachedSchema === undefined) {
-    cachedSchema = readFileSync3(schemaPath, "utf8");
-  }
-  return cachedSchema;
-}
-function migrateTaskLogSchema(db) {
-  db.exec(loadSchema());
-}
-class SqliteTaskLog extends EventEmitter4 {
-  db;
-  now;
-  constructor(db, options = {}) {
-    super();
-    this.db = db;
-    this.now = options.now ?? (() => Date.now());
-  }
-  static open(path, options = {}) {
-    const db = new Database(path);
-    migrateTaskLogSchema(db);
-    return new SqliteTaskLog(db, options);
-  }
-  create(input) {
-    const now = this.now();
-    const status = input.status ?? { state: "submitted" };
-    const roomId = input.roomId ?? DEFAULT_ROOM_ID;
-    const row = {
-      id: input.id,
-      roomId,
-      contextId: input.contextId,
-      kind: "task",
-      status,
-      createdAt: now,
-      updatedAt: now
-    };
-    try {
-      this.db.prepare("INSERT INTO tasks (id, room_id, context_id, state, status_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(row.id, roomId, row.contextId, status.state, JSON.stringify(status), now, now);
-    } catch (err) {
-      throw new Error(`SqliteTaskLog: task ${input.id} already registered`, {
-        cause: err
-      });
-    }
-    return row;
-  }
-  get(id) {
-    const row = this.db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
-    if (!row)
-      return;
-    return this.rowToStoredTask(row);
-  }
-  updateStatus(id, status) {
-    const now = this.now();
-    this.db.prepare("UPDATE tasks SET state = ?, status_json = ?, updated_at = ? WHERE id = ?").run(status.state, JSON.stringify(status), now, id);
-  }
-  cancel(id) {
-    const now = this.now();
-    const canceled = { state: "canceled" };
-    const changes = this.db.prepare("UPDATE tasks SET state = ?, status_json = ?, updated_at = ? WHERE id = ?").run(canceled.state, JSON.stringify(canceled), now, id);
-    if (changes.changes === 0)
-      return;
-    this.emit("cancel", id);
-    return this.get(id);
-  }
-  delete(id) {
-    this.db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
-  }
-  listByRoom(roomId) {
-    const rows = this.db.prepare("SELECT * FROM tasks WHERE room_id = ? ORDER BY updated_at DESC").all(roomId);
-    return rows.map((r) => this.rowToStoredTask(r));
-  }
-  get size() {
-    const row = this.db.prepare("SELECT COUNT(*) AS c FROM tasks").get();
-    return row.c;
-  }
-  close() {
-    this.db.close();
-  }
-  rowToStoredTask(row) {
-    return {
-      id: row.id,
-      roomId: row.room_id,
-      contextId: row.context_id,
-      kind: "task",
-      status: JSON.parse(row.status_json),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
-  }
 }
 
 // src/runtime-daemon/inbound/a2a-http/verdict.ts
@@ -2109,7 +2229,12 @@ async function startA2AServer(config) {
   const card = buildAgentCard(config.agentCard);
   const rpcPath = extractPath(card.url);
   const registry = config.registry ?? SqliteTaskLog.open(config.taskLogPath ?? ":memory:");
-  const executor = config.messageStreamExecutor ?? createEchoExecutor();
+  const defaultExecutor = config.messageStreamExecutor ?? createEchoExecutor();
+  const roomRouter = config.roomRouter;
+  const executorFactory = config.executorFactory;
+  if (roomRouter && !executorFactory) {
+    throw new Error("startA2AServer: roomRouter requires executorFactory so each per-room gateway can drive its own message/stream executor");
+  }
   const handlers = {
     "tasks/get": createTasksGetHandler(registry),
     "tasks/cancel": createTasksCancelHandler(registry),
@@ -2151,10 +2276,19 @@ async function startA2AServer(config) {
           rpcId = peek.id ?? null;
         } catch {}
         if (methodName === "message/stream") {
+          const params = extractParams(body);
+          let requestExecutor = defaultExecutor;
+          if (roomRouter && executorFactory) {
+            const roomId = deriveRoomId({
+              contextId: params.message.contextId
+            });
+            const room = await roomRouter.getOrCreate(roomId);
+            requestExecutor = executorFactory(room.gateway);
+          }
           return handleMessageStream({
             rpcId: normalizeId2(rpcId),
-            params: extractParams(body),
-            executor,
+            params,
+            executor: requestExecutor,
             registry
           });
         }
@@ -2242,6 +2376,8 @@ var inboundGateway = new DaemonClaudeCodeGateway({
   },
   log: (msg) => log(`[A2aGateway] ${msg}`)
 });
+var sharedTaskStore = SqliteTaskLog.open(stateDir.taskLogFile);
+var inboundRoomRouter = new RoomRouter((id) => new Room({ id, gateway: inboundGateway, registry: sharedTaskStore }));
 var nextSystemMessageId = 0;
 var codexBootstrapped = false;
 var attentionWindowTimer = null;
@@ -2728,8 +2864,9 @@ async function bootInbound() {
       agentCard: {
         url: `http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}/a2a`
       },
-      messageStreamExecutor: createClaudeCodeExecutor({ gateway: inboundGateway }),
-      taskLogPath: stateDir.taskLogFile,
+      roomRouter: inboundRoomRouter,
+      executorFactory: (gateway) => createClaudeCodeExecutor({ gateway }),
+      registry: sharedTaskStore,
       logger: (msg) => log(`[A2aInbound] ${msg}`)
     });
     log(`A2A inbound server listening on http://${A2A_INBOUND_HOST}:${A2A_INBOUND_PORT}${a2aInboundServer.rpcPath}`);
