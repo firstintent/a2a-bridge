@@ -230,7 +230,7 @@ once that phase lands.
 
 ## Phase 6 — Distribution and UX polish
 
-- [/] **P6.1 — `a2a-bridge init` command.**
+- [x] **P6.1 — `a2a-bridge init` command.**
   Acceptance: new subcommand generates a 32-byte hex bearer token,
   writes a default config file at the state-dir's `config.json`
   (host/port/token), and prints the per-client config snippets
