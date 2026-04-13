@@ -30,6 +30,7 @@ import {
   createClaudeCodeExecutor,
   createEchoExecutor,
 } from "@daemon/inbound/a2a-http/handlers/message-stream";
+import { AcpTurnHandler } from "@daemon/inbound/acp/turn-handler";
 
 interface ControlClientMeta {
   clientId: number;
@@ -71,6 +72,12 @@ const inboundGateway = new DaemonClaudeCodeGateway({
   },
   log: (msg) => log(`[A2aGateway] ${msg}`),
 });
+
+// Daemon-side handler for ACP turn relay (P8.2). Handles acp_turn_start /
+// acp_turn_cancel messages from `a2a-bridge acp` subprocesses.
+const acpTurnHandler = new AcpTurnHandler(inboundGateway, (msg) =>
+  log(`[AcpTurnHandler] ${msg}`),
+);
 
 // One daemon-wide task log; every Room tracks through this shared store
 // (rows are scoped by the room_id column).
@@ -297,6 +304,7 @@ async function startControlServer() {
       if (wasAttached) {
         detachClaude(conn, "frontend socket closed");
       }
+      acpTurnHandler.onConnectionClose(conn);
     });
 
     conn.on("error", (err) => {
@@ -330,6 +338,12 @@ function handleControlMessage(conn: Connection, raw: string) {
       return;
     case "status":
       sendStatus(conn);
+      return;
+    case "acp_turn_start":
+      acpTurnHandler.handleTurnStart(conn, message);
+      return;
+    case "acp_turn_cancel":
+      acpTurnHandler.handleTurnCancel(conn, message);
       return;
     case "claude_to_codex": {
       if (message.message.source !== "claude") {
