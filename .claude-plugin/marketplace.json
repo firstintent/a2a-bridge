@@ -1,22 +1,50 @@
 {
   "name": "a2a-bridge",
+  "description": "Protocol-level bridge that lets Claude Code be called by any Agent2Agent (A2A) client and call out to other AI coding agents (Codex, OpenClaw, Hermes) through a uniform adapter interface.",
   "owner": {
     "name": "FirstIntent",
     "url": "https://github.com/firstintent/a2a-bridge"
   },
-  "metadata": {
-    "description": "Marketplace for the a2a-bridge Claude Code plugin and supporting runtime integration."
-  },
   "plugins": [
     {
       "name": "a2a-bridge",
-      "description": "Bridge Claude Code with other AI coding agents (Codex, OpenClaw, Hermes, ...) through a shared daemon and bidirectional channel tooling.",
+      "description": "Bidirectional bridge between Claude Code and external AI coding agents. Exposes Claude Code as an A2A server (Gemini CLI, any A2A client) and as an ACP agent (OpenClaw, Zed, VS Code); routes outbound tool calls to Codex, OpenClaw, and Hermes adapters through a shared daemon with per-room task logs and verification-artifact support.",
       "version": "0.0.1",
       "author": {
-        "name": "FirstIntent"
+        "name": "FirstIntent",
+        "url": "https://github.com/firstintent"
       },
       "source": "./plugins/a2a-bridge",
-      "category": "development"
+      "category": "development",
+      "keywords": [
+        "multi-agent",
+        "a2a",
+        "agent2agent",
+        "acp",
+        "agent-client-protocol",
+        "codex",
+        "openclaw",
+        "hermes",
+        "gemini-cli",
+        "zed",
+        "vscode",
+        "bridge",
+        "claude-code"
+      ],
+      "tags": [
+        "bridge",
+        "multi-agent",
+        "inbound",
+        "outbound"
+      ],
+      "screenshots": [
+        "docs/screenshots/gemini-cli-handshake.png",
+        "docs/screenshots/zed-acp-session.png",
+        "docs/screenshots/daemon-status.png"
+      ],
+      "homepage": "https://github.com/firstintent/a2a-bridge#readme",
+      "repository": "https://github.com/firstintent/a2a-bridge",
+      "license": "MIT"
     }
   ]
 }

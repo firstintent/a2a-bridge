@@ -266,7 +266,7 @@ once that phase lands.
   copy-pasteable and tested locally. The existing "When to use" /
   "When NOT to use" sections stay unchanged.
 
-- [ ] **P6.6 — Polish `.claude-plugin/marketplace.json`.**
+- [/] **P6.6 — Polish `.claude-plugin/marketplace.json`.**
   Acceptance: marketplace entry has `categories`, `tags`, full
   description, screenshots placeholder paths, and `homepage`. Schema
   validates against the marketplace JSON schema. No behavior change.
