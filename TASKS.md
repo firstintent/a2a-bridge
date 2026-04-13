@@ -30,7 +30,7 @@ once that phase lands.
 
 ## Phase 3 — Verification and delegation patterns
 
-- [ ] **P3.0 — Sanity-check the v0.1 starting baseline.**
+- [/] **P3.0 — Sanity-check the v0.1 starting baseline.**
   Acceptance: `bun run check:ci` passes; record `N pass / 0 fail` in
   this file's footer for Phase 3. No other changes.
 
@@ -342,7 +342,7 @@ once that phase lands.
 
 ## Phase footers (filled by the loop)
 
-- Phase 3 baseline:
+- Phase 3 baseline: 223 pass / 0 fail (carried forward from Phase 2; P3.0 only verified CI still green).
 - Phase 4 baseline:
 - Phase 5 baseline:
 - Phase 6 baseline:
