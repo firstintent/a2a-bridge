@@ -122,6 +122,66 @@ After restarting Gemini CLI, `@a2a-bridge` in a prompt routes the
 message to the paired Claude Code session; the streamed reply comes
 back as A2A `artifact-update` events.
 
+## Connect ACP clients
+
+Editor-style clients (Zed, VS Code, OpenClaw via `acpx`) speak the
+Agent Client Protocol over stdio, not A2A. Run
+`a2a-bridge acp` as the agent command and each of these clients can
+drive Claude Code through a2a-bridge with no per-client adapter.
+
+v0.1 ships an in-process echo reply (`Echo: <prompt>`) so you can
+validate the wire end-to-end before daemon-backed ACP→CC routing
+lands post-v0.1.
+
+### OpenClaw (`acpx.config.agents`)
+
+```json
+{
+  "agents": {
+    "a2a-bridge": {
+      "command": "a2a-bridge",
+      "args": ["acp"],
+      "description": "Claude Code via a2a-bridge (ACP over stdio)"
+    }
+  }
+}
+```
+
+### Zed (`agent_servers` in `settings.json`)
+
+```json
+{
+  "agent_servers": {
+    "a2a-bridge": {
+      "command": "a2a-bridge",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+### VS Code ACP plugin
+
+Any VS Code extension that accepts a `command` + `args` pair for an
+external ACP agent uses the same shape:
+
+```json
+{
+  "acp.agents": [
+    {
+      "name": "a2a-bridge",
+      "command": "a2a-bridge",
+      "args": ["acp"]
+    }
+  ]
+}
+```
+
+Each client's exact settings key may differ as plugins evolve — the
+constants are always `command: "a2a-bridge"` and `args: ["acp"]`.
+The subcommand binds `process.stdin` / `process.stdout`, so no ports
+are opened and no bearer token is required.
+
 ## Skill templates
 
 Copy-pasteable prompt scaffolds for the multi-agent patterns a2a-bridge
