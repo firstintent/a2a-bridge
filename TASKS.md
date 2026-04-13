@@ -316,7 +316,7 @@ once that phase lands.
   `release/acp-registry/README.md` explains the PR process the user
   follows to submit.
 
-- [ ] **P7.4 — Claude Code marketplace submission package.**
+- [x] **P7.4 — Claude Code marketplace submission package.**
   Acceptance: `release/marketplace/SUBMIT.md` lists every artifact
   Anthropic requires (description, screenshots paths, plugin
   manifest validation steps) plus the submission URL. All referenced
