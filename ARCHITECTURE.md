@@ -40,11 +40,13 @@ src/
       peer-adapter.ts  IPeerAdapter contract
       peer-factory.ts
       codex/
-      openclaw/        scaffold; Phase 5
-      hermes/          scaffold; Phase 6
-    inbound/           A2A server (external -> CC); Phase 2
-    rooms/             RoomRouter; Phase 4
-    tasks/             Task lifecycle + store; Phase 4
+      openclaw/        scaffold; outbound ships in v0.2
+      hermes/          scaffold; outbound ships in v0.2
+    inbound/
+      a2a-http/        A2A server (external -> CC)
+      acp/             ACP stdio server
+    rooms/             RoomRouter + Room
+    tasks/             Task lifecycle + SqliteTaskLog
     daemon.ts          daemon process entrypoint
   cli/             user-facing CLI; also hosts cross-runtime
                    integration tests
@@ -100,20 +102,20 @@ Bun process, optionally on a different host. Owns:
   unix-socket for same-host agents, TLS TCP for remote.
 - **InboundServices** — multi-protocol shims that all converge on a
   shared `ClaudeCodeGateway`:
-  - A2A InboundService (HTTP + JSON-RPC + SSE) — Phase 2
+  - A2A InboundService (HTTP + JSON-RPC + SSE).
   - ACP InboundService (stdio JSON-RPC, via `a2a-bridge acp`
-    subcommand) — Phase 5
-  - MCP InboundService (HTTP/SSE/stdio) — v0.2
+    subcommand).
+  - MCP InboundService (HTTP/SSE/stdio) — v0.2.
 - **PeerAdapter instances** — one `IPeerAdapter` per active peer
   connection. Adapters translate per-peer wire formats into
   `PeerAdapterEvents` and consume `injectMessage(text)`.
 - **RoomRouter** — `Map<RoomId, Room>`. Each `Room` owns its own
   Claude Code connection slot, peer adapter set, message log, and
   subscriber list. Room isolation prevents task cross-talk across
-  concurrent Claude Code sessions. Phase 4.
+  concurrent Claude Code sessions.
 - **TaskLog** — SQLite persistence of in-flight and recent tasks
   (across all inbound protocols) so that Claude Code restarts do not
-  lose context. Phase 4.
+  lose context. Backed by `bun:sqlite` at `<stateDir>/tasks.db`.
 
 ### Peer adapter contract (`IPeerAdapter`)
 
@@ -127,18 +129,18 @@ private to the implementations.
 
 ## Protocol matrix
 
-| Counterparty       | Native wire                        | a2a-bridge module    | Direction         | Phase |
-|--------------------|------------------------------------|----------------------|-------------------|-------|
-| Claude Code        | MCP Channels (stdio)               | channel plugin       | ↔ (always)        | 1     |
-| Codex              | App-server JSON-RPC over WebSocket | CodexAdapter         | ↔                 | 1     |
-| Any A2A client     | A2A (JSON-RPC + SSE)               | A2A InboundService   | client → CC       | 2     |
-| OpenClaw / Zed /   | ACP (JSON-RPC 2.0 over stdio)      | ACP InboundService   | client → CC       | 5     |
-|  VS Code / Hermes  |                                    | (`a2a-bridge acp`)   |                   |       |
-| MCP clients        | MCP (HTTP/SSE/stdio)               | MCP InboundService   | client → CC       | v0.2  |
-|  (Cursor, Claude   |                                    |                      |                   |       |
-|   Desktop)         |                                    |                      |                   |       |
-| OpenClaw (peer)    | Gateway WS + Ed25519 handshake     | OpenClawAdapter      | ↔                 | v0.2  |
-| Hermes (peer)      | Zed ACP (JSON-RPC 2.0 over stdio)  | HermesAdapter        | CC → Hermes only  | v0.2  |
+| Counterparty       | Native wire                        | a2a-bridge module    | Direction         | Status |
+|--------------------|------------------------------------|----------------------|-------------------|--------|
+| Claude Code        | MCP Channels (stdio)               | channel plugin       | ↔ (always)        | v0.1   |
+| Codex              | App-server JSON-RPC over WebSocket | CodexAdapter         | ↔                 | v0.1   |
+| Any A2A client     | A2A (JSON-RPC + SSE)               | A2A InboundService   | client → CC       | v0.1   |
+| OpenClaw / Zed /   | ACP (JSON-RPC 2.0 over stdio)      | ACP InboundService   | client → CC       | v0.1   |
+|  VS Code / Hermes  |                                    | (`a2a-bridge acp`)   |                   |        |
+| MCP clients        | MCP (HTTP/SSE/stdio)               | MCP InboundService   | client → CC       | v0.2   |
+|  (Cursor, Claude   |                                    |                      |                   |        |
+|   Desktop)         |                                    |                      |                   |        |
+| OpenClaw (peer)    | Gateway WS + Ed25519 handshake     | OpenClawAdapter      | ↔                 | v0.2   |
+| Hermes (peer)      | Zed ACP (JSON-RPC 2.0 over stdio)  | HermesAdapter        | CC → Hermes only  | v0.2   |
 
 a2a-bridge does not run A2A to its Codex/OpenClaw/Hermes peers —
 those have their own protocols and no A2A support. a2a-bridge is the
@@ -263,7 +265,7 @@ clients.
 The design principles behind these contracts live in
 [`POSITIONING.md`](./POSITIONING.md).
 
-### Verification artifact (Phase 3)
+### Verification artifact
 
 Verification is the canonical, validated multi-agent pattern.
 a2a-bridge ships a first-class artifact shape for it so that a
@@ -297,7 +299,7 @@ Shape:
 Callers that do not opt into the structured shape receive plain
 text as today.
 
-### return_format hint (Phase 3)
+### return_format hint
 
 Callers express context-protection intent by passing a
 `return_format` field in the A2A `Message.metadata`:

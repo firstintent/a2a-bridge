@@ -11,6 +11,19 @@ most tasks should still run on a single well-prompted Claude Code
 session — a2a-bridge ships capability for the cases where that is
 genuinely insufficient.
 
+## Status
+
+**v0.1 (shipped).** Phases 1–7 complete. A2A + ACP inbound, Codex
+outbound, RoomRouter + SQLite TaskLog, verification artifact +
+`return_format` hint, `a2a-bridge init / doctor / daemon` UX, CI +
+release workflow, marketplace + ACP-registry submission packages.
+See [`CHANGELOG.md`](./CHANGELOG.md).
+
+**v0.2 (planned).** Outbound OpenClaw + Hermes adapters, MCP
+inbound, TLS listener. Each item needs live external infrastructure
+or client software that the autonomous loop cannot provision; see
+the "v0.2 backlog" section at the bottom of this file.
+
 ## Phase 1 — Foundation (done)
 
 - Vendor import from `raysonmeng/agent-bridge` with MIT attribution
@@ -25,7 +38,7 @@ genuinely insufficient.
 - Architecture boundaries enforced by dependency-cruiser via
   `bun run lint:deps`.
 
-## Phase 2 — InboundService v0 (A2A server)
+## Phase 2 — InboundService v0 (A2A server) (done)
 
 **Why first.** One feature unlocks the broadest audience: any A2A
 client (Gemini CLI today, every A2A peer that follows) can drive
@@ -50,7 +63,7 @@ This is the biggest breadth-per-effort ratio in the roadmap.
 entry pointing at the daemon and has Claude Code answering their
 queries.
 
-## Phase 3 — Verification and delegation patterns
+## Phase 3 — Verification and delegation patterns (done)
 
 **Why next.** The article's validated pattern is the verification
 subagent. Phase 2 makes inbound connectivity exist; Phase 3 makes
@@ -79,7 +92,7 @@ differentiates from "just another MCP server."
 documented skill, from a single Claude Code session, targeting the
 CodexAdapter, returning structured pass/fail.
 
-## Phase 4 — RoomRouter and TaskLog
+## Phase 4 — RoomRouter and TaskLog (done)
 
 **Why here.** Phase 3's context-protection and parallel patterns
 expose scale needs: multiple concurrent Claude Code sessions per
@@ -96,7 +109,7 @@ daemon, task history that survives plugin restarts.
 daemon run in parallel without cross-talk; a task survives a plugin
 reconnect.
 
-## Phase 5 — ACP inbound (multi-client reach)
+## Phase 5 — ACP inbound (multi-client reach) (done)
 
 **Why next, ahead of outbound peers.** Phase 2 covered the A2A
 inbound surface that Gemini CLI (and future A2A peers) speak. The
@@ -122,7 +135,7 @@ cannot provision; they move to v0.2.
 register `a2a-bridge acp` as a custom ACP agent and have Claude Code
 answering their prompts end-to-end with streamed replies.
 
-## Phase 6 — Distribution and UX polish
+## Phase 6 — Distribution and UX polish (done)
 
 **Why before release packaging.** The build chain produces a tarball
 today, but first-run UX still requires reading source. Shipping v0.1
@@ -148,7 +161,7 @@ for every supported integration.
 && a2a-bridge daemon start` works, with all four client integrations
 documented and locally verified.
 
-## Phase 7 — Release packaging
+## Phase 7 — Release packaging (done)
 
 **Why this seam.** v0.1 release requires steps the autonomous loop
 cannot fully execute — npm publish, marketplace submission, registry
