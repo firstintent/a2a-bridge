@@ -145,7 +145,7 @@ once that phase lands.
   spawns a Codex adapter on demand (preserving today's single-CC
   behavior). All existing daemon tests pass.
 
-- [/] **P4.9 — Per-Room idle / shutdown.**
+- [x] **P4.9 — Per-Room idle / shutdown.**
   Acceptance: `RoomRouter.dispose(roomId)` tears down the room's
   adapters and tasks. Daemon idle-shutdown logic operates per-Room
   rather than globally — the daemon stops when *all* rooms are idle,
