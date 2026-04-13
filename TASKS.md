@@ -481,7 +481,7 @@ once that phase lands.
   the tarball. Release stays as a draft (do NOT publish-npm yet);
   the tarball URL is what the skill will reference.
 
-- [ ] **P9.2 — `docs/join.md` — cross-bridge join skill.**
+- [x] **P9.2 — `docs/join.md` — cross-bridge join skill.**
   Acceptance: a single self-contained Markdown document a user can
   hand to either Claude Code or OpenClaw via "Read <url> and
   follow it." The document detects the host environment (by
