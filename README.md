@@ -16,60 +16,73 @@
 
 ---
 
-## Quick Install
+## Quick Start — Claude Code + OpenClaw in 5 minutes
+
+Both sides install the same package. The difference is what you run
+after install.
+
+**Step 1 — On the Claude Code machine** (the server that answers prompts):
 
 ```bash
-npm i -g a2a-bridge
-a2a-bridge --version    # a2a-bridge v0.1.0
+npm i -g a2a-bridge                 # install bridge
+a2a-bridge init                     # mint token + install CC plugin
+a2a-bridge claude                   # launch Claude Code with bridge
 ```
+
+Claude Code is now listening for inbound prompts.
+
+**Step 2 — On the OpenClaw machine** (the client that sends prompts):
+
+```bash
+npm i -g a2a-bridge                 # same package, same install
+```
+
+Add to `acpx.config.agents`:
+
+```json
+{ "agents": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
+```
+
+Send a prompt through OpenClaw — it reaches Claude Code through the
+bridge, Claude Code reasons about it, and the reply streams back.
+
+> **Same machine?** Both sides can run on one box — no extra
+> config needed. **Different machines?** Set
+> `A2A_BRIDGE_CONTROL_HOST=0.0.0.0` on the server and
+> `A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws` on the client.
+
+> **AI-assisted:** tell each AI
+> `Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.`
+> — it detects which side it is and self-installs.
 
 > From source: `git clone https://github.com/firstintent/a2a-bridge.git && cd a2a-bridge && bun install && bun run build:plugin && npm pack && npm i -g ./a2a-bridge-*.tgz`
 
 ---
 
-## Getting Started
+## Connect other agents
 
-### Server side (Claude Code)
+The same bridge works for every A2A / ACP agent — just swap the
+client config:
 
-```bash
-a2a-bridge init           # mint token + install plugin
-a2a-bridge claude         # launch CC with bridge plugin
-```
+| Agent | Protocol | Config |
+|-------|----------|--------|
+| **OpenClaw** | ACP | `acpx.config.agents` → `{ "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } }` |
+| **Hermes Agent** | ACP | Same pattern as OpenClaw |
+| **Zed** | ACP | `settings.json` → `{ "agent_servers": { "a2a-bridge": { ... } } }` |
+| **VS Code** | ACP | `{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }` |
+| **Gemini CLI** | A2A | `~/.gemini/settings.json` → `{ "remoteAgents": [{ "agentCardUrl": "http://localhost:4520/...", "auth": { "token": "<TOKEN>" } }] }` |
+| **Codex** | peer | `a2a-bridge codex` — Claude Code ↔ Codex bidirectional |
 
-Or headless in tmux (run bridge CC in background while your primary session works):
+### Headless server (tmux)
+
+Run the bridge CC in background while your primary Claude Code
+session works on something else:
 
 ```bash
 a2a-bridge daemon start
 tmux new-session -d -s cc-bridge "a2a-bridge claude"
 tmux send-keys -t cc-bridge Enter
 ```
-
-> **AI-assisted:** tell Claude Code `Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.` — it does everything above automatically.
-
-### Client side (pick your agent)
-
-| Agent | Config |
-|-------|--------|
-| **OpenClaw** | `acpx.config.agents` → `{ "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } }` |
-| **Zed** | `settings.json` → `{ "agent_servers": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }` |
-| **VS Code** | `{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }` |
-| **Hermes Agent** | Same ACP pattern as Zed / VS Code |
-| **Gemini CLI** | `~/.gemini/settings.json` → `{ "remoteAgents": [{ "name": "a2a-bridge", "agentCardUrl": "http://localhost:4520/.well-known/agent-card.json", "auth": { "type": "bearer", "token": "<TOKEN>" } }] }` |
-
-Cross-host (daemon on server, agent on laptop):
-
-```bash
-export A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws
-export A2A_BRIDGE_ACP_SKIP_DAEMON=1
-```
-
-### Peer side (bidirectional)
-
-```bash
-a2a-bridge codex    # Claude Code ↔ Codex (requires codex on PATH)
-```
-
-OpenClaw / Hermes outbound peer adapters → v0.2.
 
 ---
 
