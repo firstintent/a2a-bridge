@@ -44,8 +44,23 @@ export interface RunAcpOptions {
 export async function runAcp(
   args: string[],
   options: RunAcpOptions = {},
-): Promise<AcpInboundService> {
-  void args;
+): Promise<AcpInboundService | void> {
+  // Parse CLI flags from args
+  const parsed = parseAcpArgs(args);
+
+  // --url flag overrides the control WS URL (takes precedence over env)
+  if (parsed.url) {
+    options = { ...options, controlWsUrl: parsed.url };
+  }
+
+  // One-shot prompt mode: a2a-bridge acp -p "hello" / --prompt "hello"
+  if (parsed.prompt !== undefined) {
+    if (!parsed.prompt) {
+      console.error("Usage: a2a-bridge acp -p <prompt>");
+      process.exit(1);
+    }
+    return runOneShotPrompt(parsed.prompt, options);
+  }
 
   const stdio = options.stdio ?? defaultStdio();
   const gateway = await resolveGateway(options);
@@ -53,6 +68,54 @@ export async function runAcp(
   const service = new AcpInboundService({ stdio, gateway });
   await service.start();
   return service;
+}
+
+function parseAcpArgs(args: string[]): {
+  prompt?: string;
+  url?: string;
+} {
+  let prompt: string | undefined;
+  let url: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if ((arg === "-p" || arg === "--prompt") && i + 1 < args.length) {
+      prompt = args[++i] ?? "";
+    } else if ((arg === "--url" || arg === "-u") && i + 1 < args.length) {
+      url = args[++i];
+    } else if (arg?.startsWith("--url=")) {
+      url = arg.slice(6);
+    }
+  }
+
+  return { prompt, url };
+}
+
+/**
+ * One-shot mode: connect to daemon, send one prompt, print the reply,
+ * exit. Useful for smoke-testing the bridge from the command line.
+ */
+async function runOneShotPrompt(
+  text: string,
+  options: RunAcpOptions,
+): Promise<void> {
+  const gateway = await resolveGateway(options);
+  const turn = gateway.startTurn(text);
+
+  const chunks: string[] = [];
+  await new Promise<void>((resolve, reject) => {
+    turn.on("chunk", (c: string) => chunks.push(c));
+    turn.on("complete", () => resolve());
+    turn.on("error", (err: Error) => reject(err));
+  });
+
+  const reply = chunks.join("");
+  console.log(reply);
+
+  // Clean shutdown
+  if ("disconnect" in gateway && typeof gateway.disconnect === "function") {
+    await (gateway as { disconnect: () => Promise<void> }).disconnect();
+  }
 }
 
 async function resolveGateway(options: RunAcpOptions): Promise<ClaudeCodeGateway> {

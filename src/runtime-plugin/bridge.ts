@@ -99,7 +99,7 @@ async function connectToDaemon(isReconnect = false) {
     if (!isReconnect) {
       void claude.pushNotification(systemMessage(
         "system_bridge_ready",
-        "✅ A2aBridge bridge is ready. Daemon connected. Start Codex in another terminal with: a2a-bridge codex",
+        "✅ A2aBridge bridge is ready. Daemon connected. ACP clients can now send prompts.",
       ));
     }
   } catch (err: any) {

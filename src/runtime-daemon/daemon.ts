@@ -735,13 +735,20 @@ async function bootCodex() {
     emitToClaude(systemMessage("system_waiting", currentWaitingMessage()));
     broadcastStatus();
   } catch (err: any) {
-    log(`Failed to start Codex: ${err.message}`);
-    emitToClaude(
-      systemMessage(
-        "system_codex_start_failed",
-        `❌ A2aBridge failed to start Codex app-server: ${err.message}`,
-      ),
-    );
+    // Codex is optional — don't alarm the user if it's just not
+    // installed. The ACP bridge works fine without Codex.
+    const msg = err.message ?? String(err);
+    log(`Codex start skipped: ${msg}`);
+    if (!msg.includes("not found in $PATH") && !msg.includes("Executable not found")) {
+      // Only push a notification for unexpected failures, not for
+      // "codex binary missing" which is the normal bridge-only case.
+      emitToClaude(
+        systemMessage(
+          "system_codex_start_failed",
+          `⚠️ Codex app-server failed to start: ${msg}. The ACP bridge still works — Codex is optional.`,
+        ),
+      );
+    }
     broadcastStatus();
   }
 }

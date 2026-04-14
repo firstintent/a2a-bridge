@@ -131,7 +131,7 @@ describe("E2E: a2a-bridge acp CLI subcommand", () => {
       ensureDaemon: false,
       controlWsUrl: `ws://127.0.0.1:${port}/ws`,
     });
-    register(() => service.stop());
+    register(() => service && "stop" in service ? service.stop() : undefined);
 
     const updates: CapturedUpdate[] = [];
     const recordingClient = makeRecordingClient(updates);
