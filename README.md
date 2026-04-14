@@ -24,8 +24,13 @@ after install.
 **Step 1 — On the Claude Code machine** (the server that answers prompts):
 
 ```bash
-npm i -g a2a-bridge                 # install bridge
-a2a-bridge init                     # mint token + install CC plugin
+curl -fsSL https://raw.githubusercontent.com/firstintent/a2a-bridge/main/scripts/install.sh | bash
+```
+
+The script checks prerequisites (bun, npm, claude), installs
+a2a-bridge globally, and runs `a2a-bridge init`. Then start:
+
+```bash
 a2a-bridge claude                   # launch Claude Code with bridge
 ```
 
