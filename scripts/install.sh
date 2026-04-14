@@ -82,8 +82,15 @@ info "a2a-bridge $(a2a-bridge --version 2>/dev/null)"
 # --- Configure ---------------------------------------------------------------
 
 echo ""
-echo "${BOLD}Configuring...${RESET}"
+echo "${BOLD}Registering plugin + configuring...${RESET}"
 
+# Register the local marketplace and install the CC channel plugin.
+# `dev` is idempotent — safe to re-run.
+a2a-bridge dev 2>&1 | while IFS= read -r line; do
+  echo "  $line"
+done
+
+# Mint bearer token + write state-dir config (if not already present).
 a2a-bridge init --print 2>&1 | while IFS= read -r line; do
   echo "  $line"
 done

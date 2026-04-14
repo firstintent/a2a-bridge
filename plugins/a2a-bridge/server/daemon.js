@@ -982,17 +982,25 @@ class TuiConnectionState {
 import { spawn as spawn2, execFileSync } from "child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync, openSync, closeSync, constants } from "fs";
 import { fileURLToPath } from "url";
-var DAEMON_ENTRY = process.env.A2A_BRIDGE_DAEMON_ENTRY ?? "./daemon.ts";
-var DAEMON_PATH = fileURLToPath(new URL(DAEMON_ENTRY, import.meta.url));
+function resolveDaemonPath(explicitPath) {
+  if (process.env.A2A_BRIDGE_DAEMON_ENTRY) {
+    return fileURLToPath(new URL(process.env.A2A_BRIDGE_DAEMON_ENTRY, `file://${process.cwd()}/`));
+  }
+  if (explicitPath)
+    return explicitPath;
+  return fileURLToPath(new URL("./daemon.ts", import.meta.url));
+}
 
 class DaemonLifecycle {
   stateDir;
   controlPort;
   log;
+  daemonPath;
   constructor(opts) {
     this.stateDir = opts.stateDir;
     this.controlPort = opts.controlPort;
     this.log = opts.log;
+    this.daemonPath = resolveDaemonPath(opts.daemonEntryPath);
   }
   get healthUrl() {
     return `http://127.0.0.1:${this.controlPort}/healthz`;
@@ -1123,7 +1131,7 @@ class DaemonLifecycle {
   launch() {
     this.stateDir.ensure();
     this.log(`Launching detached daemon on control port ${this.controlPort}`);
-    const daemonProc = spawn2(process.execPath, ["run", DAEMON_PATH], {
+    const daemonProc = spawn2(process.execPath, ["run", this.daemonPath], {
       cwd: process.cwd(),
       env: {
         ...process.env,

@@ -21,8 +21,10 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { DaemonLifecycle } from "@shared/daemon-lifecycle";
 import { StateDirResolver } from "@shared/state-dir";
+import { findPackageRoot } from "./pkg-root";
 
 export type DaemonSubcommand = "start" | "stop" | "status" | "logs";
 
@@ -138,10 +140,17 @@ export async function runDaemon(
 function defaultLifecycle(): LifecycleView {
   const stateDir = new StateDirResolver();
   const controlPort = parseInt(process.env.A2A_BRIDGE_CONTROL_PORT ?? "4512", 10);
+  // Resolve the daemon bundle from the installed package root so
+  // `a2a-bridge daemon start` works from the global npm install.
+  let daemonEntryPath: string | undefined;
+  try {
+    daemonEntryPath = join(findPackageRoot(), "plugins", "a2a-bridge", "server", "daemon.js");
+  } catch {}
   const lifecycle = new DaemonLifecycle({
     stateDir,
     controlPort,
     log: () => {},
+    daemonEntryPath,
   });
   // `DaemonLifecycle` keeps `stateDir` private; expose it via this
   // wrapper so the view's logs subcommand can reach the log file path.

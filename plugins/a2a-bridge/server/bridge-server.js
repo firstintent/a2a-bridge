@@ -13666,7 +13666,7 @@ import { appendFileSync } from "fs";
 // package.json
 var package_default = {
   name: "a2a-bridge",
-  version: "0.1.0",
+  version: "0.1.1",
   description: "Bidirectional bridge between Claude Code and other AI coding agents (Codex, OpenClaw, Hermes, ...) over the MCP Channels protocol.",
   type: "module",
   bin: {
@@ -14162,17 +14162,25 @@ class DaemonClient extends EventEmitter2 {
 import { spawn, execFileSync } from "child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync, openSync, closeSync, constants } from "fs";
 import { fileURLToPath } from "url";
-var DAEMON_ENTRY = process.env.A2A_BRIDGE_DAEMON_ENTRY ?? "./daemon.ts";
-var DAEMON_PATH = fileURLToPath(new URL(DAEMON_ENTRY, import.meta.url));
+function resolveDaemonPath(explicitPath) {
+  if (process.env.A2A_BRIDGE_DAEMON_ENTRY) {
+    return fileURLToPath(new URL(process.env.A2A_BRIDGE_DAEMON_ENTRY, `file://${process.cwd()}/`));
+  }
+  if (explicitPath)
+    return explicitPath;
+  return fileURLToPath(new URL("./daemon.ts", import.meta.url));
+}
 
 class DaemonLifecycle {
   stateDir;
   controlPort;
   log;
+  daemonPath;
   constructor(opts) {
     this.stateDir = opts.stateDir;
     this.controlPort = opts.controlPort;
     this.log = opts.log;
+    this.daemonPath = resolveDaemonPath(opts.daemonEntryPath);
   }
   get healthUrl() {
     return `http://127.0.0.1:${this.controlPort}/healthz`;
@@ -14303,7 +14311,7 @@ class DaemonLifecycle {
   launch() {
     this.stateDir.ensure();
     this.log(`Launching detached daemon on control port ${this.controlPort}`);
-    const daemonProc = spawn(process.execPath, ["run", DAEMON_PATH], {
+    const daemonProc = spawn(process.execPath, ["run", this.daemonPath], {
       cwd: process.cwd(),
       env: {
         ...process.env,

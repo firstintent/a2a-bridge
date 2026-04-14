@@ -3,15 +3,27 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync, openSync, closeSyn
 import { fileURLToPath } from "node:url";
 import { StateDirResolver } from "@shared/state-dir";
 
-// When bundled into a Claude Code plugin, the frontend runs from the plugin
-// cache directory and must launch the sibling daemon bundle from there.
-const DAEMON_ENTRY = process.env.A2A_BRIDGE_DAEMON_ENTRY ?? "./daemon.ts";
-const DAEMON_PATH = fileURLToPath(new URL(DAEMON_ENTRY, import.meta.url));
+// Resolve the daemon entry script. Order of precedence:
+// 1. Explicit env var A2A_BRIDGE_DAEMON_ENTRY (absolute or relative to cwd)
+// 2. Constructor-supplied daemonEntryPath (the CLI uses this to point at
+//    the installed daemon bundle)
+// 3. Fallback: "./daemon.ts" relative to this module (works in the
+//    plugin bundle where bridge-server.js and daemon.js are siblings,
+//    and in source-tree dev mode where daemon.ts is a sibling).
+function resolveDaemonPath(explicitPath?: string): string {
+  if (process.env.A2A_BRIDGE_DAEMON_ENTRY) {
+    return fileURLToPath(new URL(process.env.A2A_BRIDGE_DAEMON_ENTRY, `file://${process.cwd()}/`));
+  }
+  if (explicitPath) return explicitPath;
+  return fileURLToPath(new URL("./daemon.ts", import.meta.url));
+}
 
 export interface DaemonLifecycleOptions {
   stateDir: StateDirResolver;
   controlPort: number;
   log: (msg: string) => void;
+  /** Absolute path to the daemon entry script. When omitted, resolved via env or import.meta.url. */
+  daemonEntryPath?: string;
 }
 
 /**
@@ -23,10 +35,13 @@ export class DaemonLifecycle {
   private readonly controlPort: number;
   private readonly log: (msg: string) => void;
 
+  private readonly daemonPath: string;
+
   constructor(opts: DaemonLifecycleOptions) {
     this.stateDir = opts.stateDir;
     this.controlPort = opts.controlPort;
     this.log = opts.log;
+    this.daemonPath = resolveDaemonPath(opts.daemonEntryPath);
   }
 
   get healthUrl(): string {
@@ -194,7 +209,7 @@ export class DaemonLifecycle {
     this.stateDir.ensure();
     this.log(`Launching detached daemon on control port ${this.controlPort}`);
 
-    const daemonProc = spawn(process.execPath, ["run", DAEMON_PATH], {
+    const daemonProc = spawn(process.execPath, ["run", this.daemonPath], {
       cwd: process.cwd(),
       env: {
         ...process.env,
