@@ -55,36 +55,87 @@ cd a2a-bridge && bun install && bun run build:plugin
 npm pack && npm i -g ./a2a-bridge-*.tgz
 ```
 
-## Connect your agents
+## Set up the server side (Claude Code)
 
-### Claude Code (CC side)
+The **server** is the Claude Code session that other agents call
+into. It runs the daemon + channel plugin and accepts inbound
+requests from all connected clients.
 
-Claude Code is the brain of the bridge. Two deployment modes:
+> **AI-assisted setup:** tell Claude Code
+> `Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.`
+> — it auto-runs the steps below. Skip this section if you prefer
+> the one-liner.
 
-**Interactive** — start a Claude Code session with the plugin loaded:
+**Interactive** — start Claude Code with the bridge plugin:
 
 ```bash
 a2a-bridge claude
 ```
 
-All inbound prompts arrive as channel messages; CC reasons about them
-and replies via the built-in `reply` tool.
+All inbound prompts arrive as channel messages; CC reasons and
+replies automatically via the `reply` tool.
 
-**Tmux (headless)** — spawn a second CC from an existing session:
+**Tmux (headless)** — spawn a bridge CC from an existing session,
+useful when your primary CC is doing other work:
 
 ```bash
 a2a-bridge dev                                            # register plugin (first time)
 A2A_BRIDGE_CONTROL_HOST=0.0.0.0 a2a-bridge daemon start  # expose to network
-tmux new-session -d -s cc-bridge "a2a-bridge claude"      # headless CC
+tmux new-session -d -s cc-bridge "a2a-bridge claude"      # headless bridge CC
 tmux send-keys -t cc-bridge Enter                         # approve dev channels
 ```
 
-Your primary session keeps working; the tmux CC serves bridge
-traffic in the background. Use `tmux attach -t cc-bridge` to inspect.
+Check with `tmux attach -t cc-bridge`. Set
+`A2A_BRIDGE_CONTROL_HOST=0.0.0.0` when clients connect from a
+different machine.
 
-### Gemini CLI (A2A over HTTP)
+## Set up a client (call Claude Code)
 
-Add to `~/.gemini/settings.json`:
+A **client** is any agent that sends prompts to Claude Code through
+the bridge. Clients speak one of two protocols:
+
+- **ACP** (stdio) — OpenClaw, Zed, VS Code, Hermes. The client
+  spawns `a2a-bridge acp` as a subprocess; no HTTP port or bearer
+  token needed.
+- **A2A** (HTTP) — Gemini CLI and other A2A-speaking agents. They
+  call the daemon's JSON-RPC endpoint with a bearer token.
+
+> **AI-assisted setup:** tell your ACP client
+> `Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.`
+> — it detects which agent it is and self-configures. Skip the
+> manual steps below if you prefer the one-liner.
+
+### OpenClaw (ACP)
+
+```json
+{ "agents": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
+```
+
+Cross-host (daemon on a different machine):
+
+```bash
+export A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws
+export A2A_BRIDGE_ACP_SKIP_DAEMON=1
+```
+
+### Zed (ACP)
+
+```json
+{ "agent_servers": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
+```
+
+### VS Code (ACP)
+
+```json
+{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }
+```
+
+### Hermes Agent (ACP)
+
+Same pattern as Zed / VS Code. Hermes-as-peer (Claude Code calling
+Hermes) ships in v0.2 via a dedicated `HermesAdapter`.
+
+### Gemini CLI (A2A)
 
 ```json
 {
@@ -96,65 +147,29 @@ Add to `~/.gemini/settings.json`:
 }
 ```
 
-Restart Gemini CLI; `@a2a-bridge` routes prompts to Claude Code.
+Add to `~/.gemini/settings.json`. Restart Gemini CLI;
+`@a2a-bridge` routes prompts to Claude Code.
 
-### OpenClaw (ACP over stdio)
+## Set up a peer (bidirectional)
 
-Add to `acpx.config.agents`:
+A **peer** is an agent that Claude Code can delegate tasks *to* —
+the bridge carries messages in both directions.
 
-```json
-{ "agents": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
-```
-
-No bearer token needed. For cross-host (daemon on a remote server):
-
-```bash
-export A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws
-export A2A_BRIDGE_ACP_SKIP_DAEMON=1
-```
-
-### Zed (ACP)
-
-Add to Zed `settings.json`:
-
-```json
-{ "agent_servers": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
-```
-
-### VS Code (ACP)
-
-Any VS Code ACP extension:
-
-```json
-{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }
-```
-
-### Hermes Agent (ACP)
-
-Same ACP pattern as Zed / VS Code above. Hermes-as-peer (Claude Code
-calling Hermes) ships in v0.2 via a dedicated `HermesAdapter`.
-
-### Codex (peer adapter)
-
-Claude Code can delegate tasks to Codex:
+### Codex
 
 ```bash
 a2a-bridge codex    # starts Codex TUI + app-server proxy
 ```
 
-Requires `codex` on `PATH`. Once the TUI creates a thread, messages
-flow bidirectionally between Claude Code and Codex.
+Requires `codex` on `PATH`. Once the TUI creates a thread, Claude
+Code and Codex exchange messages bidirectionally.
 
-## Join the bridge (self-install skill)
+### OpenClaw / Hermes (outbound)
 
-Hand this URL to **both** AIs and each self-installs its side:
-
-```
-Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
-```
-
-Works for Claude Code, OpenClaw, Zed, and VS Code — step 0 detects
-the host and branches. Full text: [`docs/join.md`](./docs/join.md).
+Outbound peer adapters (Claude Code → OpenClaw, Claude Code →
+Hermes) ship in v0.2. Today these agents connect as **clients**
+(calling Claude Code); v0.2 adds adapters for the reverse
+direction.
 
 ## Advanced
 
