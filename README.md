@@ -31,19 +31,34 @@ a2a-bridge claude                   # launch Claude Code with bridge
 
 Claude Code is now listening for inbound prompts.
 
-**Step 2 — On the OpenClaw machine** (the client that sends prompts):
+**Step 2 — On the OpenClaw / Hermes Agent machine** (the client that sends prompts):
+
+Recommended — tell the agent:
+
+```
+Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
+```
+
+The agent detects it is on the client side, installs a2a-bridge,
+registers itself, and smoke-tests the connection automatically.
+Full text: [`docs/join.md`](./docs/join.md)
+
+<details>
+<summary><b>Manual setup</b></summary>
 
 ```bash
 npm i -g a2a-bridge                 # same package, same install
 ```
 
-Add to `acpx.config.agents`:
+Add to `acpx.config.agents` (OpenClaw) or your agent's config:
 
 ```json
 { "agents": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
 ```
 
-Send a prompt through OpenClaw — it reaches Claude Code through the
+</details>
+
+Send a prompt through the agent — it reaches Claude Code through the
 bridge, Claude Code reasons about it, and the reply streams back.
 
 **Same machine?** Both sides run on one box, no extra config.
@@ -53,18 +68,9 @@ bridge, Claude Code reasons about it, and the reply streams back.
 # on the server (Claude Code side)
 export A2A_BRIDGE_CONTROL_HOST=0.0.0.0
 
-# on the client (OpenClaw side)
+# on the client (OpenClaw / Hermes side)
 export A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws
 ```
-
-**Agent-assisted setup** — tell each agent:
-
-```
-Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
-```
-
-The agent detects which side it is and self-installs.
-Full text: [`docs/join.md`](./docs/join.md)
 
 <details>
 <summary><b>Install from source</b></summary>
