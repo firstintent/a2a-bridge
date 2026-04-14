@@ -13666,7 +13666,7 @@ import { appendFileSync } from "fs";
 // package.json
 var package_default = {
   name: "a2a-bridge",
-  version: "0.1.1",
+  version: "0.1.2",
   description: "Bidirectional bridge between Claude Code and other AI coding agents (Codex, OpenClaw, Hermes, ...) over the MCP Channels protocol.",
   type: "module",
   bin: {
@@ -14673,7 +14673,7 @@ async function connectToDaemon(isReconnect = false) {
     await daemonClient.connect();
     daemonClient.attachClaude();
     if (!isReconnect) {
-      claude.pushNotification(systemMessage("system_bridge_ready", "\u2705 A2aBridge bridge is ready. Daemon connected. Start Codex in another terminal with: a2a-bridge codex"));
+      claude.pushNotification(systemMessage("system_bridge_ready", "\u2705 A2aBridge bridge is ready. Daemon connected. ACP clients can now send prompts."));
     }
   } catch (err) {
     log(`Failed to connect to daemon: ${err.message}`);
