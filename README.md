@@ -46,8 +46,6 @@ Add to `acpx.config.agents`:
 Send a prompt through OpenClaw — it reaches Claude Code through the
 bridge, Claude Code reasons about it, and the reply streams back.
 
----
-
 **Same machine?** Both sides run on one box, no extra config.
 **Different machines?** Two env vars:
 
@@ -59,8 +57,6 @@ export A2A_BRIDGE_CONTROL_HOST=0.0.0.0
 export A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws
 ```
 
----
-
 **Agent-assisted setup** — tell each agent:
 
 ```
@@ -69,8 +65,6 @@ Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md 
 
 The agent detects which side it is and self-installs.
 Full text: [`docs/join.md`](./docs/join.md)
-
----
 
 <details>
 <summary><b>Install from source</b></summary>
