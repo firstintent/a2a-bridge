@@ -15,9 +15,6 @@
 
 import { Database } from "bun:sqlite";
 import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import { DEFAULT_ROOM_ID, type RoomId } from "@daemon/rooms/room-id";
 import type {
   ITaskStore,
@@ -31,15 +28,25 @@ export interface SqliteDatabaseLike {
   exec(sql: string): void;
 }
 
-const schemaPath = join(dirname(fileURLToPath(import.meta.url)), "task-log-schema.sql");
-
-let cachedSchema: string | undefined;
+// Schema inlined so the bundled daemon.js works without a sibling
+// .sql file in the npm package. Canonical source: task-log-schema.sql
+// (kept as documentation; this string is the runtime authority).
+const TASK_LOG_SCHEMA = `
+CREATE TABLE IF NOT EXISTS tasks (
+  id          TEXT PRIMARY KEY,
+  room_id     TEXT NOT NULL,
+  context_id  TEXT NOT NULL,
+  state       TEXT NOT NULL,
+  status_json TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_room ON tasks(room_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_room_updated ON tasks(room_id, updated_at DESC);
+`;
 
 function loadSchema(): string {
-  if (cachedSchema === undefined) {
-    cachedSchema = readFileSync(schemaPath, "utf8");
-  }
-  return cachedSchema;
+  return TASK_LOG_SCHEMA;
 }
 
 /**

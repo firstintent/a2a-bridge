@@ -1725,16 +1725,21 @@ function deriveRoomId(input = {}) {
 // src/runtime-daemon/tasks/task-log.ts
 import { Database } from "bun:sqlite";
 import { EventEmitter as EventEmitter4 } from "events";
-import { readFileSync as readFileSync3 } from "fs";
-import { fileURLToPath as fileURLToPath2 } from "url";
-import { dirname as dirname2, join as join3 } from "path";
-var schemaPath = join3(dirname2(fileURLToPath2(import.meta.url)), "task-log-schema.sql");
-var cachedSchema;
+var TASK_LOG_SCHEMA = `
+CREATE TABLE IF NOT EXISTS tasks (
+  id          TEXT PRIMARY KEY,
+  room_id     TEXT NOT NULL,
+  context_id  TEXT NOT NULL,
+  state       TEXT NOT NULL,
+  status_json TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_room ON tasks(room_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_room_updated ON tasks(room_id, updated_at DESC);
+`;
 function loadSchema() {
-  if (cachedSchema === undefined) {
-    cachedSchema = readFileSync3(schemaPath, "utf8");
-  }
-  return cachedSchema;
+  return TASK_LOG_SCHEMA;
 }
 function migrateTaskLogSchema(db) {
   db.exec(loadSchema());
