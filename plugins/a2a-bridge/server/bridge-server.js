@@ -13665,7 +13665,7 @@ import { randomUUID } from "crypto";
 import { appendFileSync } from "fs";
 // package.json
 var package_default = {
-  name: "@firstintent/a2a-bridge",
+  name: "a2a-bridge",
   version: "0.1.0",
   description: "Bidirectional bridge between Claude Code and other AI coding agents (Codex, OpenClaw, Hermes, ...) over the MCP Channels protocol.",
   type: "module",

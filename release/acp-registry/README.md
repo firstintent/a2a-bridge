@@ -21,7 +21,7 @@ The submission uses the **npx distribution** form:
 ```json
 "distribution": {
   "npx": {
-    "package": "@firstintent/a2a-bridge@0.1.0",
+    "package": "a2a-bridge@0.1.0",
     "args": ["acp"]
   }
 }
@@ -30,7 +30,7 @@ The submission uses the **npx distribution** form:
 An editor that honors the registry resolves this into:
 
 ```
-npx -y @firstintent/a2a-bridge@0.1.0 acp
+npx -y a2a-bridge@0.1.0 acp
 ```
 
 which boots `a2a-bridge acp` — the ACP-over-stdio server the
@@ -39,7 +39,7 @@ which boots `a2a-bridge acp` — the ACP-over-stdio server the
 ## Submission process
 
 1. **Verify release is live on npm.** The `package` field pins
-   `@firstintent/a2a-bridge@0.1.0`; the registry CI fetches that
+   `a2a-bridge@0.1.0`; the registry CI fetches that
    exact version to sanity-check the distribution. Do not submit
    before `npm publish` has completed.
 2. **Fork** `agentclientprotocol/registry`.

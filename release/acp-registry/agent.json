@@ -10,7 +10,7 @@
   "license": "MIT",
   "distribution": {
     "npx": {
-      "package": "@firstintent/a2a-bridge@0.1.0",
+      "package": "a2a-bridge@0.1.0",
       "args": ["acp"]
     }
   }

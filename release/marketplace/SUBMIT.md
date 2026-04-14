@@ -125,7 +125,7 @@ Run down this list the day of submission:
 
 - [ ] `bun run check:ci` green on `dev`
 - [ ] 0.1.0 tag pushed and `release.yml` workflow published the
-      npm tarball (`npm view @firstintent/a2a-bridge@0.1.0`
+      npm tarball (`npm view a2a-bridge@0.1.0`
       returns metadata)
 - [ ] `claude plugin validate plugins/a2a-bridge` exits 0
 - [ ] `claude plugin validate .claude-plugin/marketplace.json`

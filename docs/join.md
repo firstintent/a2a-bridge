@@ -40,7 +40,7 @@ the bearer token to the user so they can paste it on the ACP side.
 ### 1. Install
 
 ```bash
-npm i -g https://github.com/firstintent/a2a-bridge/releases/download/v0.1.0/firstintent-a2a-bridge-0.1.0.tgz
+npm i -g https://github.com/firstintent/a2a-bridge/releases/download/v0.1.0/a2a-bridge-0.1.0.tgz
 ```
 
 Verify the install:
@@ -116,7 +116,7 @@ through to verify the real CC path works.
 ### 1. Install
 
 ```bash
-npm i -g https://github.com/firstintent/a2a-bridge/releases/download/v0.1.0/firstintent-a2a-bridge-0.1.0.tgz
+npm i -g https://github.com/firstintent/a2a-bridge/releases/download/v0.1.0/a2a-bridge-0.1.0.tgz
 ```
 
 Verify:
