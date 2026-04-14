@@ -507,7 +507,7 @@ once that phase lands.
   Short two-sentence intro on what happens after both sides run
   the skill. Links to `docs/join.md` for the full text.
 
-- [/] **P9.4 — End-to-end manual verification of the cross-bridge
+- [x] **P9.4 — End-to-end manual verification of the cross-bridge
   loop.**
   Acceptance: on the maintainer's machine, execute the skill
   against a live Claude Code session and a live OpenClaw session,
