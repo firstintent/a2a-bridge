@@ -121,23 +121,19 @@ tmux send-keys -t cc-bridge Enter
 Star topology — the daemon is the hub; every agent connects to it.
 
 ```
-                          ┌───────────────┐
-          A2A (HTTP)      │               │      MCP Channel
-     ┌──────────────────▶ │               │ ◀──────────────────┐
-     │                    │  a2a-bridge   │                    │
-     │   ACP (stdio)      │    daemon     │   WS JSON-RPC      │
-     │ ┌────────────────▶ │  (RoomRouter) │ ◀────────────────┐ │
-     │ │                  │               │                  │ │
-     │ │  ACP (stdio)     │               │  ACP [v0.2]      │ │
-     │ │ ┌──────────────▶ │               │ ◀──────────────┐ │ │
-     │ │ │                └───────────────┘                │ │ │
-     │ │ │                                                 │ │ │
-     │ │ │                  C L I E N T S                  │ │ │
-     │ │ │              (call Claude Code)          S E R V E R + P E E R S
-     │ │ │                                        (answer / collaborate)
-     │ │ │                                                 │ │ │
-  Gemini CLI    OpenClaw    Zed / VS Code       Hermes   Codex  Claude Code
-               Hermes Agent                    [v0.2]          (CC plugin)
+          Gemini CLI        OpenClaw        Zed        VS Code       Hermes Agent
+              │                │             │            │               │
+              │ A2A            │ ACP         │ ACP       │ ACP          │ ACP
+              ▼                ▼             ▼            ▼               ▼
+        ┌─────────────────────────────────────────────────────────────────────┐
+        │                        a2a-bridge daemon                           │
+        │                         (RoomRouter)                               │
+        └──────────────┬──────────────────┬──────────────────┬───────────────┘
+                       │                  │                  │
+                       ▼                  ▼                  ▼
+                  Claude Code          Codex           Hermes [v0.2]
+                  (CC plugin)       (WS JSON-RPC)     (ACP adapter)
+                    server             peer               peer
 ```
 
 | Agent | Role | Status |
