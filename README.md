@@ -2,365 +2,238 @@
 
 [![CI](https://github.com/firstintent/a2a-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/firstintent/a2a-bridge/actions/workflows/ci.yml)
 
-Protocol-level plumbing that lets Claude Code be **called by** any
-Agent2Agent (A2A) client and that lets Claude Code **call out to**
-other AI coding agents — Codex, OpenClaw, Hermes — through a uniform
-adapter interface.
+Connect Claude Code with other AI coding agents. OpenClaw, Gemini
+CLI, Zed, VS Code, Codex, Hermes — each speaks its own protocol;
+a2a-bridge translates so they can call Claude Code (and each other)
+without anyone switching tools.
 
-Built on Anthropic's Claude Code Channels protocol. Inspired by
-[`raysonmeng/agent-bridge`](https://github.com/raysonmeng/agent-bridge),
-generalized with a proper port/adapter split, A2A inbound, and
-multi-machine deployment.
+## Example scenarios
 
-## Status
+a2a-bridge is plumbing, not a prescription. Use it when multi-agent
+collaboration actually helps:
 
-Early development. See [`docs/design/roadmap.md`](./docs/design/roadmap.md)
-for the phased plan;
-see [`docs/design/positioning.md`](./docs/design/positioning.md) for
-the design principles.
+- **Verification** — ask a second agent to review your primary
+  agent's output against explicit criteria. The one pattern that
+  consistently justifies the extra tokens.
+- **Context protection** — a subtask would dump 1000+ tokens of logs
+  into the main session. Push it to a peer; take the summary back.
+- **Parallel work** — truly independent subtasks (separate files,
+  separate investigations) run concurrently on different agents and
+  merge at the end.
+- **Cross-tool access** — you need Codex's CLI skills or OpenClaw's
+  orchestration without leaving your Claude Code session.
 
-## When to use
+**Skip it** when the task is sequential, when the "multi-agent" split
+is by job title (planner / implementer / reviewer), or when token
+cost matters more than the collaboration benefit. Multi-agent chains
+typically consume 3-10x more tokens than a single well-prompted
+agent.
 
-a2a-bridge is plumbing, not a prescription. Reach for it only when
-multi-agent collaboration is the right call:
-
-- **Verification.** You want a second agent to check your primary
-  agent's work against explicit criteria. This is the one pattern
-  Anthropic's own research flags as consistently worth the extra
-  tokens.
-- **Context protection.** A subtask would otherwise pollute the main
-  session with 1000+ tokens of irrelevant output (long log digs,
-  codebase audits, transcript analysis). Push it to a peer; take the
-  summary back.
-- **Parallel independent work.** Truly independent subtasks (separate
-  components, separate investigations) can run concurrently on
-  different agents and merge at the end.
-- **Cross-tool access.** You need to use a capability only one agent
-  has (Codex's CLI skills, OpenClaw's orchestration, Hermes'
-  reasoning) without switching your working environment.
-
-## When NOT to use
-
-- The task is sequential and dependent. A single well-prompted agent
-  is simpler and cheaper.
-- The "multi-agent" split is by job title (planner / implementer /
-  tester / reviewer). This pattern loses fidelity through repeated
-  handoffs and almost always underperforms a single agent with the
-  same tools.
-- You're only trying to "try more models." Model-switching inside a
-  single agent context usually beats spawning a second agent.
-- The token cost matters. Multi-agent chains typically consume
-  3–10× more tokens than the equivalent single-agent workflow. Only
-  pay that cost when one of the above benefits justifies it.
-
-## Architecture (high-level)
-
-```
-┌──────────────┐   MCP stdio (channel)   ┌──────────────────┐   control WS (TLS)   ┌──────────────┐
-│ Claude Code  │ ◀────────────────────▶  │ a2a-bridge plugin │ ◀──────────────────▶ │   daemon     │
-└──────────────┘                         └──────────────────┘                      └──────┬───────┘
-                                                                                          │
-                                                                 ┌────────────────────────┼────────────────────────┐
-                                                                 ▼                        ▼                        ▼
-                                                          InboundService            CodexAdapter          OpenClawAdapter / HermesAdapter
-                                                          (A2A server,              (WS JSON-RPC)         (WS + Ed25519 / stdio ACP)
-                                                           JSON-RPC + SSE)
-```
-
-- **Plugin** (foreground): a Claude Code MCP channel plugin. Injects
-  inbound peer messages as `<channel>` tags; exposes outbound tools
-  (`reply`, `cancel_turn`, `switch_peer`, ...).
-- **Daemon** (background, optionally remote): owns the
-  `IPeerAdapter` instances, hosts the InboundService A2A server,
-  authenticates plugin clients, persists per-room task logs.
-- **Peer adapters**: uniform interface (`start`, `injectMessage`,
-  events `ready` / `agentMessage` / `turnStarted` / `turnCompleted` /
-  ...). One implementation per target agent.
-- **InboundService**: HTTPS + SSE A2A server so any A2A client
-  (Gemini CLI today, any A2A peer tomorrow) can drive Claude Code
-  remotely.
-
-See [`docs/design/architecture.md`](./docs/design/architecture.md) for the protocol matrix,
-the minimum A2A server surface, and the three deployment shapes.
-
-## Supported peers (planned)
-
-| Peer      | Transport              | Status  |
-|-----------|------------------------|---------|
-| Codex     | WebSocket JSON-RPC     | Phase 1 |
-| *any A2A* | HTTPS + SSE (inbound)  | Phase 2 |
-| OpenClaw  | WebSocket + Ed25519    | Phase 5 |
-| Hermes    | stdio (Zed ACP)        | Phase 6 |
-
-## Install (npm)
-
-a2a-bridge ships as a single global CLI, `a2a-bridge` (with a short
-alias `abg`). Both names are installed together:
+## Quick start
 
 ```bash
-npm i -g a2a-bridge
-a2a-bridge --version
+# 1. Install
+npm i -g a2a-bridge          # or: npm i -g ./a2a-bridge-*.tgz from source
+a2a-bridge --version          # a2a-bridge v0.1.0
+
+# 2. Configure
+a2a-bridge init               # mint bearer token + install channel plugin
+a2a-bridge doctor             # preflight checklist
+
+# 3. Start the daemon
+a2a-bridge daemon start
+a2a-bridge daemon status      # confirm pid + ports
 ```
 
 Requires Bun >= 1.3 on `PATH` (`a2a-bridge doctor` confirms).
 
-For contributors working from source:
+From source:
 
 ```bash
 git clone https://github.com/firstintent/a2a-bridge.git
-cd a2a-bridge
-bun install
-bun run build:plugin
-npm pack                            # produces a2a-bridge-<version>.tgz
-npm i -g ./a2a-bridge-*.tgz         # install the local tarball
+cd a2a-bridge && bun install && bun run build:plugin
+npm pack && npm i -g ./a2a-bridge-*.tgz
 ```
 
-`bun run check:ci` runs the full test suite, lint:deps, build, and
-plugin-manifest check before you cut a tarball.
+## Connect your agents
 
-## Configure (init + doctor)
-
-Two subcommands get a fresh machine ready in under a minute:
-
-```bash
-a2a-bridge init       # mint a 32-byte bearer token + write config.json
-a2a-bridge doctor     # preflight checklist (bun, ports, SDK, plugin, state-dir)
-```
-
-`init` is idempotent — re-running prints the existing config without
-rotating the token. Pass `--force` when you want a fresh token. The
-command also emits copy-pasteable Gemini CLI, OpenClaw, and Zed
-snippets keyed to the token it just wrote.
-
-`doctor` exits non-zero when any required check fails (bun missing
-or too old, ACP SDK missing, state-dir unwritable) and prints
-PASS / WARN / FAIL lines for the advisory checks (port in use, CC
-plugin discoverable, `init` already run).
-
-After both pass, start the daemon:
-
-```bash
-a2a-bridge daemon start
-a2a-bridge daemon status
-a2a-bridge daemon logs --tail 50
-a2a-bridge daemon stop
-```
-
-## Join the bridge
-
-Hand the join skill to **both** AIs and each self-installs its
-side — no manual port / token juggling in the middle.  After both
-halves run, the ACP-side AI can drive the CC-side AI end-to-end
-through the bridge.
-
-```
-Claude Code:   Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
-OpenClaw:      Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
-```
-
-The same URL also works for Zed and the VS Code ACP extension —
-the skill's step 0 asks the host AI to identify itself and branches
-accordingly.  Full text lives in
-[`docs/join.md`](./docs/join.md).
-
-## Deploy Claude Code (CC side)
+### Claude Code (CC side)
 
 Claude Code is the brain of the bridge. Two deployment modes:
 
-**Standard — interactive session:**
+**Interactive** — start a Claude Code session with the plugin loaded:
 
 ```bash
-a2a-bridge init     # mint token + install channel plugin
-a2a-bridge claude   # launches `claude --channels` with the plugin
+a2a-bridge claude
 ```
 
-This starts an interactive Claude Code session with the a2a-bridge
-plugin loaded. All inbound prompts (from OpenClaw, Gemini CLI, etc.)
-arrive as channel messages; CC reasons about them and replies using
-the built-in `reply` tool.
+All inbound prompts arrive as channel messages; CC reasons about them
+and replies via the built-in `reply` tool.
 
-**Tmux — headless bridge CC from an existing session:**
-
-If you already have a Claude Code session running (e.g. an autonomous
-loop), it can spawn a second CC as the bridge endpoint:
+**Tmux (headless)** — spawn a second CC from an existing session:
 
 ```bash
-# From inside your existing Claude Code, or any terminal:
-a2a-bridge dev                                          # register plugin (first time only)
-A2A_BRIDGE_CONTROL_HOST=0.0.0.0 a2a-bridge daemon start  # expose daemon to network
-tmux new-session -d -s cc-bridge "a2a-bridge claude"    # bridge CC in background
-tmux send-keys -t cc-bridge Enter                       # approve dev-channels prompt
+a2a-bridge dev                                            # register plugin (first time)
+A2A_BRIDGE_CONTROL_HOST=0.0.0.0 a2a-bridge daemon start  # expose to network
+tmux new-session -d -s cc-bridge "a2a-bridge claude"      # headless CC
+tmux send-keys -t cc-bridge Enter                         # approve dev channels
 ```
 
-The tmux CC runs headlessly, serving ACP/A2A traffic while your
-primary session keeps working. Check it with `tmux attach -t cc-bridge`.
-Set `A2A_BRIDGE_CONTROL_HOST=0.0.0.0` when ACP clients connect from
-a different machine.
+Your primary session keeps working; the tmux CC serves bridge
+traffic in the background. Use `tmux attach -t cc-bridge` to inspect.
 
-## Deploy Codex (peer adapter)
+### Gemini CLI (A2A over HTTP)
 
-Codex is a peer agent — Claude Code can delegate tasks to it.
-
-```bash
-a2a-bridge codex    # starts the Codex TUI + app-server proxy
-```
-
-Requires `codex` on `PATH`. The Codex adapter connects via WebSocket
-JSON-RPC to Codex's app-server. Once the TUI creates a thread,
-the bridge is ready for bidirectional message exchange between Claude
-Code and Codex.
-
-## Connect Gemini CLI (A2A)
-
-Gemini CLI speaks A2A over HTTP. Add a `remoteAgents` entry in
-`~/.gemini/settings.json`:
+Add to `~/.gemini/settings.json`:
 
 ```json
 {
-  "remoteAgents": [
-    {
-      "name": "a2a-bridge",
-      "agentCardUrl": "http://localhost:4520/.well-known/agent-card.json",
-      "auth": { "type": "bearer", "token": "<TOKEN_FROM_INIT>" }
-    }
-  ]
+  "remoteAgents": [{
+    "name": "a2a-bridge",
+    "agentCardUrl": "http://localhost:4520/.well-known/agent-card.json",
+    "auth": { "type": "bearer", "token": "<TOKEN_FROM_INIT>" }
+  }]
 }
 ```
 
-Replace `<TOKEN_FROM_INIT>` with the bearer token `a2a-bridge init`
-printed. Restart Gemini CLI; `@a2a-bridge` in a prompt routes to
-Claude Code.
+Restart Gemini CLI; `@a2a-bridge` routes prompts to Claude Code.
 
-## Connect OpenClaw (ACP)
+### OpenClaw (ACP over stdio)
 
-OpenClaw speaks ACP over stdio. Add to `acpx.config.agents`:
+Add to `acpx.config.agents`:
 
 ```json
-{
-  "agents": {
-    "a2a-bridge": {
-      "command": "a2a-bridge",
-      "args": ["acp"]
-    }
-  }
-}
+{ "agents": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
 ```
 
-For cross-host connections (OpenClaw on laptop, daemon on server):
+No bearer token needed. For cross-host (daemon on a remote server):
 
 ```bash
 export A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws
 export A2A_BRIDGE_ACP_SKIP_DAEMON=1
 ```
 
-No bearer token needed — ACP connections inherit filesystem trust
-on the stdio link.
+### Zed (ACP)
 
-## Connect Zed (ACP)
-
-Add to Zed's `settings.json` under `agent_servers`:
+Add to Zed `settings.json`:
 
 ```json
-{
-  "agent_servers": {
-    "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] }
-  }
-}
+{ "agent_servers": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
 ```
 
-Restart Zed; select `a2a-bridge` in the agent picker.
+### VS Code (ACP)
 
-## Connect VS Code (ACP)
-
-Any VS Code ACP extension uses:
+Any VS Code ACP extension:
 
 ```json
-{
-  "acp.agents": [
-    { "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }
-  ]
-}
+{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }
 ```
 
-The settings key varies by extension — the command is always
-`a2a-bridge acp`.
+### Hermes Agent (ACP)
 
-## Connect Hermes Agent (ACP)
+Same ACP pattern as Zed / VS Code above. Hermes-as-peer (Claude Code
+calling Hermes) ships in v0.2 via a dedicated `HermesAdapter`.
 
-Hermes speaks ACP over stdio (same as Zed). Register it identically
-to the Zed / VS Code pattern above. Hermes-as-peer (Claude Code
-calling Hermes) is planned for v0.2 via a dedicated `HermesAdapter`.
+### Codex (peer adapter)
 
-## Troubleshooting
+Claude Code can delegate tasks to Codex:
 
-`a2a-bridge doctor` surfaces most misconfigurations before they bite.
-When a subcommand prints an `error: / fix:` block, the fix line names
-the exact command or environment variable to try next. The common
+```bash
+a2a-bridge codex    # starts Codex TUI + app-server proxy
+```
+
+Requires `codex` on `PATH`. Once the TUI creates a thread, messages
+flow bidirectionally between Claude Code and Codex.
+
+## Join the bridge (self-install skill)
+
+Hand this URL to **both** AIs and each self-installs its side:
+
+```
+Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
+```
+
+Works for Claude Code, OpenClaw, Zed, and VS Code — step 0 detects
+the host and branches. Full text: [`docs/join.md`](./docs/join.md).
+
+## Advanced
+
+### Skill templates
+
+Copy-paste prompt scaffolds for the patterns a2a-bridge is built for:
+
+- [`skills/verify/SKILL.md`](./skills/verify/SKILL.md) — structured
+  pass/fail/needs-info verdict from a peer.
+- [`skills/context-protect/SKILL.md`](./skills/context-protect/SKILL.md) —
+  push long digs to a peer with `return_format: "summary"`.
+- [`skills/parallel/SKILL.md`](./skills/parallel/SKILL.md) — spawn N
+  peers on independent subtasks and merge.
+
+Runnable `curl` + SDK examples:
+[`docs/guides/cookbook.md`](./docs/guides/cookbook.md).
+
+### Troubleshooting
+
+`a2a-bridge doctor` surfaces most issues. When a subcommand prints
+`error: / fix:`, the fix line names the exact command to run. Common
 failures:
 
-- **Port 4520 already in use** — another process is listening on the
-  default A2A port. Stop it, or export `A2A_BRIDGE_A2A_PORT=<free
-  port>` before `a2a-bridge daemon start` and update the Gemini CLI
-  snippet to match.
-- **No bearer token configured** — the A2A inbound endpoint cannot
-  authenticate callers. Run `a2a-bridge init` to mint one, or export
-  `A2A_BRIDGE_BEARER_TOKEN` in the daemon's environment.
-- **Claude Code channel plugin not installed** — Claude Code cannot
-  reach the daemon. Run `a2a-bridge init` (or `a2a-bridge dev` when
-  working from a source checkout) to install it.
-- **`@agentclientprotocol/sdk` missing** — the ACP inbound service
-  cannot boot. Run `bun install` in the project root to fetch the
-  SDK from npm.
-- **State-dir unwritable** — the daemon cannot persist its pid file,
-  task log, or status.json. `doctor` flags this as a required fail;
-  set `A2A_BRIDGE_STATE_DIR=<writable path>` before retrying.
+- **Port in use** — `A2A_BRIDGE_A2A_PORT=<free port>` before daemon
+  start.
+- **No bearer token** — run `a2a-bridge init`.
+- **Plugin not installed** — run `a2a-bridge init` or `a2a-bridge dev`.
+- **ACP SDK missing** — `bun install` in the project root.
 
-For more involved issues (stuck turns, crashed peers, plugin-daemon
-disconnects), `a2a-bridge daemon logs --tail 200` shows the most
-recent daemon activity.
+Full logs: `a2a-bridge daemon logs --tail 200`.
 
-## Skill templates
+### Environment variables
 
-Copy-pasteable prompt scaffolds for the multi-agent patterns a2a-bridge
-is designed for. Each skill documents when to use it, the wire protocol,
-and a worked example.
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `A2A_BRIDGE_BEARER_TOKEN` | (from init) | A2A HTTP endpoint auth |
+| `A2A_BRIDGE_A2A_PORT` | `4520` | A2A listener port |
+| `A2A_BRIDGE_CONTROL_PORT` | `4512` | Daemon control plane port |
+| `A2A_BRIDGE_CONTROL_HOST` | `127.0.0.1` | Control plane bind address (`0.0.0.0` for remote) |
+| `A2A_BRIDGE_CONTROL_URL` | auto | Full WS URL for ACP subprocess (`ws://host:port/ws`) |
+| `A2A_BRIDGE_ACP_SKIP_DAEMON` | unset | Skip daemon auto-start in `a2a-bridge acp` |
+| `A2A_BRIDGE_STATE_DIR` | `~/.local/state/a2a-bridge` | Config, logs, task DB |
 
-- [`skills/verify/SKILL.md`](./skills/verify/SKILL.md) — delegate a
-  check to a peer agent and receive a structured pass/fail/needs-info
-  verdict instead of free-form text.
-- [`skills/context-protect/SKILL.md`](./skills/context-protect/SKILL.md) —
-  push a long log dig, audit, or transcript analysis to a peer with
-  `return_format: "summary"` and keep the primary session's context
-  focused on the conclusion.
-- [`skills/parallel/SKILL.md`](./skills/parallel/SKILL.md) — spawn N
-  peers on genuinely independent subtasks (different files, modules,
-  or investigations), await all of them, and merge.
+## Architecture
 
-For end-to-end runnable `curl` + SDK examples of all three patterns
-(plus a rough token-cost reference), see
-[`docs/guides/cookbook.md`](./docs/guides/cookbook.md). For how the daemon isolates
-concurrent sessions and what survives a restart, see
+```
+┌──────────────┐   MCP stdio (channel)   ┌──────────────────┐   control WS   ┌──────────────┐
+│ Claude Code  │ ◀────────────────────▶  │ a2a-bridge plugin │ ◀────────────▶ │   daemon     │
+└──────────────┘                         └──────────────────┘                └──────┬───────┘
+                                                                                    │
+                                                               ┌────────────────────┼────────────────────┐
+                                                               ▼                    ▼                    ▼
+                                                        InboundService        CodexAdapter       OpenClaw / Hermes
+                                                        (A2A + ACP)           (WS JSON-RPC)      (v0.2)
+```
+
+- **Plugin** — Claude Code MCP channel plugin. Pushes inbound
+  messages as `<channel>` tags; exposes `reply` + `get_messages`
+  tools.
+- **Daemon** — background process owning peer adapters, A2A/ACP
+  inbound services, room router, and SQLite task log.
+- **Peer adapters** — one `IPeerAdapter` per target agent. Uniform
+  interface (`start`, `injectMessage`, events).
+- **InboundService** — A2A (HTTP/SSE) + ACP (stdio) servers so
+  external clients can drive Claude Code.
+
+Protocol matrix, deployment shapes, and the full adapter contract:
+[`docs/design/architecture.md`](./docs/design/architecture.md).
+Session isolation and restart semantics:
 [`docs/guides/rooms.md`](./docs/guides/rooms.md).
 
 ## Releasing
 
-Maintainers cutting a release follow
-[`docs/release/publish.md`](./docs/release/publish.md) — the
-11-step runbook covering bump check → CHANGELOG → tag push →
-`release.yml` → manual `npm publish --otp` → marketplace form →
-ACP registry PR → post-release smoke.
-
-Before opening the tag, run the pre-release gate:
+Maintainers follow [`docs/release/publish.md`](./docs/release/publish.md).
+Pre-release gate:
 
 ```bash
 bash scripts/check-release-ready.sh
 ```
-
-It asserts version alignment across all manifests, that
-`CHANGELOG.md` has an entry for the current version, that
-`bun run check:ci` is green, and that every artifact under
-`release/` and `docs/release/` the runbook needs is present.
-Exits non-zero on any failure.
 
 ## License
 
