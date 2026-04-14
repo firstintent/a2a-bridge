@@ -14170,6 +14170,14 @@ function resolveDaemonPath(explicitPath) {
     return explicitPath;
   return fileURLToPath(new URL("./daemon.ts", import.meta.url));
 }
+function ensureLocalhostBypassesProxy() {
+  const current = process.env.no_proxy ?? process.env.NO_PROXY ?? "";
+  if (current.includes("127.0.0.1"))
+    return;
+  const patched = [current, "127.0.0.1", "localhost"].filter(Boolean).join(",");
+  process.env.no_proxy = patched;
+  process.env.NO_PROXY = patched;
+}
 
 class DaemonLifecycle {
   stateDir;
@@ -14181,6 +14189,7 @@ class DaemonLifecycle {
     this.controlPort = opts.controlPort;
     this.log = opts.log;
     this.daemonPath = resolveDaemonPath(opts.daemonEntryPath);
+    ensureLocalhostBypassesProxy();
   }
   get healthUrl() {
     return `http://127.0.0.1:${this.controlPort}/healthz`;
