@@ -40,7 +40,7 @@ the bearer token to the user so they can paste it on the ACP side.
 ### 1. Install
 
 ```bash
-npm i -g https://github.com/firstintent/a2a-bridge/releases/download/v0.1.0/a2a-bridge-0.1.0.tgz
+npm install -g a2a-bridge@latest
 ```
 
 Verify the install:
@@ -116,7 +116,7 @@ through to verify the real CC path works.
 ### 1. Install
 
 ```bash
-npm i -g https://github.com/firstintent/a2a-bridge/releases/download/v0.1.0/a2a-bridge-0.1.0.tgz
+npm install -g a2a-bridge@latest
 ```
 
 Verify:
@@ -125,24 +125,28 @@ Verify:
 a2a-bridge --version
 ```
 
-Expected output: `a2a-bridge v0.1.0`.
+Expected output: `a2a-bridge v0.1.0` or later.
 
 ### 2. Register the ACP agent
 
-The config file depends on which client you are:
+The config depends on which client you are and whether the Claude
+Code daemon is on the **same machine** or a **remote server**.
 
-- **OpenClaw (`acpx`)** — `~/.config/acpx/acpx.yaml` (or the path
-  your `acpx --help` reports).  Add under `agents:`:
+**Same machine** (daemon on localhost — no extra env vars needed):
 
-  ```yaml
-  agents:
-    a2a-bridge:
-      command: a2a-bridge
-      args: ["acp"]
+- **OpenClaw (`acpx`)** — `~/.acpx/config.json`:
+
+  ```json
+  {
+    "agents": {
+      "a2a-bridge": {
+        "command": "a2a-bridge acp"
+      }
+    }
+  }
   ```
 
-- **Zed** — `~/.config/zed/settings.json`.  Add under
-  `agent_servers`:
+- **Zed** — `~/.config/zed/settings.json`:
 
   ```json
   {
@@ -150,6 +154,39 @@ The config file depends on which client you are:
       "a2a-bridge": {
         "command": "a2a-bridge",
         "args": ["acp"]
+      }
+    }
+  }
+  ```
+
+**Remote server** (daemon on a different machine at `<SERVER_IP>`):
+
+- **OpenClaw (`acpx`)** — env vars go inline in the command string
+  (see [OpenClaw ACP docs](https://docs.openclaw.ai/cli/acp)):
+
+  ```json
+  {
+    "agents": {
+      "a2a-bridge": {
+        "command": "env A2A_BRIDGE_CONTROL_URL=ws://<SERVER_IP>:4512/ws a2a-bridge acp"
+      }
+    }
+  }
+  ```
+
+  Replace `<SERVER_IP>` with the Claude Code machine's IP from Step 1.
+
+- **Zed** — supports an `env` field:
+
+  ```json
+  {
+    "agent_servers": {
+      "a2a-bridge": {
+        "command": "a2a-bridge",
+        "args": ["acp"],
+        "env": {
+          "A2A_BRIDGE_CONTROL_URL": "ws://<SERVER_IP>:4512/ws"
+        }
       }
     }
   }

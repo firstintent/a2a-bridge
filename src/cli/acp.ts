@@ -65,8 +65,12 @@ async function resolveGateway(options: RunAcpOptions): Promise<ClaudeCodeGateway
     process.env.A2A_BRIDGE_CONTROL_URL ??
     `ws://${controlHost}:${controlPort}/ws`;
 
+  // Default: skip daemon auto-start. ACP clients are typically on a
+  // different machine from the daemon; trying to ensureRunning locally
+  // just wastes time and confuses users behind proxies. Set
+  // A2A_BRIDGE_ACP_ENSURE_DAEMON=1 to opt back in.
   const ensureDaemon =
-    options.ensureDaemon ?? process.env.A2A_BRIDGE_ACP_SKIP_DAEMON !== "1";
+    options.ensureDaemon ?? process.env.A2A_BRIDGE_ACP_ENSURE_DAEMON === "1";
 
   if (ensureDaemon) {
     const stateDir = new StateDirResolver();
