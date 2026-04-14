@@ -266,11 +266,18 @@ applications) that the autonomous loop cannot provision in CI.
 - **MCP inbound** — `runtime-daemon/inbound/mcp/` shim mirroring the
   ACP shape. Targets Cursor and Claude Desktop. Same
   `ClaudeCodeGateway` underneath.
+- **Self-signed TLS listener** — `a2a-bridge daemon start --tls`
+  auto-generates a self-signed certificate pair on first run, prints
+  the fingerprint, and binds `wss://` on port 443 (configurable).
+  Clients trust-on-first-use (TOFU) the fingerprint, same UX as SSH's
+  first-connect prompt. This makes the daemon reachable from any
+  network without WSL port-forwarding, proxy workarounds, or manual
+  certificate management. Optional Let's Encrypt and mTLS support
+  for users with domains or enterprise requirements.
 
 ## Explicitly deferred
 
-- TLS TCP listener. Only needed when cross-machine daemon deployment
-  ships; unix-socket covers same-host cleanly until then.
+- ~~TLS TCP listener.~~ Moved to v0.2 backlog above (self-signed TOFU).
 - Push-notification variants of A2A. Not used by today's A2A
   clients.
 - gRPC transport for A2A. JSON-RPC + SSE covers the field.
