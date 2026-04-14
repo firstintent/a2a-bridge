@@ -13,20 +13,22 @@ genuinely insufficient.
 
 ## Status
 
-**v0.1 (dev — Phases 1–7 on `dev`, Phases 8–9 in flight).** A2A +
-ACP inbound, Codex outbound, RoomRouter + SQLite TaskLog,
-verification artifact + `return_format` hint, `a2a-bridge init /
-doctor / daemon` UX, CI + release workflow, marketplace +
-ACP-registry submission packages. The ACP inbound currently binds
-to an in-process echo reply; Phases 8 and 9 land the real
-Claude-Code routing and the cross-bridge join skill before the
-first public publish. See [`CHANGELOG.md`](../../CHANGELOG.md) and
-[`../../TASKS.md`](../../TASKS.md).
+**v0.1 (shipped, 2026-04-14).** Phases 1–9 complete on `dev`, tag
+`v0.1.0` pushed. A2A + ACP inbound with real Claude Code routing
+via `DaemonProxyGateway` (no echo fallback), Codex outbound,
+RoomRouter + SQLite TaskLog, verification artifact +
+`return_format` hint, `a2a-bridge init / doctor / daemon` UX, CI +
+release workflow, cross-bridge join skill (`docs/join.md`), and
+cross-host verification (OpenClaw → public internet → daemon → real
+CC → reply). See [`CHANGELOG.md`](../../CHANGELOG.md).
 
-**v0.2 (planned).** Outbound OpenClaw + Hermes adapters, MCP
-inbound, TLS listener. Each item needs live external infrastructure
-or client software that the autonomous loop cannot provision; see
-the "v0.2 backlog" section at the bottom of this file.
+**v0.2 (planned).** Outbound OpenClaw + Hermes peer adapters
+(making the star topology fully bidirectional), MCP InboundService
+(Cursor / Claude Desktop as clients), TLS TCP listener for
+cross-machine daemon deployment. Each item needs live external
+infrastructure or client software the autonomous loop cannot
+provision; see the "v0.2 backlog" section at the bottom of this
+file.
 
 ## Phase 1 — Foundation (done)
 
@@ -189,7 +191,7 @@ not a research project.
 marketplace packages by following one runbook, with no further code
 changes required.
 
-## Phase 8 — Real ACP → Claude Code routing (no mock)
+## Phase 8 — Real ACP → Claude Code routing (no mock) (done)
 
 **Why before release.** Phase 5 built the ACP inbound wire; v0.1
 shipped it against an in-process echo reply to validate the
@@ -217,7 +219,7 @@ fakes; the CLI default path may not short-circuit to a mock.
 (and `smoke-e2e.sh`) pass against the real routing — no
 `A2A_BRIDGE_INBOUND_ECHO=1` in the production code path.
 
-## Phase 9 — Join skill + first public release
+## Phase 9 — Join skill + first public release (done)
 
 **Why this caps v0.1.** Once ACP → CC is real, the developer-facing
 payoff is a one-URL cross-bridge skill: a user hands the same

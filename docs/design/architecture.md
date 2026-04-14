@@ -121,12 +121,11 @@ relative `../` chains, so boundary violations stand out:
 
 A standard MCP stdio plugin (see `plugins/a2a-bridge/`). Declares
 `experimental['claude/channel']` so Claude Code treats its
-`notifications/claude/channel` as inbound user turns. Current outbound
-tools are `reply` and `get_messages`; `cancel_turn` and
-`switch_peer` are planned (roadmap Phase 3–4). Plugin connects to the
-daemon over whichever transport is configured (stdio-within-Claude
-by default; daemon URL via `A2A_BRIDGE_DAEMON_URL` for a remote
-daemon).
+`notifications/claude/channel` as inbound user turns. Outbound
+tools: `reply` and `get_messages`; `cancel_turn` and `switch_peer`
+are deferred to v0.2. Plugin connects to the daemon over the
+control-plane WebSocket (localhost by default;
+`A2A_BRIDGE_CONTROL_HOST` / `A2A_BRIDGE_CONTROL_URL` for remote).
 
 ### Daemon
 
