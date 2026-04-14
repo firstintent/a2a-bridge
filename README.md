@@ -46,16 +46,43 @@ Add to `acpx.config.agents`:
 Send a prompt through OpenClaw — it reaches Claude Code through the
 bridge, Claude Code reasons about it, and the reply streams back.
 
-> **Same machine?** Both sides can run on one box — no extra
-> config needed. **Different machines?** Set
-> `A2A_BRIDGE_CONTROL_HOST=0.0.0.0` on the server and
-> `A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws` on the client.
+---
 
-> **AI-assisted:** tell each AI
-> `Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.`
-> — it detects which side it is and self-installs.
+**Same machine?** Both sides run on one box, no extra config.
+**Different machines?** Two env vars:
 
-> From source: `git clone https://github.com/firstintent/a2a-bridge.git && cd a2a-bridge && bun install && bun run build:plugin && npm pack && npm i -g ./a2a-bridge-*.tgz`
+```bash
+# on the server (Claude Code side)
+export A2A_BRIDGE_CONTROL_HOST=0.0.0.0
+
+# on the client (OpenClaw side)
+export A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws
+```
+
+---
+
+**Agent-assisted setup** — tell each agent:
+
+```
+Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
+```
+
+The agent detects which side it is and self-installs.
+Full text: [`docs/join.md`](./docs/join.md)
+
+---
+
+<details>
+<summary><b>Install from source</b></summary>
+
+```bash
+git clone https://github.com/firstintent/a2a-bridge.git
+cd a2a-bridge
+bun install && bun run build:plugin
+npm pack && npm i -g ./a2a-bridge-*.tgz
+```
+
+</details>
 
 ---
 
