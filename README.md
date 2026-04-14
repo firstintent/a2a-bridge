@@ -214,31 +214,55 @@ Full logs: `a2a-bridge daemon logs --tail 200`.
 
 ## Architecture
 
+Star topology — every agent talks to the daemon; the daemon
+translates protocols and routes messages.
+
 ```
-┌──────────────┐   MCP stdio (channel)   ┌──────────────────┐   control WS   ┌──────────────┐
-│ Claude Code  │ ◀────────────────────▶  │ a2a-bridge plugin │ ◀────────────▶ │   daemon     │
-└──────────────┘                         └──────────────────┘                └──────┬───────┘
-                                                                                    │
-                                                               ┌────────────────────┼────────────────────┐
-                                                               ▼                    ▼                    ▼
-                                                        InboundService        CodexAdapter       OpenClaw / Hermes
-                                                        (A2A + ACP)           (WS JSON-RPC)      (v0.2)
+        Gemini CLI ─── A2A (HTTP) ───┐
+                                     │
+        OpenClaw ──── ACP (stdio) ───┤
+                                     │
+        Zed / VS Code ─ ACP (stdio) ─┤
+                                     ▼
+                              ┌─────────────┐
+                              │  a2a-bridge  │
+                              │    daemon    │
+                              │ (RoomRouter) │
+                              └──────┬───────┘
+                                     │
+                    ┌────────────────┼────────────────┐
+                    ▼                ▼                ▼
+               Claude Code       Codex          Hermes [v0.2]
+               (CC plugin)    (WS JSON-RPC)    (ACP adapter)
+                  server          peer              peer
 ```
 
-- **Plugin** — Claude Code MCP channel plugin. Pushes inbound
-  messages as `<channel>` tags; exposes `reply` + `get_messages`
-  tools.
-- **Daemon** — background process owning peer adapters, A2A/ACP
-  inbound services, room router, and SQLite task log.
-- **Peer adapters** — one `IPeerAdapter` per target agent. Uniform
-  interface (`start`, `injectMessage`, events).
-- **InboundService** — A2A (HTTP/SSE) + ACP (stdio) servers so
-  external clients can drive Claude Code.
+| Agent | Role | Protocol | Status |
+|-------|------|----------|--------|
+| Claude Code | **server** — receives and answers prompts | MCP Channels (plugin) | v0.1 |
+| Codex | **peer** — CC delegates tasks to it | WS JSON-RPC | v0.1 |
+| Gemini CLI | **client** — calls CC | A2A (HTTP + SSE) | v0.1 |
+| OpenClaw | **client** — calls CC | ACP (stdio) | v0.1 |
+| Zed | **client** — calls CC | ACP (stdio) | v0.1 |
+| VS Code | **client** — calls CC | ACP (stdio) | v0.1 |
+| Hermes | **client** — calls CC | ACP (stdio) | v0.1 |
+| OpenClaw | **peer** — CC delegates to it | Ed25519 gateway | v0.2 |
+| Hermes | **peer** — CC delegates to it | ACP adapter | v0.2 |
 
-Protocol matrix, deployment shapes, and the full adapter contract:
-[`docs/design/architecture.md`](./docs/design/architecture.md).
-Session isolation and restart semantics:
-[`docs/guides/rooms.md`](./docs/guides/rooms.md).
+**Why star, not mesh?** Each agent speaks a different wire protocol.
+A mesh would need N*(N-1)/2 translators; a star needs one adapter
+per agent. Adding a new agent means writing one adapter — nothing
+else changes.
+
+**Only Claude Code as server (v0.1).** The bridge is a Claude Code
+Channel plugin, so CC is the natural hub that receives inbound
+prompts. v0.2 adds outbound peer adapters so CC can also *call*
+OpenClaw and Hermes, making the topology fully bidirectional.
+
+Details: [`docs/design/architecture.md`](./docs/design/architecture.md)
+(protocol matrix, deployment shapes, adapter contract).
+Sessions: [`docs/guides/rooms.md`](./docs/guides/rooms.md)
+(room isolation, restart semantics).
 
 ## Releasing
 
