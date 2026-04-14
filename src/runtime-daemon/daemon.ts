@@ -68,7 +68,7 @@ let nextControlClientId = 0;
 
 const inboundGateway = new DaemonClaudeCodeGateway({
   sendToClaude: (text) => {
-    emitToClaude(systemMessage("a2a_inbound", text));
+    emitToClaude(systemMessage("a2a_inbound", text, "acp"));
   },
   log: (msg) => log(`[A2aGateway] ${msg}`),
 });
@@ -691,10 +691,10 @@ function shouldNotifyCodexClaudeOnline() {
   return !claudeOnlineNoticeSent || claudeOfflineNoticeShown;
 }
 
-function systemMessage(idPrefix: string, content: string): BridgeMessage {
+function systemMessage(idPrefix: string, content: string, source: BridgeMessage["source"] = "codex"): BridgeMessage {
   return {
     id: `${idPrefix}_${++nextSystemMessageId}`,
-    source: "codex",
+    source,
     content,
     timestamp: Date.now(),
   };

@@ -36,38 +36,26 @@ export type ReplySender = (msg: BridgeMessage, requireReply?: boolean) => Promis
 export type DeliveryMode = "push" | "pull" | "auto";
 
 export const CLAUDE_INSTRUCTIONS = [
-  "Codex is an AI coding agent (OpenAI) running in a separate session on the same machine.",
-  "",
-  "## Message delivery",
-  "Messages from Codex may arrive in two ways depending on the connection mode:",
-  "- As <channel source=\"a2a-bridge\" chat_id=\"...\" user=\"Codex\" ...> tags (push mode)",
-  "- Via the get_messages tool (pull mode)",
-  "",
-  "## Collaboration roles",
-  "Default roles in this setup:",
-  "- Claude: Reviewer, Planner, Hypothesis Challenger",
-  "- Codex: Implementer, Executor, Reproducer/Verifier",
-  "- Expect Codex to provide independent technical judgment and evidence, not passive agreement.",
-  "",
-  "## Thinking patterns (task-driven)",
-  "- Analytical/review tasks: Independent Analysis & Convergence",
-  "- Implementation tasks: Architect -> Builder -> Critic",
-  "- Debugging tasks: Hypothesis -> Experiment -> Interpretation",
-  "",
-  "## Collaboration language",
-  "- Use explicit phrases such as \"My independent view is:\", \"I agree on:\", \"I disagree on:\", and \"Current consensus:\".",
+  "a2a-bridge connects you to other AI agents (Codex, OpenClaw, Hermes, Gemini CLI, etc.).",
+  "Messages from connected agents arrive as <channel> tags. The `user` field tells you which agent sent it.",
   "",
   "## How to interact",
-  "- Use the reply tool to send messages back to Codex — pass chat_id back.",
-  "- Use the get_messages tool to check for pending messages from Codex.",
+  "- Use the reply tool to send messages back — pass chat_id back.",
+  "- Use the get_messages tool to check for pending messages.",
   "- After sending a reply, call get_messages to check for responses.",
-  "- When the user asks about Codex status or progress, call get_messages.",
   "",
   "## Turn coordination",
-  "- When you see '⏳ Codex is working', do NOT call the reply tool — wait for '✅ Codex finished'.",
-  "- After Codex finishes a turn, you have an attention window to review and respond before new messages arrive.",
-  "- If the reply tool returns a busy error, Codex is still executing — wait and try again later.",
+  "- When you see '⏳ ... is working', do NOT call the reply tool — wait for '✅ ... finished'.",
+  "- If the reply tool returns a busy error, the peer agent is still executing — wait and try again later.",
 ].join("\n");
+
+/** Map message.source to a human-readable name for channel notifications. */
+const SOURCE_DISPLAY_NAMES: Record<string, string> = {
+  codex: "Codex",
+  acp: "ACP agent",
+  a2a: "A2A agent",
+  system: "system",
+};
 
 const LOG_FILE = "/tmp/a2a-bridge.log";
 
@@ -163,8 +151,9 @@ export class ClaudeAdapter extends EventEmitter {
   }
 
   private async pushViaChannel(message: BridgeMessage) {
-    const msgId = `codex_msg_${this.notificationIdPrefix}_${++this.notificationSeq}`;
+    const msgId = `bridge_msg_${this.notificationIdPrefix}_${++this.notificationSeq}`;
     const ts = new Date(message.timestamp).toISOString();
+    const displayName = SOURCE_DISPLAY_NAMES[message.source] ?? message.source;
 
     try {
       await this.server.notification({
@@ -174,10 +163,10 @@ export class ClaudeAdapter extends EventEmitter {
           meta: {
             chat_id: this.sessionId,
             message_id: msgId,
-            user: "Codex",
-            user_id: "codex",
+            user: displayName,
+            user_id: message.source,
             ts,
-            source_type: "codex",
+            source_type: message.source,
           },
         },
       });

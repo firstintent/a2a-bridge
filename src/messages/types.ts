@@ -1,6 +1,6 @@
 // ===== Bridge Core Types =====
 
-export type MessageSource = "claude" | "codex";
+export type MessageSource = "claude" | "codex" | "acp" | "a2a" | "system";
 
 export interface BridgeMessage {
   id: string;
