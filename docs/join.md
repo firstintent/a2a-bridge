@@ -168,7 +168,7 @@ Code daemon is on the **same machine** or a **remote server**.
   {
     "agents": {
       "a2a-bridge": {
-        "command": "env A2A_BRIDGE_CONTROL_URL=ws://<SERVER_IP>:4512/ws A2A_BRIDGE_ACP_SKIP_DAEMON=1 a2a-bridge acp"
+        "command": "env A2A_BRIDGE_CONTROL_URL=ws://<SERVER_IP>:4512/ws a2a-bridge acp"
       }
     }
   }
@@ -185,8 +185,7 @@ Code daemon is on the **same machine** or a **remote server**.
         "command": "a2a-bridge",
         "args": ["acp"],
         "env": {
-          "A2A_BRIDGE_CONTROL_URL": "ws://<SERVER_IP>:4512/ws",
-          "A2A_BRIDGE_ACP_SKIP_DAEMON": "1"
+          "A2A_BRIDGE_CONTROL_URL": "ws://<SERVER_IP>:4512/ws"
         }
       }
     }

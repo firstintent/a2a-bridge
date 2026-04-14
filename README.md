@@ -102,7 +102,7 @@ client config:
 | Agent | Protocol | Config |
 |-------|----------|--------|
 | **OpenClaw** | ACP | `~/.acpx/config.json` → `{ "agents": { "a2a-bridge": { "command": "a2a-bridge acp" } } }` |
-| **OpenClaw (remote)** | ACP | `"command": "env A2A_BRIDGE_CONTROL_URL=ws://<ip>:4512/ws A2A_BRIDGE_ACP_SKIP_DAEMON=1 a2a-bridge acp"` |
+| **OpenClaw (remote)** | ACP | `"command": "env A2A_BRIDGE_CONTROL_URL=ws://<ip>:4512/ws a2a-bridge acp"` |
 | **Hermes Agent** | ACP | Same pattern as OpenClaw |
 | **Zed** | ACP | `settings.json` → `{ "agent_servers": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }` |
 | **VS Code** | ACP | `{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }` |
@@ -185,7 +185,7 @@ Common fixes: [see the env var reference below](#environment-variables).
 | `A2A_BRIDGE_CONTROL_PORT` | `4512` | Daemon control plane |
 | `A2A_BRIDGE_CONTROL_HOST` | `127.0.0.1` | Control plane bind (`0.0.0.0` for remote) |
 | `A2A_BRIDGE_CONTROL_URL` | auto | Full WS URL for ACP subprocess |
-| `A2A_BRIDGE_ACP_SKIP_DAEMON` | unset | Skip daemon auto-start in `acp` |
+| `A2A_BRIDGE_ACP_ENSURE_DAEMON` | unset | Opt-in: auto-start daemon in `acp` (off by default) |
 | `A2A_BRIDGE_STATE_DIR` | `~/.local/state/a2a-bridge` | Config, logs, task DB |
 
 ---
