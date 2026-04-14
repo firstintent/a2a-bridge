@@ -101,9 +101,10 @@ client config:
 
 | Agent | Protocol | Config |
 |-------|----------|--------|
-| **OpenClaw** | ACP | `acpx.config.agents` → `{ "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } }` |
+| **OpenClaw** | ACP | `~/.acpx/config.json` → `{ "agents": { "a2a-bridge": { "command": "a2a-bridge acp" } } }` |
+| **OpenClaw (remote)** | ACP | `"command": "env A2A_BRIDGE_CONTROL_URL=ws://<ip>:4512/ws A2A_BRIDGE_ACP_SKIP_DAEMON=1 a2a-bridge acp"` |
 | **Hermes Agent** | ACP | Same pattern as OpenClaw |
-| **Zed** | ACP | `settings.json` → `{ "agent_servers": { "a2a-bridge": { ... } } }` |
+| **Zed** | ACP | `settings.json` → `{ "agent_servers": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }` |
 | **VS Code** | ACP | `{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }` |
 | **Gemini CLI** | A2A | `~/.gemini/settings.json` → `{ "remoteAgents": [{ "agentCardUrl": "http://localhost:4520/...", "auth": { "token": "<TOKEN>" } }] }` |
 | **Codex** | peer | `a2a-bridge codex` — Claude Code ↔ Codex bidirectional |
