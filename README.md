@@ -29,25 +29,24 @@ cost matters more than the collaboration benefit. Multi-agent chains
 typically consume 3-10x more tokens than a single well-prompted
 agent.
 
-## Quick start
+## Set up the server side (Claude Code)
+
+The **server** is the Claude Code session that other agents call
+into. Install a2a-bridge, start the daemon, then launch Claude Code
+with the bridge plugin.
+
+> **AI-assisted:** tell Claude Code
+> `Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.`
+> — it runs everything below automatically.
+
+### 1. Install
 
 ```bash
-# 1. Install
-npm i -g a2a-bridge          # or: npm i -g ./a2a-bridge-*.tgz from source
-a2a-bridge --version          # a2a-bridge v0.1.0
-
-# 2. Configure
-a2a-bridge init               # mint bearer token + install channel plugin
-a2a-bridge doctor             # preflight checklist
-
-# 3. Start the daemon
-a2a-bridge daemon start
-a2a-bridge daemon status      # confirm pid + ports
+npm i -g a2a-bridge            # or: npm i -g ./a2a-bridge-*.tgz from source
+a2a-bridge --version           # a2a-bridge v0.1.0
 ```
 
-Requires Bun >= 1.3 on `PATH` (`a2a-bridge doctor` confirms).
-
-From source:
+Requires Bun >= 1.3 on `PATH`. From source:
 
 ```bash
 git clone https://github.com/firstintent/a2a-bridge.git
@@ -55,28 +54,28 @@ cd a2a-bridge && bun install && bun run build:plugin
 npm pack && npm i -g ./a2a-bridge-*.tgz
 ```
 
-## Set up the server side (Claude Code)
+### 2. Configure + start daemon
 
-The **server** is the Claude Code session that other agents call
-into. It runs the daemon + channel plugin and accepts inbound
-requests from all connected clients.
+```bash
+a2a-bridge init                # mint bearer token + install plugin
+a2a-bridge doctor              # preflight checklist
+a2a-bridge daemon start        # start background daemon
+a2a-bridge daemon status       # confirm pid + ports
+```
 
-> **AI-assisted setup:** tell Claude Code
-> `Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.`
-> — it auto-runs the steps below. Skip this section if you prefer
-> the one-liner.
+### 3. Launch Claude Code
 
-**Interactive** — start Claude Code with the bridge plugin:
+**Interactive** — Claude Code with the bridge plugin loaded:
 
 ```bash
 a2a-bridge claude
 ```
 
-All inbound prompts arrive as channel messages; CC reasons and
-replies automatically via the `reply` tool.
+Inbound prompts arrive as channel messages; CC reasons and replies
+via the `reply` tool.
 
-**Tmux (headless)** — spawn a bridge CC from an existing session,
-useful when your primary CC is doing other work:
+**Tmux (headless)** — run the bridge CC in the background while
+your primary session keeps working:
 
 ```bash
 a2a-bridge dev                                            # register plugin (first time)
@@ -85,9 +84,9 @@ tmux new-session -d -s cc-bridge "a2a-bridge claude"      # headless bridge CC
 tmux send-keys -t cc-bridge Enter                         # approve dev channels
 ```
 
-Check with `tmux attach -t cc-bridge`. Set
-`A2A_BRIDGE_CONTROL_HOST=0.0.0.0` when clients connect from a
-different machine.
+Inspect with `tmux attach -t cc-bridge`. Set
+`A2A_BRIDGE_CONTROL_HOST=0.0.0.0` when clients connect from another
+machine.
 
 ## Set up a client (call Claude Code)
 
