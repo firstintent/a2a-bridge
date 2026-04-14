@@ -266,6 +266,15 @@ applications) that the autonomous loop cannot provision in CI.
 - **MCP inbound** — `runtime-daemon/inbound/mcp/` shim mirroring the
   ACP shape. Targets Cursor and Claude Desktop. Same
   `ClaudeCodeGateway` underneath.
+- **Multi-CC single-daemon** — multiple Claude Code instances attach
+  to one daemon, each assigned to its own Room via a workspace ID
+  (derived from `A2A_BRIDGE_STATE_DIR` or the CC conversation ID).
+  The plugin sends the workspace ID on `claude_connect`; the daemon's
+  attach logic becomes per-Room instead of a global single slot.
+  Inbound clients (OpenClaw, Gemini CLI) route to a specific Room
+  via `contextId`. RoomRouter already supports multi-Room; this item
+  wires the CC attach path through it. Follows the Telegram plugin's
+  `TELEGRAM_STATE_DIR` pattern for workspace isolation.
 - **Self-signed TLS listener** — `a2a-bridge daemon start --tls`
   auto-generates a self-signed certificate pair on first run, prints
   the fingerprint, and binds `wss://` on port 443 (configurable).
