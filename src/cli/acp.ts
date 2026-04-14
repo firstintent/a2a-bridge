@@ -45,15 +45,21 @@ export async function runAcp(
   args: string[],
   options: RunAcpOptions = {},
 ): Promise<AcpInboundService | void> {
+  // Parse CLI flags from args
+  const parsed = parseAcpArgs(args);
+
+  // --url flag overrides the control WS URL (takes precedence over env)
+  if (parsed.url) {
+    options = { ...options, controlWsUrl: parsed.url };
+  }
+
   // One-shot prompt mode: a2a-bridge acp -p "hello" / --prompt "hello"
-  const promptIdx = args.findIndex((a) => a === "-p" || a === "--prompt");
-  if (promptIdx !== -1) {
-    const text = args[promptIdx + 1];
-    if (!text) {
+  if (parsed.prompt !== undefined) {
+    if (!parsed.prompt) {
       console.error("Usage: a2a-bridge acp -p <prompt>");
       process.exit(1);
     }
-    return runOneShotPrompt(text, options);
+    return runOneShotPrompt(parsed.prompt, options);
   }
 
   const stdio = options.stdio ?? defaultStdio();
@@ -62,6 +68,27 @@ export async function runAcp(
   const service = new AcpInboundService({ stdio, gateway });
   await service.start();
   return service;
+}
+
+function parseAcpArgs(args: string[]): {
+  prompt?: string;
+  url?: string;
+} {
+  let prompt: string | undefined;
+  let url: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if ((arg === "-p" || arg === "--prompt") && i + 1 < args.length) {
+      prompt = args[++i] ?? "";
+    } else if ((arg === "--url" || arg === "-u") && i + 1 < args.length) {
+      url = args[++i];
+    } else if (arg?.startsWith("--url=")) {
+      url = arg.slice(6);
+    }
+  }
+
+  return { prompt, url };
 }
 
 /**
