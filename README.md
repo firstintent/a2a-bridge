@@ -29,7 +29,8 @@ a2a-bridge init                     # mint token + install CC plugin
 a2a-bridge claude                   # launch Claude Code with bridge
 ```
 
-Claude Code is now listening for inbound prompts.
+Claude Code is now listening. Note your machine's IP — the client
+in Step 2 needs it to connect (`localhost` if both on the same box).
 
 **Step 2 — On the OpenClaw / Hermes Agent machine** (the client that sends prompts):
 
@@ -37,11 +38,13 @@ Recommended — tell the agent:
 
 ```
 Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
+The Claude Code server is at <server-ip>:4512.
 ```
 
-The agent detects it is on the client side, installs a2a-bridge,
-registers itself, and smoke-tests the connection automatically.
-Full text: [`docs/join.md`](./docs/join.md)
+Replace `<server-ip>` with the IP from Step 1 (or skip that line if
+both sides are on the same machine). The agent installs a2a-bridge,
+sets `A2A_BRIDGE_CONTROL_URL`, registers itself, and smoke-tests
+the connection. Full text: [`docs/join.md`](./docs/join.md)
 
 <details>
 <summary><b>Manual setup</b></summary>
