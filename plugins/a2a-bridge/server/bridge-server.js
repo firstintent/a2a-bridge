@@ -5,25 +5,43 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 
@@ -13645,6 +13663,79 @@ class StdioServerTransport {
 import { EventEmitter } from "events";
 import { randomUUID } from "crypto";
 import { appendFileSync } from "fs";
+// package.json
+var package_default = {
+  name: "@firstintent/a2a-bridge",
+  version: "0.1.0",
+  description: "Bidirectional bridge between Claude Code and other AI coding agents (Codex, OpenClaw, Hermes, ...) over the MCP Channels protocol.",
+  type: "module",
+  bin: {
+    "a2a-bridge": "dist/cli.js",
+    a2ab: "dist/cli.js"
+  },
+  files: [
+    "dist/",
+    "plugins/",
+    ".claude-plugin/",
+    "scripts/postinstall.cjs",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  scripts: {
+    start: "bun run src/runtime-plugin/bridge.ts",
+    "build:cli": "mkdir -p dist && bun build src/cli/cli.ts --outfile dist/cli.js --target bun && chmod +x dist/cli.js",
+    "build:plugin": "mkdir -p plugins/a2a-bridge/server && bun build src/runtime-plugin/bridge.ts --outfile plugins/a2a-bridge/server/bridge-server.js --target bun && bun build src/runtime-daemon/daemon.ts --outfile plugins/a2a-bridge/server/daemon.js --target bun",
+    postinstall: "node scripts/postinstall.cjs",
+    prepare: "node scripts/install-git-hooks.cjs",
+    prepublishOnly: "bun run build:cli && bun run build:plugin",
+    "validate:plugin": "claude plugin validate plugins/a2a-bridge && claude plugin validate .claude-plugin/marketplace.json",
+    test: "bun test src",
+    "test:unit": "bun test src --test-name-pattern '^(?!.*E2E:).*$'",
+    typecheck: "tsc --noEmit",
+    "lint:deps": "depcruise --config .dependency-cruiser.cjs src",
+    "validate:plugin-versions": "bun scripts/check-plugin-versions.js",
+    check: "tsc --noEmit && bun run lint:deps && bun test src && bun run build:plugin && bun scripts/check-plugin-versions.js",
+    "check:ci": "tsc --noEmit && bun run lint:deps && bun run test:unit && bun run build:plugin && bun scripts/check-plugin-versions.js && bash scripts/smoke-tarball.sh && bash scripts/smoke-e2e.sh"
+  },
+  repository: {
+    type: "git",
+    url: "https://github.com/firstintent/a2a-bridge.git"
+  },
+  homepage: "https://github.com/firstintent/a2a-bridge#readme",
+  bugs: {
+    url: "https://github.com/firstintent/a2a-bridge/issues"
+  },
+  keywords: [
+    "claude-code",
+    "mcp",
+    "channels",
+    "agent",
+    "bridge",
+    "multi-agent",
+    "codex",
+    "openclaw",
+    "hermes"
+  ],
+  author: "FirstIntent",
+  license: "MIT",
+  devDependencies: {
+    "@a2a-js/sdk": "0.3.13",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@types/bun": "^1.3.11",
+    "dependency-cruiser": "^17.3.10",
+    typescript: "^5.8.0"
+  },
+  dependencies: {
+    "@agentclientprotocol/sdk": "0.18.2"
+  }
+};
+
+// src/runtime-plugin/claude-channel/claude-adapter.ts
+var PLUGIN_SERVER_INFO = {
+  name: package_default.name.split("/").pop() ?? "a2a-bridge",
+  version: package_default.version
+};
 var CLAUDE_INSTRUCTIONS = [
   "Codex is an AI coding agent (OpenAI) running in a separate session on the same machine.",
   "",
@@ -13699,7 +13790,7 @@ class ClaudeAdapter extends EventEmitter {
     const envMode = process.env.A2A_BRIDGE_MODE;
     this.configuredMode = envMode && ["push", "pull", "auto"].includes(envMode) ? envMode : "auto";
     this.maxBufferedMessages = parseInt(process.env.A2A_BRIDGE_MAX_BUFFERED_MESSAGES ?? "100", 10);
-    this.server = new Server({ name: "a2a-bridge", version: "0.1.0" }, {
+    this.server = new Server(PLUGIN_SERVER_INFO, {
       capabilities: {
         experimental: { "claude/channel": {} },
         tools: {}

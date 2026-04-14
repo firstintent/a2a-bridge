@@ -282,7 +282,10 @@ async function startControlServer() {
         return Response.json(currentStatus());
       }
       if (url.pathname === "/readyz") {
-        return Response.json(currentStatus(), { status: codexBootstrapped ? 200 : 503 });
+        // The control plane is ready for ACP traffic as soon as it is
+        // listening — codex bootstrapping is optional (v0.1 bridges
+        // work without a Codex peer when only ACP inbound is used).
+        return Response.json(currentStatus(), { status: 200 });
       }
       return undefined;
     },

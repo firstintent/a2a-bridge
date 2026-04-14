@@ -163,12 +163,57 @@ the skill's step 0 asks the host AI to identify itself and branches
 accordingly.  Full text lives in
 [`docs/join.md`](./docs/join.md).
 
-## Connect Gemini CLI
+## Deploy Claude Code (CC side)
 
-Any A2A client can drive Claude Code through a2a-bridge. For Gemini
-CLI specifically, add a single `remoteAgents` entry pointing at the
-daemon's agent-card URL and the bearer token it was started with.
-In `~/.gemini/settings.json`:
+Claude Code is the brain of the bridge. Two deployment modes:
+
+**Standard — interactive session:**
+
+```bash
+a2a-bridge init     # mint token + install channel plugin
+a2a-bridge claude   # launches `claude --channels` with the plugin
+```
+
+This starts an interactive Claude Code session with the a2a-bridge
+plugin loaded. All inbound prompts (from OpenClaw, Gemini CLI, etc.)
+arrive as channel messages; CC reasons about them and replies using
+the built-in `reply` tool.
+
+**Tmux — headless bridge CC from an existing session:**
+
+If you already have a Claude Code session running (e.g. an autonomous
+loop), it can spawn a second CC as the bridge endpoint:
+
+```bash
+# From inside your existing Claude Code, or any terminal:
+a2a-bridge dev                                          # register plugin (first time only)
+A2A_BRIDGE_CONTROL_HOST=0.0.0.0 a2a-bridge daemon start  # expose daemon to network
+tmux new-session -d -s cc-bridge "a2a-bridge claude"    # bridge CC in background
+tmux send-keys -t cc-bridge Enter                       # approve dev-channels prompt
+```
+
+The tmux CC runs headlessly, serving ACP/A2A traffic while your
+primary session keeps working. Check it with `tmux attach -t cc-bridge`.
+Set `A2A_BRIDGE_CONTROL_HOST=0.0.0.0` when ACP clients connect from
+a different machine.
+
+## Deploy Codex (peer adapter)
+
+Codex is a peer agent — Claude Code can delegate tasks to it.
+
+```bash
+a2a-bridge codex    # starts the Codex TUI + app-server proxy
+```
+
+Requires `codex` on `PATH`. The Codex adapter connects via WebSocket
+JSON-RPC to Codex's app-server. Once the TUI creates a thread,
+the bridge is ready for bidirectional message exchange between Claude
+Code and Codex.
+
+## Connect Gemini CLI (A2A)
+
+Gemini CLI speaks A2A over HTTP. Add a `remoteAgents` entry in
+`~/.gemini/settings.json`:
 
 ```json
 {
@@ -176,89 +221,75 @@ In `~/.gemini/settings.json`:
     {
       "name": "a2a-bridge",
       "agentCardUrl": "http://localhost:4520/.well-known/agent-card.json",
-      "auth": {
-        "type": "bearer",
-        "token": "<A2A_BRIDGE_BEARER_TOKEN>"
-      }
+      "auth": { "type": "bearer", "token": "<TOKEN_FROM_INIT>" }
     }
   ]
 }
 ```
 
-- Replace `<A2A_BRIDGE_BEARER_TOKEN>` with the token `a2a-bridge init`
-  printed; it protects the JSON-RPC endpoint. The agent-card endpoint
-  can be served publicly via `publicAgentCard: true` so discovery
-  works before the token is wired client-side.
-- `localhost:4520` matches the daemon's A2A listener default; swap
-  the host/port when the daemon runs on a different machine.
+Replace `<TOKEN_FROM_INIT>` with the bearer token `a2a-bridge init`
+printed. Restart Gemini CLI; `@a2a-bridge` in a prompt routes to
+Claude Code.
 
-After restarting Gemini CLI, `@a2a-bridge` in a prompt routes the
-message to the paired Claude Code session; the streamed reply comes
-back as A2A `artifact-update` events.
+## Connect OpenClaw (ACP)
 
-## Connect OpenClaw
-
-OpenClaw speaks the Agent Client Protocol (ACP) over stdio. Register
-`a2a-bridge acp` as an agent command in `acpx.config.agents`:
+OpenClaw speaks ACP over stdio. Add to `acpx.config.agents`:
 
 ```json
 {
   "agents": {
     "a2a-bridge": {
       "command": "a2a-bridge",
-      "args": ["acp"],
-      "description": "Claude Code via a2a-bridge (ACP over stdio)"
+      "args": ["acp"]
     }
   }
 }
 ```
 
-The subcommand binds `process.stdin` / `process.stdout`; no ports are
-opened and no bearer token is required. Every turn is relayed through
-the a2a-bridge daemon to the attached Claude Code session via
-`DaemonProxyGateway`. When the daemon is unreachable the subcommand
-exits non-zero with a friendly `error: / fix:` block instead of
-returning a silent echo.
+For cross-host connections (OpenClaw on laptop, daemon on server):
 
-## Connect Zed
+```bash
+export A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws
+export A2A_BRIDGE_ACP_SKIP_DAEMON=1
+```
 
-Zed reads the same ACP shape under `agent_servers` in its
-`settings.json`:
+No bearer token needed — ACP connections inherit filesystem trust
+on the stdio link.
+
+## Connect Zed (ACP)
+
+Add to Zed's `settings.json` under `agent_servers`:
 
 ```json
 {
   "agent_servers": {
-    "a2a-bridge": {
-      "command": "a2a-bridge",
-      "args": ["acp"]
-    }
+    "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] }
   }
 }
 ```
 
-Restart Zed; the new agent appears in the agent picker. As with
-OpenClaw, each prompt reaches the real Claude Code session through
-the daemon — the subcommand does not fall back to an in-process echo.
+Restart Zed; select `a2a-bridge` in the agent picker.
 
-## Connect VS Code
+## Connect VS Code (ACP)
 
-Any VS Code extension that accepts a `command` + `args` pair for an
-external ACP agent uses the same shape:
+Any VS Code ACP extension uses:
 
 ```json
 {
   "acp.agents": [
-    {
-      "name": "a2a-bridge",
-      "command": "a2a-bridge",
-      "args": ["acp"]
-    }
+    { "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }
   ]
 }
 ```
 
-Each extension's exact settings key may differ as plugins evolve —
-the constants are always `command: "a2a-bridge"` and `args: ["acp"]`.
+The settings key varies by extension — the command is always
+`a2a-bridge acp`.
+
+## Connect Hermes Agent (ACP)
+
+Hermes speaks ACP over stdio (same as Zed). Register it identically
+to the Zed / VS Code pattern above. Hermes-as-peer (Claude Code
+calling Hermes) is planned for v0.2 via a dedicated `HermesAdapter`.
 
 ## Troubleshooting
 
