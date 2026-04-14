@@ -272,7 +272,7 @@ codex.on("exit", (code: number | null) => {
 async function startControlServer() {
   const listener = new WebSocketListener({
     port: CONTROL_PORT,
-    hostname: "127.0.0.1",
+    hostname: process.env.A2A_BRIDGE_CONTROL_HOST ?? "127.0.0.1",
     path: "/ws",
     idleTimeoutSec: 960, // 16 minutes — prevent premature idle disconnects
     sendPings: true,

@@ -59,7 +59,11 @@ async function resolveGateway(options: RunAcpOptions): Promise<ClaudeCodeGateway
   if (options.gateway) return options.gateway;
 
   const controlPort = parseInt(process.env.A2A_BRIDGE_CONTROL_PORT ?? "4512", 10);
-  const controlWsUrl = options.controlWsUrl ?? `ws://127.0.0.1:${controlPort}/ws`;
+  const controlHost = process.env.A2A_BRIDGE_CONTROL_HOST ?? "127.0.0.1";
+  const controlWsUrl =
+    options.controlWsUrl ??
+    process.env.A2A_BRIDGE_CONTROL_URL ??
+    `ws://${controlHost}:${controlPort}/ws`;
 
   const ensureDaemon =
     options.ensureDaemon ?? process.env.A2A_BRIDGE_ACP_SKIP_DAEMON !== "1";
