@@ -2377,6 +2377,139 @@ function jsonRpcResponse(resp) {
   });
 }
 
+// src/runtime-daemon/inbound/acp/turn-handler.ts
+var DEFAULT_PERMISSION_TIMEOUT_MS = 5 * 60 * 1000;
+
+class AcpTurnHandler {
+  gateway;
+  activeTurns = new Map;
+  pendingPermissions = new Map;
+  log;
+  permissionTimeoutMs;
+  constructor(gateway, log, opts) {
+    this.gateway = gateway;
+    this.log = log ?? (() => {});
+    this.permissionTimeoutMs = opts?.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS;
+  }
+  routePermissionRequest(req) {
+    const [conn, active] = this.activeTurns.entries().next().value ?? [undefined, undefined];
+    if (!conn || !active) {
+      this.log(`No active ACP turn \u2014 auto-denying permission ${req.requestId}`);
+      return Promise.resolve("deny");
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        const pending = this.pendingPermissions.get(req.requestId);
+        if (!pending)
+          return;
+        this.pendingPermissions.delete(req.requestId);
+        this.log(`Permission ${req.requestId} timed out after ${this.permissionTimeoutMs}ms \u2014 auto-denying`);
+        resolve("deny");
+      }, this.permissionTimeoutMs);
+      this.pendingPermissions.set(req.requestId, { conn, resolve, timer });
+      this.log(`Forwarding permission ${req.requestId} (${req.toolName}) to ACP turn ${active.turnId}`);
+      this.send(conn, {
+        type: "acp_permission_request",
+        requestId: req.requestId,
+        turnId: active.turnId,
+        toolName: req.toolName,
+        description: req.description,
+        inputPreview: req.inputPreview
+      });
+    });
+  }
+  handlePermissionResponse(conn, msg) {
+    const pending = this.pendingPermissions.get(msg.requestId);
+    if (!pending) {
+      this.log(`Dropping unknown acp_permission_response ${msg.requestId}`);
+      return;
+    }
+    if (pending.conn !== conn) {
+      this.log(`Dropping acp_permission_response ${msg.requestId} from wrong connection`);
+      return;
+    }
+    clearTimeout(pending.timer);
+    this.pendingPermissions.delete(msg.requestId);
+    this.log(`Permission ${msg.requestId} resolved: ${msg.outcome}`);
+    pending.resolve(msg.outcome);
+  }
+  handleTurnStart(conn, msg) {
+    this.settleTurn(conn, `superseded by ${msg.turnId}`);
+    const turn = this.gateway.startTurn(msg.userText);
+    const settled = { value: false };
+    this.activeTurns.set(conn, { turnId: msg.turnId, turn, settled });
+    this.log(`ACP turn started (turnId=${msg.turnId}, ${msg.userText.length} chars)`);
+    turn.on("chunk", (text) => {
+      if (settled.value)
+        return;
+      this.send(conn, { type: "acp_turn_chunk", turnId: msg.turnId, text });
+    });
+    turn.on("complete", () => {
+      if (settled.value)
+        return;
+      settled.value = true;
+      this.activeTurns.delete(conn);
+      this.log(`ACP turn complete (turnId=${msg.turnId})`);
+      this.send(conn, { type: "acp_turn_complete", turnId: msg.turnId });
+    });
+    turn.on("error", (err) => {
+      if (settled.value)
+        return;
+      settled.value = true;
+      this.activeTurns.delete(conn);
+      this.log(`ACP turn error (turnId=${msg.turnId}): ${err.message}`);
+      this.send(conn, {
+        type: "acp_turn_error",
+        turnId: msg.turnId,
+        message: err.message
+      });
+    });
+  }
+  handleTurnCancel(conn, msg) {
+    const active = this.activeTurns.get(conn);
+    if (!active || active.turnId !== msg.turnId) {
+      this.log(`acp_turn_cancel ignored: no active turn ${msg.turnId} on this connection`);
+      return;
+    }
+    this.log(`Cancelling ACP turn ${msg.turnId}`);
+    this.settleTurn(conn, "cancelled by client");
+  }
+  onConnectionClose(conn) {
+    this.settleTurn(conn, "connection closed");
+    this.denyPendingPermissionsFor(conn, "connection closed");
+  }
+  denyPendingPermissionsFor(conn, reason) {
+    for (const [requestId, pending] of this.pendingPermissions.entries()) {
+      if (pending.conn !== conn)
+        continue;
+      this.log(`Auto-denying pending permission ${requestId} (${reason})`);
+      clearTimeout(pending.timer);
+      this.pendingPermissions.delete(requestId);
+      pending.resolve("deny");
+    }
+  }
+  settleTurn(conn, reason) {
+    const active = this.activeTurns.get(conn);
+    if (!active)
+      return;
+    this.log(`Settling turn ${active.turnId} (${reason})`);
+    active.settled.value = true;
+    this.activeTurns.delete(conn);
+    try {
+      active.turn.cancel();
+    } catch {}
+  }
+  send(conn, msg) {
+    if (!conn.isOpen)
+      return;
+    try {
+      conn.send(JSON.stringify(msg));
+    } catch (err) {
+      this.log(`Failed to send ACP frame: ${err?.message ?? err}`);
+    }
+  }
+}
+
 // src/runtime-daemon/daemon.ts
 var stateDir = new StateDirResolver;
 stateDir.ensure();
@@ -2407,6 +2540,7 @@ var inboundGateway = new DaemonClaudeCodeGateway({
   },
   log: (msg) => log(`[A2aGateway] ${msg}`)
 });
+var acpTurnHandler = new AcpTurnHandler(inboundGateway, (msg) => log(`[AcpTurnHandler] ${msg}`));
 var sharedTaskStore = SqliteTaskLog.open(stateDir.taskLogFile);
 var defaultRoom = new Room({
   id: DEFAULT_ROOM_ID,
@@ -2534,7 +2668,7 @@ codex.on("exit", (code) => {
 async function startControlServer() {
   const listener = new WebSocketListener({
     port: CONTROL_PORT,
-    hostname: "127.0.0.1",
+    hostname: process.env.A2A_BRIDGE_CONTROL_HOST ?? "127.0.0.1",
     path: "/ws",
     idleTimeoutSec: 960,
     sendPings: true,
@@ -2544,7 +2678,7 @@ async function startControlServer() {
         return Response.json(currentStatus());
       }
       if (url.pathname === "/readyz") {
-        return Response.json(currentStatus(), { status: codexBootstrapped ? 200 : 503 });
+        return Response.json(currentStatus(), { status: 200 });
       }
       return;
     }
@@ -2563,6 +2697,7 @@ async function startControlServer() {
       if (wasAttached) {
         detachClaude(conn, "frontend socket closed");
       }
+      acpTurnHandler.onConnectionClose(conn);
     });
     conn.on("error", (err) => {
       log(`Frontend socket error (#${clientId}): ${err.message}`);
@@ -2591,6 +2726,38 @@ function handleControlMessage(conn, raw) {
       return;
     case "status":
       sendStatus(conn);
+      return;
+    case "acp_turn_start":
+      acpTurnHandler.handleTurnStart(conn, message);
+      return;
+    case "acp_turn_cancel":
+      acpTurnHandler.handleTurnCancel(conn, message);
+      return;
+    case "plugin_permission_request": {
+      const { requestId } = message;
+      acpTurnHandler.routePermissionRequest({
+        requestId,
+        toolName: message.toolName,
+        description: message.description,
+        inputPreview: message.inputPreview
+      }).then((outcome) => {
+        sendProtocolMessage(conn, {
+          type: "plugin_permission_response",
+          requestId,
+          outcome
+        });
+      }).catch((err) => {
+        log(`Permission routing failed for ${requestId}: ${err.message}`);
+        sendProtocolMessage(conn, {
+          type: "plugin_permission_response",
+          requestId,
+          outcome: "deny"
+        });
+      });
+      return;
+    }
+    case "acp_permission_response":
+      acpTurnHandler.handlePermissionResponse(conn, message);
       return;
     case "claude_to_codex": {
       if (message.message.source !== "claude") {
