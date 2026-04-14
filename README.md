@@ -29,25 +29,24 @@ cost matters more than the collaboration benefit. Multi-agent chains
 typically consume 3-10x more tokens than a single well-prompted
 agent.
 
-## Quick start
+## Set up the server side (Claude Code)
+
+The **server** is the Claude Code session that other agents call
+into. Install a2a-bridge, start the daemon, then launch Claude Code
+with the bridge plugin.
+
+> **AI-assisted:** tell Claude Code
+> `Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.`
+> — it runs everything below automatically.
+
+### 1. Install
 
 ```bash
-# 1. Install
-npm i -g a2a-bridge          # or: npm i -g ./a2a-bridge-*.tgz from source
-a2a-bridge --version          # a2a-bridge v0.1.0
-
-# 2. Configure
-a2a-bridge init               # mint bearer token + install channel plugin
-a2a-bridge doctor             # preflight checklist
-
-# 3. Start the daemon
-a2a-bridge daemon start
-a2a-bridge daemon status      # confirm pid + ports
+npm i -g a2a-bridge            # or: npm i -g ./a2a-bridge-*.tgz from source
+a2a-bridge --version           # a2a-bridge v0.1.0
 ```
 
-Requires Bun >= 1.3 on `PATH` (`a2a-bridge doctor` confirms).
-
-From source:
+Requires Bun >= 1.3 on `PATH`. From source:
 
 ```bash
 git clone https://github.com/firstintent/a2a-bridge.git
@@ -55,36 +54,87 @@ cd a2a-bridge && bun install && bun run build:plugin
 npm pack && npm i -g ./a2a-bridge-*.tgz
 ```
 
-## Connect your agents
+### 2. Configure + start daemon
 
-### Claude Code (CC side)
+```bash
+a2a-bridge init                # mint bearer token + install plugin
+a2a-bridge doctor              # preflight checklist
+a2a-bridge daemon start        # start background daemon
+a2a-bridge daemon status       # confirm pid + ports
+```
 
-Claude Code is the brain of the bridge. Two deployment modes:
+### 3. Launch Claude Code
 
-**Interactive** — start a Claude Code session with the plugin loaded:
+**Interactive** — Claude Code with the bridge plugin loaded:
 
 ```bash
 a2a-bridge claude
 ```
 
-All inbound prompts arrive as channel messages; CC reasons about them
-and replies via the built-in `reply` tool.
+Inbound prompts arrive as channel messages; CC reasons and replies
+via the `reply` tool.
 
-**Tmux (headless)** — spawn a second CC from an existing session:
+**Tmux (headless)** — run the bridge CC in the background while
+your primary session keeps working:
 
 ```bash
 a2a-bridge dev                                            # register plugin (first time)
 A2A_BRIDGE_CONTROL_HOST=0.0.0.0 a2a-bridge daemon start  # expose to network
-tmux new-session -d -s cc-bridge "a2a-bridge claude"      # headless CC
+tmux new-session -d -s cc-bridge "a2a-bridge claude"      # headless bridge CC
 tmux send-keys -t cc-bridge Enter                         # approve dev channels
 ```
 
-Your primary session keeps working; the tmux CC serves bridge
-traffic in the background. Use `tmux attach -t cc-bridge` to inspect.
+Inspect with `tmux attach -t cc-bridge`. Set
+`A2A_BRIDGE_CONTROL_HOST=0.0.0.0` when clients connect from another
+machine.
 
-### Gemini CLI (A2A over HTTP)
+## Set up a client (call Claude Code)
 
-Add to `~/.gemini/settings.json`:
+A **client** is any agent that sends prompts to Claude Code through
+the bridge. Clients speak one of two protocols:
+
+- **ACP** (stdio) — OpenClaw, Zed, VS Code, Hermes. The client
+  spawns `a2a-bridge acp` as a subprocess; no HTTP port or bearer
+  token needed.
+- **A2A** (HTTP) — Gemini CLI and other A2A-speaking agents. They
+  call the daemon's JSON-RPC endpoint with a bearer token.
+
+> **AI-assisted setup:** tell your ACP client
+> `Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.`
+> — it detects which agent it is and self-configures. Skip the
+> manual steps below if you prefer the one-liner.
+
+### OpenClaw (ACP)
+
+```json
+{ "agents": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
+```
+
+Cross-host (daemon on a different machine):
+
+```bash
+export A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws
+export A2A_BRIDGE_ACP_SKIP_DAEMON=1
+```
+
+### Zed (ACP)
+
+```json
+{ "agent_servers": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
+```
+
+### VS Code (ACP)
+
+```json
+{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }
+```
+
+### Hermes Agent (ACP)
+
+Same pattern as Zed / VS Code. Hermes-as-peer (Claude Code calling
+Hermes) ships in v0.2 via a dedicated `HermesAdapter`.
+
+### Gemini CLI (A2A)
 
 ```json
 {
@@ -96,65 +146,29 @@ Add to `~/.gemini/settings.json`:
 }
 ```
 
-Restart Gemini CLI; `@a2a-bridge` routes prompts to Claude Code.
+Add to `~/.gemini/settings.json`. Restart Gemini CLI;
+`@a2a-bridge` routes prompts to Claude Code.
 
-### OpenClaw (ACP over stdio)
+## Set up a peer (bidirectional)
 
-Add to `acpx.config.agents`:
+A **peer** is an agent that Claude Code can delegate tasks *to* —
+the bridge carries messages in both directions.
 
-```json
-{ "agents": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
-```
-
-No bearer token needed. For cross-host (daemon on a remote server):
-
-```bash
-export A2A_BRIDGE_CONTROL_URL=ws://<server-ip>:4512/ws
-export A2A_BRIDGE_ACP_SKIP_DAEMON=1
-```
-
-### Zed (ACP)
-
-Add to Zed `settings.json`:
-
-```json
-{ "agent_servers": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }
-```
-
-### VS Code (ACP)
-
-Any VS Code ACP extension:
-
-```json
-{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }
-```
-
-### Hermes Agent (ACP)
-
-Same ACP pattern as Zed / VS Code above. Hermes-as-peer (Claude Code
-calling Hermes) ships in v0.2 via a dedicated `HermesAdapter`.
-
-### Codex (peer adapter)
-
-Claude Code can delegate tasks to Codex:
+### Codex
 
 ```bash
 a2a-bridge codex    # starts Codex TUI + app-server proxy
 ```
 
-Requires `codex` on `PATH`. Once the TUI creates a thread, messages
-flow bidirectionally between Claude Code and Codex.
+Requires `codex` on `PATH`. Once the TUI creates a thread, Claude
+Code and Codex exchange messages bidirectionally.
 
-## Join the bridge (self-install skill)
+### OpenClaw / Hermes (outbound)
 
-Hand this URL to **both** AIs and each self-installs its side:
-
-```
-Read https://raw.githubusercontent.com/firstintent/a2a-bridge/main/docs/join.md and follow it.
-```
-
-Works for Claude Code, OpenClaw, Zed, and VS Code — step 0 detects
-the host and branches. Full text: [`docs/join.md`](./docs/join.md).
+Outbound peer adapters (Claude Code → OpenClaw, Claude Code →
+Hermes) ship in v0.2. Today these agents connect as **clients**
+(calling Claude Code); v0.2 adds adapters for the reverse
+direction.
 
 ## Advanced
 
@@ -200,31 +214,55 @@ Full logs: `a2a-bridge daemon logs --tail 200`.
 
 ## Architecture
 
+Star topology — every agent talks to the daemon; the daemon
+translates protocols and routes messages.
+
 ```
-┌──────────────┐   MCP stdio (channel)   ┌──────────────────┐   control WS   ┌──────────────┐
-│ Claude Code  │ ◀────────────────────▶  │ a2a-bridge plugin │ ◀────────────▶ │   daemon     │
-└──────────────┘                         └──────────────────┘                └──────┬───────┘
-                                                                                    │
-                                                               ┌────────────────────┼────────────────────┐
-                                                               ▼                    ▼                    ▼
-                                                        InboundService        CodexAdapter       OpenClaw / Hermes
-                                                        (A2A + ACP)           (WS JSON-RPC)      (v0.2)
+        Gemini CLI ─── A2A (HTTP) ───┐
+                                     │
+        OpenClaw ──── ACP (stdio) ───┤
+                                     │
+        Zed / VS Code ─ ACP (stdio) ─┤
+                                     ▼
+                              ┌─────────────┐
+                              │  a2a-bridge  │
+                              │    daemon    │
+                              │ (RoomRouter) │
+                              └──────┬───────┘
+                                     │
+                    ┌────────────────┼────────────────┐
+                    ▼                ▼                ▼
+               Claude Code       Codex          Hermes [v0.2]
+               (CC plugin)    (WS JSON-RPC)    (ACP adapter)
+                  server          peer              peer
 ```
 
-- **Plugin** — Claude Code MCP channel plugin. Pushes inbound
-  messages as `<channel>` tags; exposes `reply` + `get_messages`
-  tools.
-- **Daemon** — background process owning peer adapters, A2A/ACP
-  inbound services, room router, and SQLite task log.
-- **Peer adapters** — one `IPeerAdapter` per target agent. Uniform
-  interface (`start`, `injectMessage`, events).
-- **InboundService** — A2A (HTTP/SSE) + ACP (stdio) servers so
-  external clients can drive Claude Code.
+| Agent | Role | Protocol | Status |
+|-------|------|----------|--------|
+| Claude Code | **server** — receives and answers prompts | MCP Channels (plugin) | v0.1 |
+| Codex | **peer** — CC delegates tasks to it | WS JSON-RPC | v0.1 |
+| Gemini CLI | **client** — calls CC | A2A (HTTP + SSE) | v0.1 |
+| OpenClaw | **client** — calls CC | ACP (stdio) | v0.1 |
+| Zed | **client** — calls CC | ACP (stdio) | v0.1 |
+| VS Code | **client** — calls CC | ACP (stdio) | v0.1 |
+| Hermes | **client** — calls CC | ACP (stdio) | v0.1 |
+| OpenClaw | **peer** — CC delegates to it | Ed25519 gateway | v0.2 |
+| Hermes | **peer** — CC delegates to it | ACP adapter | v0.2 |
 
-Protocol matrix, deployment shapes, and the full adapter contract:
-[`docs/design/architecture.md`](./docs/design/architecture.md).
-Session isolation and restart semantics:
-[`docs/guides/rooms.md`](./docs/guides/rooms.md).
+**Why star, not mesh?** Each agent speaks a different wire protocol.
+A mesh would need N*(N-1)/2 translators; a star needs one adapter
+per agent. Adding a new agent means writing one adapter — nothing
+else changes.
+
+**Only Claude Code as server (v0.1).** The bridge is a Claude Code
+Channel plugin, so CC is the natural hub that receives inbound
+prompts. v0.2 adds outbound peer adapters so CC can also *call*
+OpenClaw and Hermes, making the topology fully bidirectional.
+
+Details: [`docs/design/architecture.md`](./docs/design/architecture.md)
+(protocol matrix, deployment shapes, adapter contract).
+Sessions: [`docs/guides/rooms.md`](./docs/guides/rooms.md)
+(room isolation, restart semantics).
 
 ## Releasing
 

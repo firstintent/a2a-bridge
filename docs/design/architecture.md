@@ -17,6 +17,40 @@ Claude Code session and some other agent, preserve turn semantics,
 and do not care whether the other agent sits on the same host or
 across a network.
 
+## Topology
+
+Star — the daemon is the central hub; every agent connects to it.
+
+```
+        Gemini CLI ─── A2A (HTTP) ───┐
+                                     │
+        OpenClaw ──── ACP (stdio) ───┤
+                                     │
+        Zed / VS Code ─ ACP (stdio) ─┤
+                                     ▼
+                              ┌─────────────┐
+                              │  a2a-bridge  │
+                              │    daemon    │
+                              │ (RoomRouter) │
+                              └──────┬───────┘
+                                     │
+                    ┌────────────────┼────────────────┐
+                    ▼                ▼                ▼
+               Claude Code       Codex          Hermes [v0.2]
+               (CC plugin)    (WS JSON-RPC)    (ACP adapter)
+                  server          peer              peer
+```
+
+Agents never talk to each other directly — the daemon translates
+protocols and routes messages. Adding a new agent means writing one
+adapter; nothing else changes.
+
+v0.1: Claude Code is the only **server** (receives inbound prompts);
+Codex is the only **peer** (CC delegates to it). OpenClaw, Zed,
+VS Code, Hermes, and Gemini CLI connect as **clients** (call CC).
+v0.2 adds outbound peer adapters for OpenClaw and Hermes, making
+the topology fully bidirectional.
+
 ## Code layout
 
 The source tree is split by **runtime** (where the code executes)
@@ -87,12 +121,11 @@ relative `../` chains, so boundary violations stand out:
 
 A standard MCP stdio plugin (see `plugins/a2a-bridge/`). Declares
 `experimental['claude/channel']` so Claude Code treats its
-`notifications/claude/channel` as inbound user turns. Current outbound
-tools are `reply` and `get_messages`; `cancel_turn` and
-`switch_peer` are planned (roadmap Phase 3–4). Plugin connects to the
-daemon over whichever transport is configured (stdio-within-Claude
-by default; daemon URL via `A2A_BRIDGE_DAEMON_URL` for a remote
-daemon).
+`notifications/claude/channel` as inbound user turns. Outbound
+tools: `reply` and `get_messages`; `cancel_turn` and `switch_peer`
+are deferred to v0.2. Plugin connects to the daemon over the
+control-plane WebSocket (localhost by default;
+`A2A_BRIDGE_CONTROL_HOST` / `A2A_BRIDGE_CONTROL_URL` for remote).
 
 ### Daemon
 
@@ -129,18 +162,18 @@ private to the implementations.
 
 ## Protocol matrix
 
-| Counterparty       | Native wire                        | a2a-bridge module    | Direction         | Status |
-|--------------------|------------------------------------|----------------------|-------------------|--------|
-| Claude Code        | MCP Channels (stdio)               | channel plugin       | ↔ (always)        | v0.1   |
-| Codex              | App-server JSON-RPC over WebSocket | CodexAdapter         | ↔                 | v0.1   |
-| Any A2A client     | A2A (JSON-RPC + SSE)               | A2A InboundService   | client → CC       | v0.1   |
-| OpenClaw / Zed /   | ACP (JSON-RPC 2.0 over stdio)      | ACP InboundService   | client → CC       | v0.1   |
-|  VS Code / Hermes  |                                    | (`a2a-bridge acp`)   |                   |        |
-| MCP clients        | MCP (HTTP/SSE/stdio)               | MCP InboundService   | client → CC       | v0.2   |
-|  (Cursor, Claude   |                                    |                      |                   |        |
-|   Desktop)         |                                    |                      |                   |        |
-| OpenClaw (peer)    | Gateway WS + Ed25519 handshake     | OpenClawAdapter      | ↔                 | v0.2   |
-| Hermes (peer)      | Zed ACP (JSON-RPC 2.0 over stdio)  | HermesAdapter        | CC → Hermes only  | v0.2   |
+| Agent | Role | Native wire | a2a-bridge module | Status |
+|-------|------|-------------|-------------------|--------|
+| Claude Code | **server** | MCP Channels (stdio) | channel plugin | v0.1 |
+| Codex | **peer** | App-server JSON-RPC (WS) | CodexAdapter | v0.1 |
+| Gemini CLI | **client** | A2A (JSON-RPC + SSE) | A2A InboundService | v0.1 |
+| OpenClaw | **client** | ACP (JSON-RPC stdio) | ACP InboundService | v0.1 |
+| Zed | **client** | ACP (JSON-RPC stdio) | ACP InboundService | v0.1 |
+| VS Code | **client** | ACP (JSON-RPC stdio) | ACP InboundService | v0.1 |
+| Hermes | **client** | ACP (JSON-RPC stdio) | ACP InboundService | v0.1 |
+| Cursor / Claude Desktop | **client** | MCP (HTTP/SSE/stdio) | MCP InboundService | v0.2 |
+| OpenClaw | **peer** | Gateway WS + Ed25519 | OpenClawAdapter | v0.2 |
+| Hermes | **peer** | Zed ACP (JSON-RPC stdio) | HermesAdapter | v0.2 |
 
 a2a-bridge does not run A2A to its Codex/OpenClaw/Hermes peers —
 those have their own protocols and no A2A support. a2a-bridge is the
