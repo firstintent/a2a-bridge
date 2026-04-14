@@ -18,6 +18,14 @@ function resolveDaemonPath(explicitPath?: string): string {
   return fileURLToPath(new URL("./daemon.ts", import.meta.url));
 }
 
+function ensureLocalhostBypassesProxy(): void {
+  const current = process.env.no_proxy ?? process.env.NO_PROXY ?? "";
+  if (current.includes("127.0.0.1")) return;
+  const patched = [current, "127.0.0.1", "localhost"].filter(Boolean).join(",");
+  process.env.no_proxy = patched;
+  process.env.NO_PROXY = patched;
+}
+
 export interface DaemonLifecycleOptions {
   stateDir: StateDirResolver;
   controlPort: number;
@@ -42,6 +50,11 @@ export class DaemonLifecycle {
     this.controlPort = opts.controlPort;
     this.log = opts.log;
     this.daemonPath = resolveDaemonPath(opts.daemonEntryPath);
+    // Health/readyz checks hit 127.0.0.1 — make sure they bypass any
+    // HTTP proxy the user's shell may have configured. Without this,
+    // `fetch("http://127.0.0.1:4512/healthz")` goes through the proxy
+    // and returns 502 instead of the daemon's real response.
+    ensureLocalhostBypassesProxy();
   }
 
   get healthUrl(): string {
