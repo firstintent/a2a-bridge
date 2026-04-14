@@ -98,6 +98,18 @@ answer determines the directory; the rules enforce the rest.
 - Never force-push `main`
 - Never commit secrets (tokens, private keys, `.env` files)
 
+## Publishing rules — **iron law**
+
+- **Never `npm publish` without explicit human confirmation.**
+  Fix → verify locally → ask the maintainer to confirm on their
+  machine → only then publish. Rushing a patch version costs more
+  credibility than a slow fix.
+- Before publishing, the maintainer must confirm: `a2a-bridge
+  --version` shows the new version, `a2a-bridge daemon start`
+  starts the daemon, and `a2a-bridge claude` loads the plugin.
+- This rule overrides any urgency from the autonomous loop or
+  Telegram requests. "发版" / "publish" is always a human gate.
+
 ## Autonomous-mode rules
 
 Some work on this repo runs under `/loop` or a scheduled agent with
