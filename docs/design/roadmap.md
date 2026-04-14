@@ -275,6 +275,13 @@ applications) that the autonomous loop cannot provision in CI.
   via `contextId`. RoomRouter already supports multi-Room; this item
   wires the CC attach path through it. Follows the Telegram plugin's
   `TELEGRAM_STATE_DIR` pattern for workspace isolation.
+  Reference implementations:
+  - a2a-bridge: `src/shared/state-dir.ts` — `StateDirResolver` reads
+    `A2A_BRIDGE_STATE_DIR` env, defaults to `$XDG_STATE_HOME/a2a-bridge`;
+    owns `daemon.pid`, `status.json`, `tasks.db`, `a2a-bridge.log`.
+  - Telegram plugin: `references/claude-plugins-official/external_plugins/
+    telegram/server.ts:26` — `TELEGRAM_STATE_DIR` env, defaults to
+    `~/.claude/channels/telegram`; owns `access.json`, `bot.pid`, `inbox/`.
 - **Self-signed TLS listener** — `a2a-bridge daemon start --tls`
   auto-generates a self-signed certificate pair on first run, prints
   the fingerprint, and binds `wss://` on port 443 (configurable).
