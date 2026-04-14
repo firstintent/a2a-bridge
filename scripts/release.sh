@@ -229,7 +229,7 @@ append_section "Other" "其他" "$OTHERS"
 
 NOTES+=$'\n'"### Installation / 安装"$'\n'
 NOTES+='```bash'$'\n'
-NOTES+="npm install -g @firstintent/a2a-bridge"$'\n'
+NOTES+="npm install -g a2a-bridge"$'\n'
 NOTES+='```'$'\n'
 NOTES+=$'\n'"**Full Changelog / 完整变更记录:** https://github.com/$REPO/compare/$COMPARE_BASE...v$NEW_VERSION"
 

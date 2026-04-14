@@ -982,17 +982,34 @@ class TuiConnectionState {
 import { spawn as spawn2, execFileSync } from "child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync, openSync, closeSync, constants } from "fs";
 import { fileURLToPath } from "url";
-var DAEMON_ENTRY = process.env.A2A_BRIDGE_DAEMON_ENTRY ?? "./daemon.ts";
-var DAEMON_PATH = fileURLToPath(new URL(DAEMON_ENTRY, import.meta.url));
+function resolveDaemonPath(explicitPath) {
+  if (process.env.A2A_BRIDGE_DAEMON_ENTRY) {
+    return fileURLToPath(new URL(process.env.A2A_BRIDGE_DAEMON_ENTRY, `file://${process.cwd()}/`));
+  }
+  if (explicitPath)
+    return explicitPath;
+  return fileURLToPath(new URL("./daemon.ts", import.meta.url));
+}
+function ensureLocalhostBypassesProxy() {
+  const current = process.env.no_proxy ?? process.env.NO_PROXY ?? "";
+  if (current.includes("127.0.0.1"))
+    return;
+  const patched = [current, "127.0.0.1", "localhost"].filter(Boolean).join(",");
+  process.env.no_proxy = patched;
+  process.env.NO_PROXY = patched;
+}
 
 class DaemonLifecycle {
   stateDir;
   controlPort;
   log;
+  daemonPath;
   constructor(opts) {
     this.stateDir = opts.stateDir;
     this.controlPort = opts.controlPort;
     this.log = opts.log;
+    this.daemonPath = resolveDaemonPath(opts.daemonEntryPath);
+    ensureLocalhostBypassesProxy();
   }
   get healthUrl() {
     return `http://127.0.0.1:${this.controlPort}/healthz`;
@@ -1123,7 +1140,7 @@ class DaemonLifecycle {
   launch() {
     this.stateDir.ensure();
     this.log(`Launching detached daemon on control port ${this.controlPort}`);
-    const daemonProc = spawn2(process.execPath, ["run", DAEMON_PATH], {
+    const daemonProc = spawn2(process.execPath, ["run", this.daemonPath], {
       cwd: process.cwd(),
       env: {
         ...process.env,
@@ -1717,16 +1734,21 @@ function deriveRoomId(input = {}) {
 // src/runtime-daemon/tasks/task-log.ts
 import { Database } from "bun:sqlite";
 import { EventEmitter as EventEmitter4 } from "events";
-import { readFileSync as readFileSync3 } from "fs";
-import { fileURLToPath as fileURLToPath2 } from "url";
-import { dirname as dirname2, join as join3 } from "path";
-var schemaPath = join3(dirname2(fileURLToPath2(import.meta.url)), "task-log-schema.sql");
-var cachedSchema;
+var TASK_LOG_SCHEMA = `
+CREATE TABLE IF NOT EXISTS tasks (
+  id          TEXT PRIMARY KEY,
+  room_id     TEXT NOT NULL,
+  context_id  TEXT NOT NULL,
+  state       TEXT NOT NULL,
+  status_json TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_room ON tasks(room_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_room_updated ON tasks(room_id, updated_at DESC);
+`;
 function loadSchema() {
-  if (cachedSchema === undefined) {
-    cachedSchema = readFileSync3(schemaPath, "utf8");
-  }
-  return cachedSchema;
+  return TASK_LOG_SCHEMA;
 }
 function migrateTaskLogSchema(db) {
   db.exec(loadSchema());
@@ -3050,7 +3072,7 @@ async function bootCodex() {
   log("Starting A2aBridge daemon...");
   log(`Codex app-server: ${codex.appServerUrl}`);
   log(`Codex proxy: ${codex.proxyUrl}`);
-  log(`Control server: ws://127.0.0.1:${CONTROL_PORT}/ws`);
+  log(`Control server: ws://${process.env.A2A_BRIDGE_CONTROL_HOST ?? "127.0.0.1"}:${CONTROL_PORT}/ws`);
   try {
     await codex.start();
     codexBootstrapped = true;

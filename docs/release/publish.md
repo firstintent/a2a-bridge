@@ -17,7 +17,7 @@ cannot hold.
   - Access to the `production` GitHub Actions environment on
     that repo.
   - An npm account with publish rights on
-    `@firstintent/a2a-bridge` and a current `NPM_TOKEN` set as
+    `a2a-bridge` and a current `NPM_TOKEN` set as
     a repo secret.
   - An Anthropic account for the `/plugin` marketplace form.
   - Two-factor auth configured on npm (we use `--otp`).
@@ -114,7 +114,7 @@ The `release.yml` workflow has three jobs:
 Open the draft release. Verify:
 
 - Title is `v0.1.0`.
-- Tarball is attached (`firstintent-a2a-bridge-0.1.0.tgz`, ~230
+- Tarball is attached (`a2a-bridge-0.1.0.tgz`, ~230
   KB).
 - Body text is present (pulled from `release.yml` body:).
 
@@ -144,9 +144,9 @@ npm publish --access=public --otp=<6-digit code from your authenticator>
 Verify on the npm registry:
 
 ```bash
-npm view @firstintent/a2a-bridge@0.1.0 version
+npm view a2a-bridge@0.1.0 version
 # → 0.1.0
-npm view @firstintent/a2a-bridge dist-tags
+npm view a2a-bridge dist-tags
 # → latest: 0.1.0
 ```
 
@@ -210,7 +210,7 @@ machine (or at least a clean directory):
 TMP=$(mktemp -d)
 cd "$TMP"
 npm init -y >/dev/null
-npm install @firstintent/a2a-bridge@0.1.0
+npm install a2a-bridge@0.1.0
 ./node_modules/.bin/a2a-bridge --version
 # → a2a-bridge v0.1.0
 ./node_modules/.bin/a2a-bridge init --print
@@ -227,7 +227,7 @@ immediately:
 - Missing file in the tarball → check `package.json`'s `files`
   array, publish `0.1.1`.
 - Runtime error → revert the tag if possible
-  (`npm unpublish @firstintent/a2a-bridge@0.1.0` within 72h of
+  (`npm unpublish a2a-bridge@0.1.0` within 72h of
   the publish) and ship a corrected release.
 
 ## 11. Announcement
@@ -245,12 +245,12 @@ If a defect surfaces after publish:
 
 1. **Patch if possible.** Ship a `0.1.1` via the full flow; it
    supersedes `0.1.0` as `latest` on npm.
-2. **Deprecate if not.** `npm deprecate @firstintent/a2a-bridge@0.1.0
+2. **Deprecate if not.** `npm deprecate a2a-bridge@0.1.0
    "install 0.1.1 instead — [reason]"`. The package stays
    downloadable (existing installs don't break) but npm warns
    on `npm install`.
 3. **Unpublish only within 72h.** `npm unpublish
-   @firstintent/a2a-bridge@0.1.0 --force` is destructive and
+   a2a-bridge@0.1.0 --force` is destructive and
    irreversible after the 72-hour window. Avoid unless the
    release leaks secrets or has legal issues.
 

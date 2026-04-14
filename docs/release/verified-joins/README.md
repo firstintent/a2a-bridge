@@ -34,7 +34,7 @@ the whole point is human verification on real infrastructure.
 - **Host OS:** macOS 15.4 / Ubuntu 24.04 / …
 - **Claude Code:** <version>
 - **ACP client:** OpenClaw <version> / Zed <version> / VS Code ACP <version>
-- **Tarball URL:** https://github.com/firstintent/a2a-bridge/releases/download/v0.1.0/firstintent-a2a-bridge-0.1.0.tgz
+- **Tarball URL:** https://github.com/firstintent/a2a-bridge/releases/download/v0.1.0/a2a-bridge-0.1.0.tgz
 
 ## CC side
 

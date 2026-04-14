@@ -725,7 +725,7 @@ async function bootCodex() {
   log("Starting A2aBridge daemon...");
   log(`Codex app-server: ${codex.appServerUrl}`);
   log(`Codex proxy: ${codex.proxyUrl}`);
-  log(`Control server: ws://127.0.0.1:${CONTROL_PORT}/ws`);
+  log(`Control server: ws://${process.env.A2A_BRIDGE_CONTROL_HOST ?? "127.0.0.1"}:${CONTROL_PORT}/ws`);
 
   try {
     await codex.start();
