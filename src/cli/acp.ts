@@ -44,8 +44,17 @@ export interface RunAcpOptions {
 export async function runAcp(
   args: string[],
   options: RunAcpOptions = {},
-): Promise<AcpInboundService> {
-  void args;
+): Promise<AcpInboundService | void> {
+  // One-shot prompt mode: a2a-bridge acp -p "hello" / --prompt "hello"
+  const promptIdx = args.findIndex((a) => a === "-p" || a === "--prompt");
+  if (promptIdx !== -1) {
+    const text = args[promptIdx + 1];
+    if (!text) {
+      console.error("Usage: a2a-bridge acp -p <prompt>");
+      process.exit(1);
+    }
+    return runOneShotPrompt(text, options);
+  }
 
   const stdio = options.stdio ?? defaultStdio();
   const gateway = await resolveGateway(options);
@@ -53,6 +62,33 @@ export async function runAcp(
   const service = new AcpInboundService({ stdio, gateway });
   await service.start();
   return service;
+}
+
+/**
+ * One-shot mode: connect to daemon, send one prompt, print the reply,
+ * exit. Useful for smoke-testing the bridge from the command line.
+ */
+async function runOneShotPrompt(
+  text: string,
+  options: RunAcpOptions,
+): Promise<void> {
+  const gateway = await resolveGateway(options);
+  const turn = gateway.startTurn(text);
+
+  const chunks: string[] = [];
+  await new Promise<void>((resolve, reject) => {
+    turn.on("chunk", (c: string) => chunks.push(c));
+    turn.on("complete", () => resolve());
+    turn.on("error", (err: Error) => reject(err));
+  });
+
+  const reply = chunks.join("");
+  console.log(reply);
+
+  // Clean shutdown
+  if ("disconnect" in gateway && typeof gateway.disconnect === "function") {
+    await (gateway as { disconnect: () => Promise<void> }).disconnect();
+  }
 }
 
 async function resolveGateway(options: RunAcpOptions): Promise<ClaudeCodeGateway> {
