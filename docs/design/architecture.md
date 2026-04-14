@@ -22,23 +22,19 @@ across a network.
 Star — the daemon is the central hub; every agent connects to it.
 
 ```
-        Gemini CLI ─── A2A (HTTP) ───┐
-                                     │
-        OpenClaw ──── ACP (stdio) ───┤
-                                     │
-        Zed / VS Code ─ ACP (stdio) ─┤
-                                     ▼
-                              ┌─────────────┐
-                              │  a2a-bridge  │
-                              │    daemon    │
-                              │ (RoomRouter) │
-                              └──────┬───────┘
-                                     │
-                    ┌────────────────┼────────────────┐
-                    ▼                ▼                ▼
-               Claude Code       Codex          Hermes [v0.2]
-               (CC plugin)    (WS JSON-RPC)    (ACP adapter)
-                  server          peer              peer
+          Gemini CLI        OpenClaw        Zed        VS Code       Hermes Agent
+              │                │             │            │               │
+              │ A2A            │ ACP         │ ACP       │ ACP          │ ACP
+              ▼                ▼             ▼            ▼               ▼
+        ┌─────────────────────────────────────────────────────────────────────┐
+        │                        a2a-bridge daemon                           │
+        │                         (RoomRouter)                               │
+        └──────────────┬──────────────────┬──────────────────┬───────────────┘
+                       │                  │                  │
+                       ▼                  ▼                  ▼
+                  Claude Code          Codex           Hermes [v0.2]
+                  (CC plugin)       (WS JSON-RPC)     (ACP adapter)
+                    server             peer               peer
 ```
 
 Agents never talk to each other directly — the daemon translates
