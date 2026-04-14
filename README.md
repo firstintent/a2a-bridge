@@ -3,7 +3,7 @@
 [![CI](https://github.com/firstintent/a2a-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/firstintent/a2a-bridge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/firstintent/a2a-bridge/blob/main/LICENSE)
 
-**The missing bridge between AI coding agents.** Claude Code, Codex, OpenClaw, Hermes Agent, Gemini CLI, Zed, and VS Code agents can finally talk to each other — one daemon, star topology, every protocol translated. Install once, pick your agents, and they collaborate across [A2A](https://google.github.io/A2A/) and [ACP](https://agentclientprotocol.org/) without copy-paste, context loss, or model switching.
+**The bridge between AI agents.** Claude Code, Codex, OpenClaw, Hermes Agent, Gemini CLI, Zed, and VS Code agents can finally talk to each other — one daemon, star topology, every protocol translated. Install once, pick your agents, and they collaborate across [A2A](https://google.github.io/A2A/) and [ACP](https://agentclientprotocol.org/) without copy-paste, context loss, or model switching.
 
 <table>
 <tr><td><b>Any agent calls Claude Code</b></td><td>OpenClaw, Gemini CLI, Zed, VS Code, and Hermes Agent send prompts to a live Claude Code session through the bridge. Real reasoning, not echo — verified end-to-end across the public internet.</td></tr>
