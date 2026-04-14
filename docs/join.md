@@ -40,7 +40,7 @@ the bearer token to the user so they can paste it on the ACP side.
 ### 1. Install
 
 ```bash
-npm i -g a2a-bridge
+npm install -g a2a-bridge@latest
 ```
 
 Verify the install:
@@ -116,7 +116,7 @@ through to verify the real CC path works.
 ### 1. Install
 
 ```bash
-npm i -g a2a-bridge
+npm install -g a2a-bridge@latest
 ```
 
 Verify:
