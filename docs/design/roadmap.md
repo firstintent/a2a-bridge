@@ -266,22 +266,37 @@ applications) that the autonomous loop cannot provision in CI.
 - **MCP inbound** — `runtime-daemon/inbound/mcp/` shim mirroring the
   ACP shape. Targets Cursor and Claude Desktop. Same
   `ClaudeCodeGateway` underneath.
-- **Multi-CC single-daemon** — multiple Claude Code instances attach
-  to one daemon, each assigned to its own Room via a workspace ID
-  (derived from `A2A_BRIDGE_STATE_DIR` or the CC conversation ID).
-  The plugin sends the workspace ID on `claude_connect`; the daemon's
-  attach logic becomes per-Room instead of a global single slot.
-  Inbound clients (OpenClaw, Gemini CLI) route to a specific Room
-  via `contextId`. RoomRouter already supports multi-Room; this item
-  wires the CC attach path through it. Follows the Telegram plugin's
-  `TELEGRAM_STATE_DIR` pattern for workspace isolation.
-  Reference implementations:
+- **Multi-target routing via `--target`** — a single daemon fronts
+  multiple agents behind it: one or more Claude Code workspaces
+  (project-a, project-b, ...), one or more peer adapters (Codex,
+  Hermes, OpenClaw outbound), and potentially multiple MCP clients.
+  Today there is exactly one attached Claude Code slot; v0.2 turns
+  that into a general `Map<TargetId, Room>` where a target is
+  identified by `<agent-kind>[:<instance-id>]`, e.g.:
+    - `claude:project-a`, `claude:project-b` — distinct CC sessions
+    - `codex` — the Codex peer adapter
+    - `hermes` — the Hermes peer adapter (when v0.2 lands)
+  Workspace routing is the special case where the agent-kind is
+  `claude` and the instance-id distinguishes CC sessions.
+  The `a2a-bridge acp --target <id>` flag selects the route; the
+  plugin sends the workspace ID on `claude_connect`; RoomRouter
+  becomes the unified dispatch layer.
+  OpenClaw / Zed / VS Code register one `acpx` entry per target
+  they care about:
+  ```json
+  "agents": {
+    "bridge-proj-a":  { "command": "a2a-bridge acp --target claude:project-a --url …" },
+    "bridge-proj-b":  { "command": "a2a-bridge acp --target claude:project-b --url …" },
+    "bridge-codex":   { "command": "a2a-bridge acp --target codex --url …" }
+  }
+  ```
+  Workspace IDs are derived from `A2A_BRIDGE_STATE_DIR` (same pattern
+  as the Telegram plugin's `TELEGRAM_STATE_DIR`). Reference
+  implementations:
   - a2a-bridge: `src/shared/state-dir.ts` — `StateDirResolver` reads
-    `A2A_BRIDGE_STATE_DIR` env, defaults to `$XDG_STATE_HOME/a2a-bridge`;
-    owns `daemon.pid`, `status.json`, `tasks.db`, `a2a-bridge.log`.
+    `A2A_BRIDGE_STATE_DIR`, defaults to `$XDG_STATE_HOME/a2a-bridge`.
   - Telegram plugin: `references/claude-plugins-official/external_plugins/
-    telegram/server.ts:26` — `TELEGRAM_STATE_DIR` env, defaults to
-    `~/.claude/channels/telegram`; owns `access.json`, `bot.pid`, `inbox/`.
+    telegram/server.ts:26` — `TELEGRAM_STATE_DIR` env.
 - **Self-signed TLS listener** — `a2a-bridge daemon start --tls`
   auto-generates a self-signed certificate pair on first run, prints
   the fingerprint, and binds `wss://` on port 443 (configurable).
