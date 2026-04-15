@@ -13666,7 +13666,7 @@ import { appendFileSync } from "fs";
 // package.json
 var package_default = {
   name: "a2a-bridge",
-  version: "0.1.1",
+  version: "0.2.0",
   description: "Bidirectional bridge between Claude Code and other AI coding agents (Codex, OpenClaw, Hermes, ...) over the MCP Channels protocol.",
   type: "module",
   bin: {

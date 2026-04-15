@@ -5,7 +5,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] — unreleased
+## [0.2.0] — 2026-04-16
 
 Multi-target routing. One daemon can now front multiple Claude Code
 workspaces at once, and ACP / A2A callers pick which one they want
@@ -72,6 +72,20 @@ Full design: [`docs/design/multi-target-routing.md`](./docs/design/multi-target-
 - **Plugin disabled-state recovery** now forwards the CC's
   TargetId on the recovery attach (was silently dropping to
   `claude:default` before the fix).
+
+### Fixed — from the v0.2.0 pre-release smoke pass
+
+- `a2a-bridge daemon targets` no longer advertises a phantom
+  `claude:default` row when every CC attach was under an explicit
+  TargetId. The legacy-singleton fallback only surfaces when no
+  per-target entry already covers that connection.
+- `a2a-bridge acp` now advertises `agentCapabilities.loadSession:
+  true` and implements `session/load` as a stateless no-op.
+  OpenClaw acpx's "persistent session" mode previously tried to
+  resume a prior session id across subprocess restarts and blew
+  up on `agent does not support session/load`; the adopt-as-new
+  implementation keeps acpx happy without introducing cross-
+  restart session state we don't actually own.
 
 ### Deferred to v0.3
 

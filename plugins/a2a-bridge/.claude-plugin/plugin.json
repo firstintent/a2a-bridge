@@ -1,6 +1,6 @@
 {
   "name": "a2a-bridge",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Bridge Claude Code with other AI coding agents (Codex, OpenClaw, Hermes, ...) through a shared daemon, push channel delivery, and bidirectional reply tooling.",
   "author": {
     "name": "FirstIntent"
