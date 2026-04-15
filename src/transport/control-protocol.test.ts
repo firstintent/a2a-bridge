@@ -29,6 +29,29 @@ function roundtripServer(msg: ControlServerMessage): ControlServerMessage {
 // Client → Daemon frames
 // ---------------------------------------------------------------------------
 
+describe("P10.2 control-plane: claude_connect carries optional target", () => {
+  test("claude_connect with target round-trips", () => {
+    const msg: ControlClientMessage = {
+      type: "claude_connect",
+      target: "claude:project-a",
+    };
+    const restored = roundtripClient(msg);
+    expect(restored).toEqual(msg);
+    if (restored.type === "claude_connect") {
+      expect(restored.target).toBe("claude:project-a");
+    }
+  });
+
+  test("claude_connect without target round-trips (v0.1 backward compat)", () => {
+    const msg: ControlClientMessage = { type: "claude_connect" };
+    const restored = roundtripClient(msg);
+    expect(restored).toEqual(msg);
+    if (restored.type === "claude_connect") {
+      expect(restored.target).toBeUndefined();
+    }
+  });
+});
+
 describe("P8.1 control-plane: ControlClientMessage ACP variants", () => {
   test("acp_turn_start round-trips with required fields", () => {
     const msg: ControlClientMessage = {

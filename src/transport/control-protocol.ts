@@ -53,7 +53,10 @@ export function assertIdentifierSafeKeys(meta: AcpTurnMeta): void {
 export type PermissionOutcome = "allow" | "deny";
 
 export type ControlClientMessage =
-  | { type: "claude_connect" }
+  // `target` is the `kind:id` TargetId (see shared/target-id.ts).
+  // Optional for v0.1 backward compat; when omitted the daemon
+  // assigns `claude:default`.
+  | { type: "claude_connect"; target?: string }
   | { type: "claude_disconnect" }
   | { type: "claude_to_codex"; requestId: string; message: BridgeMessage; requireReply?: boolean }
   | { type: "status" }

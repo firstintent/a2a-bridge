@@ -80,8 +80,14 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
     });
   }
 
-  attachClaude() {
-    this.send({ type: "claude_connect" });
+  /**
+   * Attach this client as Claude Code on the daemon control plane.
+   * Pass `target` ("kind:id" form) to claim a specific Room when
+   * the daemon supports multi-target routing (P10.x / v0.2). When
+   * omitted, the daemon assigns `claude:default` (v0.1 behaviour).
+   */
+  attachClaude(target?: string) {
+    this.send({ type: "claude_connect", ...(target ? { target } : {}) });
   }
 
   async disconnect() {

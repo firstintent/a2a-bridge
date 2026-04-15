@@ -6,6 +6,7 @@ import { DaemonClient } from "@plugin/daemon-client/daemon-client";
 import { DaemonLifecycle } from "@shared/daemon-lifecycle";
 import { StateDirResolver } from "@shared/state-dir";
 import { ConfigService } from "@shared/config-service";
+import { resolveClaudeTarget } from "@shared/workspace-id";
 import type { BridgeMessage } from "@messages/types";
 
 const stateDir = new StateDirResolver();
@@ -18,6 +19,12 @@ const CONTROL_WS_URL = daemonLifecycle.controlWsUrl;
 
 const claude = new ClaudeAdapter();
 const daemonClient = new DaemonClient(CONTROL_WS_URL);
+
+// P10.2 — derive this CC's TargetId from env + state-dir so the
+// daemon can route inbound traffic to the right Room when multiple
+// CC instances share one daemon. v0.1 backward compat: bare
+// `claude` always resolves to `claude:default` when no env vars set.
+const CLAUDE_TARGET = resolveClaudeTarget({ stateDirPath: stateDir.dir });
 
 let shuttingDown = false;
 let daemonDisabled = false;
@@ -95,7 +102,7 @@ async function connectToDaemon(isReconnect = false) {
   try {
     await daemonLifecycle.ensureRunning();
     await daemonClient.connect();
-    daemonClient.attachClaude();
+    daemonClient.attachClaude(CLAUDE_TARGET);
     if (!isReconnect) {
       void claude.pushNotification(systemMessage(
         "system_bridge_ready",
