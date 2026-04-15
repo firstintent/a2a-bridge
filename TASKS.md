@@ -568,7 +568,7 @@ once that phase lands.
   rooms map via a new control-plane `list_targets` RPC. Unit test
   against a stub daemon.
 
-- [ ] **P10.6 — Attach conflict policy (reject + `--force`).**
+- [x] **P10.6 — Attach conflict policy (reject + `--force`).**
   Acceptance: a second `a2a-bridge claude` / `a2a-bridge codex`
   targeting an already-attached TargetId is rejected with a
   descriptive error; rerunning with `--force` sends a
