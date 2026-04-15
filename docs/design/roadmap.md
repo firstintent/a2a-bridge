@@ -266,37 +266,14 @@ applications) that the autonomous loop cannot provision in CI.
 - **MCP inbound** — `runtime-daemon/inbound/mcp/` shim mirroring the
   ACP shape. Targets Cursor and Claude Desktop. Same
   `ClaudeCodeGateway` underneath.
-- **Multi-target routing via `--target`** — a single daemon fronts
-  multiple agents behind it: one or more Claude Code workspaces
-  (project-a, project-b, ...), one or more peer adapters (Codex,
-  Hermes, OpenClaw outbound), and potentially multiple MCP clients.
-  Today there is exactly one attached Claude Code slot; v0.2 turns
-  that into a general `Map<TargetId, Room>` where a target is
-  identified by `<agent-kind>[:<instance-id>]`, e.g.:
-    - `claude:project-a`, `claude:project-b` — distinct CC sessions
-    - `codex` — the Codex peer adapter
-    - `hermes` — the Hermes peer adapter (when v0.2 lands)
-  Workspace routing is the special case where the agent-kind is
-  `claude` and the instance-id distinguishes CC sessions.
-  The `a2a-bridge acp --target <id>` flag selects the route; the
-  plugin sends the workspace ID on `claude_connect`; RoomRouter
-  becomes the unified dispatch layer.
-  OpenClaw / Zed / VS Code register one `acpx` entry per target
-  they care about:
-  ```json
-  "agents": {
-    "bridge-proj-a":  { "command": "a2a-bridge acp --target claude:project-a --url …" },
-    "bridge-proj-b":  { "command": "a2a-bridge acp --target claude:project-b --url …" },
-    "bridge-codex":   { "command": "a2a-bridge acp --target codex --url …" }
-  }
-  ```
-  Workspace IDs are derived from `A2A_BRIDGE_STATE_DIR` (same pattern
-  as the Telegram plugin's `TELEGRAM_STATE_DIR`). Reference
-  implementations:
-  - a2a-bridge: `src/shared/state-dir.ts` — `StateDirResolver` reads
-    `A2A_BRIDGE_STATE_DIR`, defaults to `$XDG_STATE_HOME/a2a-bridge`.
-  - Telegram plugin: `references/claude-plugins-official/external_plugins/
-    telegram/server.ts:26` — `TELEGRAM_STATE_DIR` env.
+- **Multi-target routing via `--target`** — one daemon fronts
+  multiple agent instances (several Claude Code workspaces, several
+  Codex / Hermes peers, ...). Every target is identified by a
+  `kind:id` tuple, e.g. `claude:project-a`, `codex:dev`,
+  `hermes:default`. The ACP subprocess takes `--target kind:id` to
+  pick where its turns go; the plugin sends its workspace id on
+  attach; RoomRouter becomes `Map<TargetId, Room>` with per-target
+  attach. Full design: [`multi-target-routing.md`](./multi-target-routing.md).
 - **Self-signed TLS listener** — `a2a-bridge daemon start --tls`
   auto-generates a self-signed certificate pair on first run, prints
   the fingerprint, and binds `wss://` on port 443 (configurable).
