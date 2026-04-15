@@ -582,7 +582,7 @@ once that phase lands.
   `RoomRouter.getOrCreateByTarget`. Unit test covers both mapped
   and fallback cases.
 
-- [ ] **P10.8 — Outbound CC → peer via `reply` tool target.**
+- [x] **P10.8 — Outbound CC → peer via `reply` tool target.**
   Acceptance: the plugin's `reply` tool schema gains an optional
   `target` field; when present, the daemon forwards the reply to
   that target's Room instead of the inbound turn's originator.
