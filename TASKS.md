@@ -538,7 +538,7 @@ once that phase lands.
   single `:` separator). Unit tests cover happy path, defaults
   (`claude` → `claude:default`), and every rejection case.
 
-- [ ] **P10.2 — Plugin-side workspace id derivation.**
+- [x] **P10.2 — Plugin-side workspace id derivation.**
   Acceptance: `src/runtime-plugin/bridge.ts` computes the CC's
   TargetId at startup using the priority chain documented in the
   design doc (`A2A_BRIDGE_WORKSPACE_ID` → `A2A_BRIDGE_STATE_DIR`
