@@ -2323,6 +2323,7 @@ function extractTaskId2(params) {
 }
 
 // src/runtime-daemon/inbound/a2a-http/server.ts
+var A2A_FALLBACK_TARGET = "claude:default";
 async function startA2AServer(config) {
   const host = config.host ?? "127.0.0.1";
   const log = config.logger ?? createLogger({ tag: "A2aHttpServer", filePath: config.logFilePath });
@@ -2334,6 +2335,19 @@ async function startA2AServer(config) {
   const executorFactory = config.executorFactory;
   if (roomRouter && !executorFactory) {
     throw new Error("startA2AServer: roomRouter requires executorFactory so each per-room gateway can drive its own message/stream executor");
+  }
+  const contextRoutes = config.contextRoutes;
+  const hasRoutes = contextRoutes !== undefined && Object.keys(contextRoutes).length > 0;
+  if (hasRoutes && !roomRouter) {
+    throw new Error("startA2AServer: contextRoutes requires roomRouter \u2014 multi-target routing needs a Room registry to dispatch into");
+  }
+  if (contextRoutes) {
+    for (const [ctxId, target] of Object.entries(contextRoutes)) {
+      const parsed = parseTarget(target);
+      if (!parsed.ok) {
+        throw new Error(`startA2AServer: contextRoutes[${JSON.stringify(ctxId)}] = "${target}" is not a valid TargetId (${parsed.error})`);
+      }
+    }
   }
   const handlers = {
     "tasks/get": createTasksGetHandler(registry),
@@ -2380,11 +2394,20 @@ async function startA2AServer(config) {
           let requestExecutor = defaultExecutor;
           let resolvedRoomId;
           if (roomRouter && executorFactory) {
-            resolvedRoomId = deriveRoomId({
-              contextId: params.message.contextId
-            });
-            const room = await roomRouter.getOrCreate(resolvedRoomId);
-            requestExecutor = executorFactory(room.gateway);
+            if (hasRoutes && contextRoutes) {
+              const ctxId = params.message.contextId;
+              const targetStr = ctxId !== undefined && contextRoutes[ctxId] || A2A_FALLBACK_TARGET;
+              const target = targetStr;
+              const room = await roomRouter.getOrCreateByTarget(target);
+              resolvedRoomId = targetStr;
+              requestExecutor = executorFactory(room.gateway);
+            } else {
+              resolvedRoomId = deriveRoomId({
+                contextId: params.message.contextId
+              });
+              const room = await roomRouter.getOrCreate(resolvedRoomId);
+              requestExecutor = executorFactory(room.gateway);
+            }
           }
           return handleMessageStream({
             rpcId: normalizeId2(rpcId),
@@ -2413,6 +2436,32 @@ async function startA2AServer(config) {
       server.stop(true);
     }
   };
+}
+function parseContextRoutes(raw, log) {
+  if (!raw || raw.trim().length === 0)
+    return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    log?.(`A2A_BRIDGE_CONTEXT_ROUTES ignored \u2014 not valid JSON: ${err.message}`);
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    log?.(`A2A_BRIDGE_CONTEXT_ROUTES ignored \u2014 expected a JSON object`);
+    return null;
+  }
+  const out = {};
+  for (const [k, v] of Object.entries(parsed)) {
+    if (typeof v !== "string") {
+      log?.(`A2A_BRIDGE_CONTEXT_ROUTES[${JSON.stringify(k)}] ignored \u2014 value is not a string`);
+      continue;
+    }
+    out[k] = v;
+  }
+  if (Object.keys(out).length === 0)
+    return null;
+  return { contextRoutes: out };
 }
 function extractPath(url) {
   try {
@@ -3264,7 +3313,8 @@ async function bootInbound() {
   const echoMode = process.env.A2A_BRIDGE_INBOUND_ECHO === "1";
   const routedConfig = echoMode ? { messageStreamExecutor: createEchoExecutor() } : {
     roomRouter: inboundRoomRouter,
-    executorFactory: (gateway) => createClaudeCodeExecutor({ gateway })
+    executorFactory: (gateway) => createClaudeCodeExecutor({ gateway }),
+    ...parseContextRoutes(process.env.A2A_BRIDGE_CONTEXT_ROUTES, log) ?? {}
   };
   try {
     a2aInboundServer = await startA2AServer({

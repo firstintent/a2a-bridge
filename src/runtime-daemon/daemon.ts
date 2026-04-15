@@ -24,6 +24,7 @@ import { RoomRouter } from "@daemon/rooms/room-router";
 import { DEFAULT_ROOM_ID } from "@daemon/rooms/room-id";
 import { SqliteTaskLog } from "@daemon/tasks/task-log";
 import {
+  parseContextRoutes,
   startA2AServer,
   type A2aServerHandle,
 } from "@daemon/inbound/a2a-http/server";
@@ -925,6 +926,11 @@ async function bootInbound() {
         roomRouter: inboundRoomRouter,
         executorFactory: (gateway: import("@daemon/inbound/a2a-http/claude-code-gateway").ClaudeCodeGateway) =>
           createClaudeCodeExecutor({ gateway }),
+        // P10.7 — operator-supplied contextId → TargetId map. Format:
+        // `A2A_BRIDGE_CONTEXT_ROUTES='{"ctx-alice":"claude:alice"}'`.
+        // Malformed JSON is logged and the map is dropped so a typo
+        // degrades to v0.1 routing rather than bringing A2A down.
+        ...(parseContextRoutes(process.env.A2A_BRIDGE_CONTEXT_ROUTES, log) ?? {}),
       };
 
   try {

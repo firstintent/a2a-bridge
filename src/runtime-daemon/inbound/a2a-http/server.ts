@@ -1,4 +1,5 @@
 import { createLogger, type Logger } from "@shared/logger";
+import { parseTarget, type TargetId } from "@shared/target-id";
 import { AGENT_CARD_PATH, checkBearerAuth } from "@daemon/inbound/a2a-http/auth";
 import {
   buildAgentCard,
@@ -14,7 +15,7 @@ import {
 import type { ITaskStore } from "@daemon/tasks/task-store";
 import { SqliteTaskLog } from "@daemon/tasks/task-log";
 import type { RoomRouter } from "@daemon/rooms/room-router";
-import { deriveRoomId } from "@daemon/rooms/room-id";
+import { deriveRoomId, type RoomId } from "@daemon/rooms/room-id";
 import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
 import {
   createEchoExecutor,
@@ -24,6 +25,9 @@ import {
 } from "@daemon/inbound/a2a-http/handlers/message-stream";
 import { createTasksGetHandler } from "@daemon/inbound/a2a-http/handlers/tasks-get";
 import { createTasksCancelHandler } from "@daemon/inbound/a2a-http/handlers/tasks-cancel";
+
+/** Fallback TargetId when contextRoutes is supplied but the inbound contextId has no mapping. */
+const A2A_FALLBACK_TARGET = "claude:default";
 
 /**
  * A2A-over-HTTP server.
@@ -65,6 +69,21 @@ export interface A2aServerConfig {
    * Required when `roomRouter` is supplied; ignored otherwise.
    */
   executorFactory?: (gateway: ClaudeCodeGateway) => MessageStreamExecutor;
+  /**
+   * P10.7 — `contextId → TargetId` routing map. When supplied, every
+   * inbound `message/stream` turn resolves its target by looking up
+   * its `contextId` in this map; unmapped contexts fall back to
+   * `claude:default`. The resolved TargetId keys the Room (via
+   * `RoomRouter.getOrCreateByTarget`) so multi-CC deployments can
+   * carve A2A traffic across distinct CC instances.
+   *
+   * Omitted (or absent/empty) → server preserves v0.1 behaviour where
+   * `deriveRoomId({ contextId })` keys each contextId as its own Room.
+   * Requires `roomRouter`; the server throws at startup otherwise.
+   * Every value is validated via `parseTarget` — a bad entry is a
+   * configuration error, not a runtime failure.
+   */
+  contextRoutes?: Record<string, string>;
   /**
    * Shared task store. Callers supply an `ITaskStore` (either the
    * in-memory `TaskRegistry` or a `SqliteTaskLog`); when omitted a
@@ -112,6 +131,26 @@ export async function startA2AServer(config: A2aServerConfig): Promise<A2aServer
     throw new Error(
       "startA2AServer: roomRouter requires executorFactory so each per-room gateway can drive its own message/stream executor",
     );
+  }
+
+  // P10.7 — validate contextRoutes at startup so a typo in the config
+  // surfaces immediately instead of 5xx-ing on the first inbound call.
+  const contextRoutes = config.contextRoutes;
+  const hasRoutes = contextRoutes !== undefined && Object.keys(contextRoutes).length > 0;
+  if (hasRoutes && !roomRouter) {
+    throw new Error(
+      "startA2AServer: contextRoutes requires roomRouter — multi-target routing needs a Room registry to dispatch into",
+    );
+  }
+  if (contextRoutes) {
+    for (const [ctxId, target] of Object.entries(contextRoutes)) {
+      const parsed = parseTarget(target);
+      if (!parsed.ok) {
+        throw new Error(
+          `startA2AServer: contextRoutes[${JSON.stringify(ctxId)}] = "${target}" is not a valid TargetId (${parsed.error})`,
+        );
+      }
+    }
   }
 
   const handlers: JsonRpcHandlers = {
@@ -167,13 +206,27 @@ export async function startA2AServer(config: A2aServerConfig): Promise<A2aServer
         if (methodName === "message/stream") {
           const params = extractParams(body);
           let requestExecutor: MessageStreamExecutor = defaultExecutor;
-          let resolvedRoomId: ReturnType<typeof deriveRoomId> | undefined;
+          let resolvedRoomId: RoomId | undefined;
           if (roomRouter && executorFactory) {
-            resolvedRoomId = deriveRoomId({
-              contextId: params.message.contextId,
-            });
-            const room = await roomRouter.getOrCreate(resolvedRoomId);
-            requestExecutor = executorFactory(room.gateway);
+            if (hasRoutes && contextRoutes) {
+              // P10.7 — resolve contextId → TargetId via the operator
+              // config, falling back to `claude:default` for any
+              // unmapped context. The TargetId doubles as the Room
+              // key, so multi-tenant A2A traffic lands in the right CC.
+              const ctxId = params.message.contextId;
+              const targetStr =
+                (ctxId !== undefined && contextRoutes[ctxId]) || A2A_FALLBACK_TARGET;
+              const target = targetStr as unknown as TargetId;
+              const room = await roomRouter.getOrCreateByTarget(target);
+              resolvedRoomId = targetStr as unknown as RoomId;
+              requestExecutor = executorFactory(room.gateway);
+            } else {
+              resolvedRoomId = deriveRoomId({
+                contextId: params.message.contextId,
+              });
+              const room = await roomRouter.getOrCreate(resolvedRoomId);
+              requestExecutor = executorFactory(room.gateway);
+            }
           }
           return handleMessageStream({
             rpcId: normalizeId(rpcId),
@@ -205,6 +258,47 @@ export async function startA2AServer(config: A2aServerConfig): Promise<A2aServer
       server.stop(true);
     },
   };
+}
+
+/**
+ * Parse the `A2A_BRIDGE_CONTEXT_ROUTES` env-var payload (a JSON object
+ * literal) into a `{ contextRoutes }` config fragment. Returns `null`
+ * when the env var is absent or malformed so the caller can
+ * spread-merge the result unconditionally.
+ *
+ * Validation of TargetId shape happens later in `startA2AServer` —
+ * this parser only enforces JSON shape and key/value string types.
+ */
+export function parseContextRoutes(
+  raw: string | undefined,
+  log?: (msg: string) => void,
+): { contextRoutes: Record<string, string> } | null {
+  if (!raw || raw.trim().length === 0) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    log?.(
+      `A2A_BRIDGE_CONTEXT_ROUTES ignored — not valid JSON: ${(err as Error).message}`,
+    );
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    log?.(`A2A_BRIDGE_CONTEXT_ROUTES ignored — expected a JSON object`);
+    return null;
+  }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof v !== "string") {
+      log?.(
+        `A2A_BRIDGE_CONTEXT_ROUTES[${JSON.stringify(k)}] ignored — value is not a string`,
+      );
+      continue;
+    }
+    out[k] = v;
+  }
+  if (Object.keys(out).length === 0) return null;
+  return { contextRoutes: out };
 }
 
 function extractPath(url: string): string {
