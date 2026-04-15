@@ -1,5 +1,9 @@
 import { describe, test, expect, afterEach } from "bun:test";
-import { startA2AServer, type A2aServerHandle } from "@daemon/inbound/a2a-http/server";
+import {
+  parseContextRoutes,
+  startA2AServer,
+  type A2aServerHandle,
+} from "@daemon/inbound/a2a-http/server";
 import { Room } from "@daemon/rooms/room";
 import { RoomRouter } from "@daemon/rooms/room-router";
 import type { RoomId } from "@daemon/rooms/room-id";
@@ -306,6 +310,195 @@ describe("startA2AServer", () => {
     expect(a).toBe("from-ctx-alpha");
     expect(b).toBe("from-ctx-beta");
     expect(router.size).toBe(2);
+  });
+
+  test("P10.7: contextRoutes maps contextId to TargetId; unmapped falls back to claude:default", async () => {
+    // Three inbound contextIds:
+    //  - `ctx-alice` is mapped to `claude:alice`  → routes to its Room
+    //  - `ctx-bob` is mapped to `claude:bob`      → routes to its Room
+    //  - `ctx-stranger` has no mapping            → falls back to `claude:default`
+    // Each Room's stub gateway emits a label derived from its TargetId,
+    // proving the router keyed on the right entry.
+    const gatewayByRoom = new Map<string, StubGateway>();
+    const roomFactory = (id: RoomId) => {
+      const gateway = new StubGateway(`room-${id}`);
+      gatewayByRoom.set(id, gateway);
+      return new Room({ id, gateway, registry: new TaskRegistry() });
+    };
+    const router = new RoomRouter(roomFactory);
+
+    const port = randomPort();
+    const server = track(
+      await startA2AServer({
+        port,
+        logger: () => {},
+        agentCard: cardConfig(port),
+        bearerToken: "tok",
+        publicAgentCard: true,
+        roomRouter: router,
+        contextRoutes: {
+          "ctx-alice": "claude:alice",
+          "ctx-bob": "claude:bob",
+        },
+        executorFactory: (gateway): MessageStreamExecutor => ({
+          taskId,
+          contextId,
+          userText,
+          emit,
+        }) =>
+          new Promise<void>((resolve) => {
+            const turn = gateway.startTurn(userText);
+            void taskId;
+            void contextId;
+            emit({ kind: "status-update", state: "working" });
+            turn.on("chunk", (text) => {
+              emit({
+                kind: "artifact-update",
+                artifactId: "out",
+                text,
+                append: true,
+              });
+            });
+            turn.on("complete", () => {
+              emit({
+                kind: "status-update",
+                state: "completed",
+                final: true,
+                message: {
+                  kind: "message",
+                  messageId: "m",
+                  role: "agent",
+                  parts: [{ kind: "text", text: "done" }],
+                },
+              });
+              resolve();
+            });
+          }),
+      }),
+    );
+
+    const postMessage = async (contextId: string) => {
+      const resp = await fetch(`http://localhost:${server.port}${server.rpcPath}`, {
+        method: "POST",
+        headers: { authorization: "Bearer tok", "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "message/stream",
+          params: {
+            message: { contextId, parts: [{ kind: "text", text: "hi" }] },
+          },
+          id: contextId,
+        }),
+      });
+      expect(resp.status).toBe(200);
+      const text = await resp.text();
+      const frames = text
+        .split("\n\n")
+        .filter((r) => r.startsWith("data: "))
+        .map((r) => JSON.parse(r.slice("data: ".length)));
+      const joined = frames
+        .filter((f) => f.result.kind === "artifact-update")
+        .map((f) => (f.result.artifact.parts[0] as { text: string }).text)
+        .join("");
+      return joined;
+    };
+
+    const pAlice = postMessage("ctx-alice");
+    const pBob = postMessage("ctx-bob");
+    const pStranger = postMessage("ctx-stranger");
+    await new Promise((r) => setTimeout(r, 20));
+    gatewayByRoom.get("claude:alice")!.pushAndComplete();
+    gatewayByRoom.get("claude:bob")!.pushAndComplete();
+    gatewayByRoom.get("claude:default")!.pushAndComplete();
+    const [a, b, d] = await Promise.all([pAlice, pBob, pStranger]);
+
+    expect(a).toBe("room-claude:alice");
+    expect(b).toBe("room-claude:bob");
+    expect(d).toBe("room-claude:default");
+    // Three distinct Rooms were minted — one per resolved TargetId.
+    // Notably "ctx-stranger" did NOT mint its own Room (which it
+    // would under v0.1 deriveRoomId).
+    expect(router.size).toBe(3);
+    expect(router.get("claude:alice" as unknown as RoomId)).toBeDefined();
+    expect(router.get("claude:default" as unknown as RoomId)).toBeDefined();
+    expect(router.get("ctx-stranger" as unknown as RoomId)).toBeUndefined();
+  });
+
+  test("P10.7: contextRoutes rejects a malformed TargetId at startup", async () => {
+    const router = new RoomRouter((id: RoomId) => {
+      const gateway = new StubGateway(`room-${id}`);
+      return new Room({ id, gateway, registry: new TaskRegistry() });
+    });
+    const port = randomPort();
+    await expect(
+      startA2AServer({
+        port,
+        logger: () => {},
+        agentCard: cardConfig(port),
+        bearerToken: "tok",
+        publicAgentCard: true,
+        roomRouter: router,
+        contextRoutes: { "ctx-bad": "NotAValidTarget" },
+        executorFactory: () => async () => {},
+      }),
+    ).rejects.toThrow(/contextRoutes.*ctx-bad.*NotAValidTarget/);
+  });
+
+  test("P10.7: contextRoutes without roomRouter is a startup error", async () => {
+    const port = randomPort();
+    await expect(
+      startA2AServer({
+        port,
+        logger: () => {},
+        agentCard: cardConfig(port),
+        bearerToken: "tok",
+        publicAgentCard: true,
+        contextRoutes: { "ctx-a": "claude:alice" },
+      }),
+    ).rejects.toThrow(/contextRoutes requires roomRouter/);
+  });
+});
+
+describe("parseContextRoutes", () => {
+  test("returns null when env var is unset or empty", () => {
+    expect(parseContextRoutes(undefined)).toBeNull();
+    expect(parseContextRoutes("")).toBeNull();
+    expect(parseContextRoutes("   ")).toBeNull();
+  });
+
+  test("parses a valid JSON object", () => {
+    const res = parseContextRoutes(`{"a":"claude:alice","b":"claude:bob"}`);
+    expect(res).toEqual({
+      contextRoutes: { a: "claude:alice", b: "claude:bob" },
+    });
+  });
+
+  test("returns null and logs on malformed JSON", () => {
+    const logs: string[] = [];
+    expect(parseContextRoutes("{bad", (m) => logs.push(m))).toBeNull();
+    expect(logs.join("\n")).toMatch(/not valid JSON/);
+  });
+
+  test("drops entries whose value is not a string", () => {
+    const logs: string[] = [];
+    const res = parseContextRoutes(
+      `{"a":"claude:alice","b":42,"c":null}`,
+      (m) => logs.push(m),
+    );
+    expect(res).toEqual({ contextRoutes: { a: "claude:alice" } });
+    expect(logs.join("\n")).toMatch(/"b".*not a string/);
+  });
+
+  test("returns null when the object is empty (or all entries were dropped)", () => {
+    expect(parseContextRoutes(`{}`)).toBeNull();
+    expect(parseContextRoutes(`{"a":42}`)).toBeNull();
+  });
+
+  test("rejects arrays and primitives", () => {
+    const logs: string[] = [];
+    expect(parseContextRoutes(`[]`, (m) => logs.push(m))).toBeNull();
+    expect(parseContextRoutes(`"string"`, (m) => logs.push(m))).toBeNull();
+    expect(logs.join("\n")).toMatch(/expected a JSON object/);
   });
 });
 

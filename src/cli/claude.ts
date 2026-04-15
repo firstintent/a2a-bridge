@@ -7,8 +7,13 @@ import { StateDirResolver } from "@shared/state-dir";
 const OWNED_FLAGS = ["--channels", "--dangerously-load-development-channels"];
 
 export async function runClaude(args: string[]) {
+  // P10.6 — strip our own `--force` flag before CC sees it, and
+  // forward it to the plugin via env. CC itself doesn't know what
+  // `--force` means for the daemon attach.
+  const { forwarded, force } = extractForceFlag(args);
+
   // Check for owned flag conflicts
-  checkOwnedFlagConflicts(args, "a2a-bridge claude", OWNED_FLAGS);
+  checkOwnedFlagConflicts(forwarded, "a2a-bridge claude", OWNED_FLAGS);
 
   const stateDir = new StateDirResolver();
   const controlPort = parseInt(process.env.A2A_BRIDGE_CONTROL_PORT ?? "4512", 10);
@@ -31,12 +36,15 @@ export async function runClaude(args: string[]) {
   // Once published to the official marketplace, switch to --channels.
   const fullArgs = [
     "--dangerously-load-development-channels", channelEntry,
-    ...args,
+    ...forwarded,
   ];
 
   const child = spawn("claude", fullArgs, {
     stdio: "inherit",
-    env: process.env,
+    env: {
+      ...process.env,
+      ...(force ? { A2A_BRIDGE_FORCE_ATTACH: "1" } : {}),
+    },
   });
 
   child.on("exit", (code) => {
@@ -52,6 +60,24 @@ export async function runClaude(args: string[]) {
     console.error(`Error starting Claude Code: ${err.message}`);
     process.exit(1);
   });
+}
+
+/**
+ * Extract the P10.6 `--force` flag from a raw argv. Returns the
+ * forwarded-through args (minus `--force`) and a boolean saying
+ * whether the flag was present. Exported for unit tests.
+ */
+export function extractForceFlag(args: string[]): { forwarded: string[]; force: boolean } {
+  const forwarded: string[] = [];
+  let force = false;
+  for (const arg of args) {
+    if (arg === "--force") {
+      force = true;
+    } else {
+      forwarded.push(arg);
+    }
+  }
+  return { forwarded, force };
 }
 
 /**

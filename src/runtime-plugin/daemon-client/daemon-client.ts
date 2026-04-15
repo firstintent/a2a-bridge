@@ -6,6 +6,12 @@ interface DaemonClientEvents {
   codexMessage: [BridgeMessage];
   disconnect: [];
   status: [DaemonStatus];
+  // P10.6 — conflict outcomes on `claude_connect`.
+  // `connectRejected` fires when another CC already owns the target
+  // and the plugin didn't pass `force=true`. `connectReplaced` fires
+  // on the old attach when someone else took over with `force=true`.
+  connectRejected: [{ target: string; reason: string }];
+  connectReplaced: [{ target: string }];
 }
 
 let nextSocketId = 0;
@@ -80,8 +86,22 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
     });
   }
 
-  attachClaude() {
-    this.send({ type: "claude_connect" });
+  /**
+   * Attach this client as Claude Code on the daemon control plane.
+   * Pass `target` ("kind:id" form) to claim a specific Room when
+   * the daemon supports multi-target routing (P10.x / v0.2). When
+   * omitted, the daemon assigns `claude:default` (v0.1 behaviour).
+   *
+   * P10.6: `force=true` kicks an attached CC that already owns the
+   * target. Default (`force=false`) makes the daemon reject the
+   * attach and emit a `connectRejected` event on this client.
+   */
+  attachClaude(target?: string, force: boolean = false) {
+    this.send({
+      type: "claude_connect",
+      ...(target ? { target } : {}),
+      ...(force ? { force: true } : {}),
+    });
   }
 
   async disconnect() {
@@ -99,7 +119,17 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
     this.rejectPendingReplies("Daemon connection closed");
   }
 
-  async sendReply(message: BridgeMessage, requireReply?: boolean): Promise<{ success: boolean; error?: string }> {
+  /**
+   * Ship a `BridgeMessage` back over the control plane as a
+   * `claude_to_codex` frame. P10.8 adds optional `target`: when set,
+   * the daemon forwards the reply to that TargetId's Room instead of
+   * the inbound turn's originator. Omitted = today's behaviour.
+   */
+  async sendReply(
+    message: BridgeMessage,
+    requireReply?: boolean,
+    target?: string,
+  ): Promise<{ success: boolean; error?: string }> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return { success: false, error: "A2aBridge daemon is not connected." };
     }
@@ -117,6 +147,7 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
         requestId,
         message,
         ...(requireReply ? { requireReply: true } : {}),
+        ...(target ? { target } : {}),
       });
     });
   }
@@ -146,6 +177,15 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
         }
         case "status":
           this.emit("status", message.status);
+          return;
+        case "claude_connect_rejected":
+          this.emit("connectRejected", {
+            target: message.target,
+            reason: message.reason,
+          });
+          return;
+        case "claude_connect_replaced":
+          this.emit("connectReplaced", { target: message.target });
           return;
       }
     };

@@ -522,6 +522,102 @@ once that phase lands.
   remains the runbook; the maintainer takes over from there for
   `npm publish`, the marketplace form, and the ACP registry PR.
 
+## Phase 10 — Multi-target routing (v0.2)
+
+> Ship the `kind:id` target model from
+> [`docs/design/multi-target-routing.md`](./docs/design/multi-target-routing.md).
+> v0.1 hardcodes one CC slot and one Codex peer; v0.2 lets one
+> daemon front multiple Claude Code workspaces and multiple peer
+> instances, selected by `--target kind:id`.
+
+- [x] **P10.1 — TargetId type + parser.**
+  Acceptance: new `src/shared/target-id.ts` exports a `TargetId`
+  branded string, a `parseTarget(s)` that returns `{kind, id}` or a
+  parse error, and a `formatTarget({kind, id})` inverse. Reject
+  empty kind/id and any character outside `[a-z0-9_-]` (plus the
+  single `:` separator). Unit tests cover happy path, defaults
+  (`claude` → `claude:default`), and every rejection case.
+
+- [x] **P10.2 — Plugin-side workspace id derivation.**
+  Acceptance: `src/runtime-plugin/bridge.ts` computes the CC's
+  TargetId at startup using the priority chain documented in the
+  design doc (`A2A_BRIDGE_WORKSPACE_ID` → `A2A_BRIDGE_STATE_DIR`
+  basename → conversation id prefix → `default`) and sends it on
+  the existing `claude_connect` frame. `ControlClientMessage`
+  gains an optional `target: string` field; unit test asserts the
+  frame round-trips.
+
+- [x] **P10.3 — Daemon rooms map keyed by TargetId.**
+  Acceptance: `RoomRouter` adds `getOrCreateByTarget(TargetId)`
+  alongside the existing context-id path. `daemon.ts`'s attach
+  handler stores `Map<TargetId, Connection>` instead of a single
+  `attachedClaude` variable. Existing single-CC behaviour is the
+  special case where every inbound request resolves to
+  `claude:default`.
+
+- [x] **P10.4 — `a2a-bridge acp --target` flag.**
+  Acceptance: `src/cli/acp.ts` parses `--target kind:id` via
+  `parseTarget`. `AcpTurnHandler` on the daemon side gets the
+  target field on every `acp_turn_start` and looks up the Room;
+  unresolvable target → `acp_turn_error { message: "target not
+  attached" }`. Unit test covers happy path + missing-target path.
+
+- [x] **P10.5 — `a2a-bridge daemon targets` subcommand.**
+  Acceptance: new subcommand prints a table of registered targets
+  with attach state, pid, and uptime. Reads from the daemon's
+  rooms map via a new control-plane `list_targets` RPC. Unit test
+  against a stub daemon.
+
+- [x] **P10.6 — Attach conflict policy (reject + `--force`).**
+  Acceptance: a second `a2a-bridge claude` / `a2a-bridge codex`
+  targeting an already-attached TargetId is rejected with a
+  descriptive error; rerunning with `--force` sends a
+  `claude_connect_replaced` / peer-specific kick frame to the old
+  attach and takes over. Unit tests for both outcomes.
+
+- [x] **P10.7 — A2A `contextId → TargetId` routing.**
+  Acceptance: `startA2AServer` accepts a `contextRoutes: Record<string, TargetId>`
+  config map; unmapped contexts fall back to `claude:default`. A2A
+  inbound handlers thread the resolved TargetId through to
+  `RoomRouter.getOrCreateByTarget`. Unit test covers both mapped
+  and fallback cases.
+
+- [x] **P10.8 — Outbound CC → peer via `reply` tool target.**
+  Acceptance: the plugin's `reply` tool schema gains an optional
+  `target` field; when present, the daemon forwards the reply to
+  that target's Room instead of the inbound turn's originator.
+  Keeps backward compat: absent `target` routes to the inbound
+  originator (today's behaviour). Unit test covers forward + omit
+  + unknown-target-error paths.
+
+- [~] **P10.9 — `a2a-bridge codex --id <id>` peer id flag. (deferred to v0.3)**
+  Deferred by maintainer 2026-04-15: unlike claude attach (plugin WS
+  → control plane), codex is a daemon-internal adapter with module-
+  level singletons (`CodexAdapter`, `TuiConnectionState`, proxy port
+  pair, `codexBootstrapped`, `replyRequired`). Multi-instance codex
+  needs a per-id peer registry + port allocation + handler routing
+  refactor — out of scope for v0.2. v0.2 ships with multi-claude
+  routing only; codex stays `codex:default` (single instance).
+  Original acceptance: the Codex peer process registers under
+  `codex:<id>` (default `codex:default`). Multiple Codex adapters
+  can run concurrently on one daemon, each in their own Room. Unit
+  test asserts two Codex instances with distinct ids don't
+  cross-talk.
+
+- [x] **P10.10 — Cross-target integration test.**
+  Acceptance: new test in `src/cli/multi-target.test.ts` boots a
+  daemon, attaches two stub CCs as `claude:a` and `claude:b`,
+  drives two concurrent ACP subprocesses with distinct `--target`
+  values, asserts each gets its own reply without leakage. Runs
+  under `check:ci`.
+
+- [x] **P10.11 — Documentation sweep.**
+  Acceptance: README, `docs/join.md`, and
+  `docs/guides/rooms.md` updated to use the `kind:id` form and
+  explain the target model. `docs/design/multi-target-routing.md`
+  flips from "not yet implemented" to "implemented in v0.2.0".
+  CHANGELOG `## [0.2.0]` block drafted.
+
 ---
 
 ## Phase footers (filled by the loop)

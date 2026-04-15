@@ -6,6 +6,7 @@ import { DaemonClient } from "@plugin/daemon-client/daemon-client";
 import { DaemonLifecycle } from "@shared/daemon-lifecycle";
 import { StateDirResolver } from "@shared/state-dir";
 import { ConfigService } from "@shared/config-service";
+import { resolveClaudeTarget } from "@shared/workspace-id";
 import type { BridgeMessage } from "@messages/types";
 
 const stateDir = new StateDirResolver();
@@ -19,6 +20,17 @@ const CONTROL_WS_URL = daemonLifecycle.controlWsUrl;
 const claude = new ClaudeAdapter();
 const daemonClient = new DaemonClient(CONTROL_WS_URL);
 
+// P10.2 — derive this CC's TargetId from env + state-dir so the
+// daemon can route inbound traffic to the right Room when multiple
+// CC instances share one daemon. v0.1 backward compat: bare
+// `claude` always resolves to `claude:default` when no env vars set.
+const CLAUDE_TARGET = resolveClaudeTarget({ stateDirPath: stateDir.dir });
+
+// P10.6 — `a2a-bridge claude --force` / `A2A_BRIDGE_FORCE_ATTACH=1`
+// kicks an existing CC attached to the same TargetId. Read once at
+// startup so operator intent is clear and can't race a reconnect.
+const FORCE_ATTACH = process.env.A2A_BRIDGE_FORCE_ATTACH === "1";
+
 let shuttingDown = false;
 let daemonDisabled = false;
 
@@ -30,7 +42,7 @@ let lastReconnectNotifyTs = 0;
 let disabledRecoveryTimer: ReturnType<typeof setInterval> | null = null;
 let disabledRecoveryInFlight = false;
 
-claude.setReplySender(async (msg: BridgeMessage, requireReply?: boolean) => {
+claude.setReplySender(async (msg: BridgeMessage, requireReply?: boolean, target?: string) => {
   if (msg.source !== "claude") {
     return { success: false, error: "Invalid message source" };
   }
@@ -42,7 +54,7 @@ claude.setReplySender(async (msg: BridgeMessage, requireReply?: boolean) => {
     };
   }
 
-  return daemonClient.sendReply(msg, requireReply);
+  return daemonClient.sendReply(msg, requireReply, target);
 });
 
 daemonClient.on("codexMessage", (message) => {
@@ -53,6 +65,22 @@ daemonClient.on("codexMessage", (message) => {
 daemonClient.on("status", (status) => {
   log(
     `Daemon status: ready=${status.bridgeReady} tui=${status.tuiConnected} thread=${status.threadId ?? "none"} queued=${status.queuedMessageCount}`,
+  );
+});
+
+// P10.6 — conflict outcomes on the multi-target attach path. In both
+// cases the daemon won't serve this CC any further, so stop looping
+// and surface the situation to the user via a CC notification.
+daemonClient.on("connectRejected", ({ target, reason }) => {
+  void enterDisabledState(
+    `claude_connect rejected for ${target}: ${reason}`,
+    `⛔ A2aBridge attach rejected for target ${target}. ${reason}`,
+  );
+});
+daemonClient.on("connectReplaced", ({ target }) => {
+  void enterDisabledState(
+    `claude_connect replaced on ${target} — another CC took over with --force`,
+    `⛔ A2aBridge attach for ${target} was replaced by another CC (--force). This bridge is now idle.`,
   );
 });
 
@@ -95,7 +123,7 @@ async function connectToDaemon(isReconnect = false) {
   try {
     await daemonLifecycle.ensureRunning();
     await daemonClient.connect();
-    daemonClient.attachClaude();
+    daemonClient.attachClaude(CLAUDE_TARGET, FORCE_ATTACH);
     if (!isReconnect) {
       void claude.pushNotification(systemMessage(
         "system_bridge_ready",
@@ -228,7 +256,10 @@ async function pollDisabledRecovery() {
     log("Disabled-state recovery conditions met — attempting direct daemon reconnect");
     try {
       await daemonClient.connect();
-      daemonClient.attachClaude();
+      // Recovery never forces — it's an automatic reconnect, not an
+      // operator-initiated takeover. Pass `CLAUDE_TARGET` so the
+      // daemon keeps the same Room it did on the initial attach.
+      daemonClient.attachClaude(CLAUDE_TARGET);
       daemonDisabled = false;
       stopDisabledRecoveryPoller();
       void claude.pushNotification(systemMessage(

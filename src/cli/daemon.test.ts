@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
-import { runDaemon, type LifecycleView } from "./daemon";
+import { runDaemon, formatTargetsTable, type LifecycleView } from "./daemon";
 import { StateDirResolver } from "@shared/state-dir";
+import type { TargetEntry } from "@transport/control-protocol";
 
 class StubLifecycle implements LifecycleView {
   healthUrl = "http://127.0.0.1:4512/healthz";
@@ -198,5 +199,84 @@ describe("runDaemon", () => {
     const res = await runDaemon(["wat"], { log: sink.log, error: sink.error });
     expect(res.exitCode).toBe(1);
     expect(sink.err.join("\n")).toMatch(/Usage: a2a-bridge daemon/);
+  });
+
+  test("targets reports not-running when the pid file is missing", async () => {
+    const lc = new StubLifecycle({ pid: null });
+    const sink = capture();
+    let calls = 0;
+    const res = await runDaemon(["targets"], {
+      buildLifecycle: () => lc,
+      log: sink.log,
+      error: sink.error,
+      queryTargets: async () => {
+        calls += 1;
+        return [];
+      },
+    });
+    expect(res.exitCode).toBe(0);
+    expect(calls).toBe(0);
+    expect(sink.out.join("\n")).toMatch(/not running/);
+  });
+
+  test("targets queries the control plane and prints a table", async () => {
+    const lc = new StubLifecycle({ pid: 9001 });
+    const sink = capture();
+    const now = 2_000_000;
+    const res = await runDaemon(["targets"], {
+      buildLifecycle: () => lc,
+      log: sink.log,
+      error: sink.error,
+      queryTargets: async (url) => {
+        expect(url).toBe("ws://127.0.0.1:4512/ws");
+        const entries: TargetEntry[] = [
+          { target: "claude:default", attached: true, clientId: 3, attachedAt: now - 42_000 },
+          { target: "claude:alt", attached: true, clientId: 7, attachedAt: now - 5_000 },
+        ];
+        return entries;
+      },
+    });
+    expect(res.exitCode).toBe(0);
+    const joined = sink.out.join("\n");
+    expect(joined).toMatch(/TARGET\s+ATTACHED\s+CLIENT\s+UPTIME/);
+    expect(joined).toMatch(/claude:default\s+yes\s+3/);
+    expect(joined).toMatch(/claude:alt\s+yes\s+7/);
+  });
+
+  test("targets surfaces query errors as exit 1", async () => {
+    const lc = new StubLifecycle({ pid: 9001 });
+    const sink = capture();
+    const res = await runDaemon(["targets"], {
+      buildLifecycle: () => lc,
+      log: sink.log,
+      error: sink.error,
+      queryTargets: async () => {
+        throw new Error("connection refused");
+      },
+    });
+    expect(res.exitCode).toBe(1);
+    expect(sink.err.join("\n")).toMatch(/daemon targets failed: connection refused/);
+  });
+});
+
+describe("formatTargetsTable", () => {
+  test("renders a fixed-width 4-column table", () => {
+    const now = 10_000_000;
+    const text = formatTargetsTable(
+      [
+        { target: "claude:default", attached: true, clientId: 3, attachedAt: now - 90_000 },
+        { target: "codex:dev", attached: false },
+      ],
+      now,
+    );
+    const lines = text.split("\n");
+    expect(lines[0]).toContain("TARGET");
+    expect(lines[0]).toContain("ATTACHED");
+    expect(lines[1]).toMatch(/claude:default\s+yes\s+3\s+1m/);
+    expect(lines[2]).toMatch(/codex:dev\s+no\s+-\s+-/);
+  });
+
+  test("empty list prints a friendly message", () => {
+    expect(formatTargetsTable([])).toBe("no targets registered");
   });
 });

@@ -266,22 +266,14 @@ applications) that the autonomous loop cannot provision in CI.
 - **MCP inbound** — `runtime-daemon/inbound/mcp/` shim mirroring the
   ACP shape. Targets Cursor and Claude Desktop. Same
   `ClaudeCodeGateway` underneath.
-- **Multi-CC single-daemon** — multiple Claude Code instances attach
-  to one daemon, each assigned to its own Room via a workspace ID
-  (derived from `A2A_BRIDGE_STATE_DIR` or the CC conversation ID).
-  The plugin sends the workspace ID on `claude_connect`; the daemon's
-  attach logic becomes per-Room instead of a global single slot.
-  Inbound clients (OpenClaw, Gemini CLI) route to a specific Room
-  via `contextId`. RoomRouter already supports multi-Room; this item
-  wires the CC attach path through it. Follows the Telegram plugin's
-  `TELEGRAM_STATE_DIR` pattern for workspace isolation.
-  Reference implementations:
-  - a2a-bridge: `src/shared/state-dir.ts` — `StateDirResolver` reads
-    `A2A_BRIDGE_STATE_DIR` env, defaults to `$XDG_STATE_HOME/a2a-bridge`;
-    owns `daemon.pid`, `status.json`, `tasks.db`, `a2a-bridge.log`.
-  - Telegram plugin: `references/claude-plugins-official/external_plugins/
-    telegram/server.ts:26` — `TELEGRAM_STATE_DIR` env, defaults to
-    `~/.claude/channels/telegram`; owns `access.json`, `bot.pid`, `inbox/`.
+- **Multi-target routing via `--target`** — one daemon fronts
+  multiple agent instances (several Claude Code workspaces, several
+  Codex / Hermes peers, ...). Every target is identified by a
+  `kind:id` tuple, e.g. `claude:project-a`, `codex:dev`,
+  `hermes:default`. The ACP subprocess takes `--target kind:id` to
+  pick where its turns go; the plugin sends its workspace id on
+  attach; RoomRouter becomes `Map<TargetId, Room>` with per-target
+  attach. Full design: [`multi-target-routing.md`](./multi-target-routing.md).
 - **Self-signed TLS listener** — `a2a-bridge daemon start --tls`
   auto-generates a self-signed certificate pair on first run, prints
   the fingerprint, and binds `wss://` on port 443 (configurable).

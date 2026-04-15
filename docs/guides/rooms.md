@@ -3,29 +3,72 @@
 a2a-bridge routes every inbound turn through a **Room** — a
 per-session container that owns the resources one Claude Code
 conversation needs: the gateway that injects user text into CC, the
-peer adapter set (Codex today; OpenClaw/Hermes post-v0.1), and the
+peer adapter set (Codex today; OpenClaw/Hermes post-v0.2), and the
 task rows that track each turn's lifecycle.
 
 This document covers the four things callers ask about most: how
 Rooms are named, what multi-session isolation guarantees you get,
 what survives restarts, and when adapters live or die.
 
-## RoomId derivation
+## TargetId and RoomId
 
-A RoomId is a **branded string** (`RoomId = string & { __brand }`)
-derived per inbound request by
-[`deriveRoomId`](../../src/runtime-daemon/rooms/room-id.ts):
+Since v0.2, every agent instance has a **TargetId** — a `kind:id`
+tuple like `claude:proj-a` or `codex:default`. TargetIds are the
+canonical key for multi-target routing: CC attaches announce one,
+ACP callers pick one with `--target`, and A2A callers map their
+`contextId` to one via `A2A_BRIDGE_CONTEXT_ROUTES`.
 
-| Precedence | Source                        | Notes                                           |
-|------------|-------------------------------|-------------------------------------------------|
-| 1          | `Message.contextId`           | A2A inbound — minted by the client, echoed back |
-| 2          | `A2A_BRIDGE_ROOM` env var     | CLI-style callers without a contextId           |
-| 3          | literal `"default"`           | Single-CC fallback — matches pre-Phase-4 behavior |
+A **RoomId** is a branded string (`RoomId = string & { __brand }`)
+derived per inbound request. In v0.2 the room is typically keyed
+directly by its TargetId (`claude:proj-a` is both the attach id and
+the Room id). The legacy fallback still applies when no target is
+supplied — see precedence table below.
 
-Empty or whitespace values are treated as absent. `contextId` wins
-over the env var; the env var wins over `"default"`. Clients that
-want a stable room across calls either thread the same `contextId`
-each request or export `A2A_BRIDGE_ROOM`.
+TargetIds must pass `[a-z0-9_-]+` on each side of the `:` —
+validated by [`parseTarget`](../../src/shared/target-id.ts) at every
+boundary that accepts one. Invalid targets are rejected at the
+source instead of silently routing to `default`.
+
+| Precedence | Source                                 | Notes                                                                                                    |
+|------------|----------------------------------------|----------------------------------------------------------------------------------------------------------|
+| 1          | ACP `--target kind:id` flag            | Sets the Room key on `acp_turn_start`; unattached targets return `acp_turn_error`                         |
+| 2          | A2A `contextRoutes[contextId]`         | Operator map (`A2A_BRIDGE_CONTEXT_ROUTES` env var); unmapped contexts fall back to `claude:default`       |
+| 3          | A2A `Message.contextId` (no routes)    | v0.1 compat — each distinct `contextId` is its own Room                                                  |
+| 4          | `A2A_BRIDGE_ROOM` env var              | CLI-style callers without a contextId                                                                    |
+| 5          | literal `"default"`                    | Single-CC fallback — matches pre-Phase-4 behavior                                                        |
+
+Empty or whitespace values are treated as absent. Clients that want
+a stable room across calls either thread the same `contextId` each
+request, export `A2A_BRIDGE_ROOM`, or — recommended on v0.2 — pick an
+explicit TargetId.
+
+## CC attach and TargetId derivation
+
+`a2a-bridge claude` announces its TargetId to the daemon on the
+control-plane WebSocket via `claude_connect { target }`. The id is
+derived by [`resolveClaudeTarget`](../../src/shared/workspace-id.ts):
+
+1. `A2A_BRIDGE_WORKSPACE_ID` env var (explicit override)
+2. Basename of `A2A_BRIDGE_STATE_DIR` (`~/.config/a2a-bridge/proj-a` → `proj-a`)
+3. First 8 chars of the CC conversation id
+4. Fallback: `default`
+
+The derived id is sanitised against `[a-z0-9_-]+` and prefixed with
+`claude:` to produce the TargetId. A second `a2a-bridge claude` with
+the same TargetId is **rejected** with a descriptive error; pass
+`--force` (or set `A2A_BRIDGE_FORCE_ATTACH=1`) to kick the existing
+attach and take over.
+
+## Inspection
+
+```bash
+a2a-bridge daemon targets
+```
+
+Prints a table of every TargetId the daemon currently tracks, with
+attach state, the WS connection id, and uptime since the attach
+landed. Uses the `list_targets` control-plane RPC — no daemon
+restart needed.
 
 ## Multi-session semantics
 
@@ -103,13 +146,31 @@ any call sites.
   concurrent `getOrCreate` for the same id spins up a fresh Room
   rather than waiting on the in-flight teardown.
 
+## Outbound reply routing (v0.2)
+
+CC's `reply` tool accepts an optional `target` field. Absent, the
+reply routes back to the inbound turn's originator (v0.1 behaviour).
+Present, the daemon delivers the reply to that target's Room
+instead — handy for handing a conversation off between CCs or from a
+CC to Codex:
+
+```
+reply({ text: "over to you", target: "codex:default" })
+```
+
+Unknown or unattached targets surface a descriptive error through
+the tool's error channel; replies cannot loop back to the sender.
+
 ## Related reading
 
 - [`architecture.md`](../design/architecture.md) — the authoritative
   directory layout and the rules `lint:deps` enforces between
   `inbound/`, `peers/`, `rooms/`, `shared/`, `messages/`.
+- [`multi-target-routing.md`](../design/multi-target-routing.md) —
+  the v0.2 `kind:id` model: who supplies which id, conflict policy,
+  deployment shapes.
 - [`roadmap.md`](../design/roadmap.md) — Phase 4 is where the room
-  abstraction was introduced; outbound peer adapters (per-Room
-  ownership of OpenClaw/Hermes) move to v0.2.
+  abstraction was introduced; Phase 10 (v0.2) added multi-target
+  routing on the claude axis; codex peer-id lands in v0.3.
 - [`cookbook.md`](./cookbook.md) — parallel-work pattern uses
   distinct `contextId`s so each branch gets its own Room.

@@ -48,19 +48,45 @@ interface PendingPermission {
  */
 const DEFAULT_PERMISSION_TIMEOUT_MS = 5 * 60 * 1_000;
 
+export interface AcpTurnHandlerOpts {
+  permissionTimeoutMs?: number;
+  /**
+   * Optional predicate (P10.4): given a TargetId from acp_turn_start,
+   * return true iff a Claude Code instance is currently attached for
+   * that target. Returning false short-circuits the turn with an
+   * `acp_turn_error` instead of forwarding to the singleton gateway.
+   * When omitted, every target is considered attached (v0.1 behaviour).
+   */
+  isTargetAttached?: (target: string) => boolean;
+}
+
+/**
+ * Resolve the `ClaudeCodeGateway` for a given TargetId. The daemon
+ * wires this through `inboundRoomRouter.getOrCreateByTarget` so each
+ * TargetId gets its own per-Room gateway (P10.10). Returning `null`
+ * treats the target as unresolvable and surfaces an `acp_turn_error`
+ * to the caller — same shape as the `isTargetAttached` rejection
+ * path. Async because creating a Room may spin up per-Room state.
+ */
+export type GatewayForTarget = (
+  target: string,
+) => ClaudeCodeGateway | null | Promise<ClaudeCodeGateway | null>;
+
 export class AcpTurnHandler {
   private readonly activeTurns = new Map<Connection, ActiveTurn>();
   private readonly pendingPermissions = new Map<string, PendingPermission>();
   private readonly log: (msg: string) => void;
   private readonly permissionTimeoutMs: number;
+  private readonly isTargetAttached?: (target: string) => boolean;
 
   constructor(
-    private readonly gateway: ClaudeCodeGateway,
+    private readonly gatewayForTarget: GatewayForTarget,
     log?: (msg: string) => void,
-    opts?: { permissionTimeoutMs?: number },
+    opts?: AcpTurnHandlerOpts,
   ) {
     this.log = log ?? (() => {});
     this.permissionTimeoutMs = opts?.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS;
+    this.isTargetAttached = opts?.isTargetAttached;
   }
 
   // ---------------------------------------------------------------------------
@@ -136,17 +162,45 @@ export class AcpTurnHandler {
     pending.resolve(msg.outcome);
   }
 
-  handleTurnStart(
+  async handleTurnStart(
     conn: Connection,
     msg: Extract<ControlClientMessage, { type: "acp_turn_start" }>,
-  ): void {
+  ): Promise<void> {
+    // P10.4 — verify the requested TargetId has an attached CC before
+    // we reach into the gateway. Falls back to claude:default when the
+    // subprocess didn't send a target (v0.1 wire compatibility).
+    const target = msg.target ?? "claude:default";
+    if (this.isTargetAttached && !this.isTargetAttached(target)) {
+      this.log(`Rejecting acp_turn_start ${msg.turnId} — target ${target} not attached`);
+      this.send(conn, {
+        type: "acp_turn_error",
+        turnId: msg.turnId,
+        message: `target ${target} not attached`,
+      });
+      return;
+    }
+
+    // P10.10 — resolve the Room's gateway for this target. Rejection
+    // path: if the gateway can't be found/created, surface a matching
+    // error frame instead of forwarding into a shared singleton.
+    const gateway = await this.gatewayForTarget(target);
+    if (!gateway) {
+      this.log(`Rejecting acp_turn_start ${msg.turnId} — no gateway for ${target}`);
+      this.send(conn, {
+        type: "acp_turn_error",
+        turnId: msg.turnId,
+        message: `no gateway for target ${target}`,
+      });
+      return;
+    }
+
     // Settle + cancel any existing turn for this connection before starting a new one.
     this.settleTurn(conn, `superseded by ${msg.turnId}`);
 
-    const turn = this.gateway.startTurn(msg.userText);
+    const turn = gateway.startTurn(msg.userText);
     const settled = { value: false };
     this.activeTurns.set(conn, { turnId: msg.turnId, turn, settled });
-    this.log(`ACP turn started (turnId=${msg.turnId}, ${msg.userText.length} chars)`);
+    this.log(`ACP turn started (turnId=${msg.turnId}, ${msg.userText.length} chars, target=${target})`);
 
     turn.on("chunk", (text) => {
       if (settled.value) return;

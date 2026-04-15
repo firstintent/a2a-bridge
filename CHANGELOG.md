@@ -5,6 +5,115 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-04-16
+
+Multi-target routing. One daemon can now front multiple Claude Code
+workspaces at once, and ACP / A2A callers pick which one they want
+via an explicit `kind:id` TargetId. Existing single-CC deployments
+are unchanged — everything defaults to `claude:default`.
+
+Full design: [`docs/design/multi-target-routing.md`](./docs/design/multi-target-routing.md).
+
+### Added
+
+- **TargetId model** — a `kind:id` tuple (e.g. `claude:proj-a`,
+  `codex:default`) is the canonical identifier for any attached
+  agent instance. Validated against `[a-z0-9_-]+` at every
+  boundary; invalid targets are rejected at the source instead of
+  silently routing to `default`.
+- **Plugin-side workspace id derivation.** `a2a-bridge claude`
+  announces a TargetId on `claude_connect` derived from (in order):
+  `A2A_BRIDGE_WORKSPACE_ID` env var → `A2A_BRIDGE_STATE_DIR`
+  basename → conversation id prefix → `default`. The result is
+  sanitised and prefixed with `claude:`. Two CC sessions with
+  distinct state-dirs therefore attach as distinct targets with no
+  extra config.
+- **`a2a-bridge acp --target <kind:id>`.** Pick which attached
+  target handles the turn. Unattached targets return
+  `acp_turn_error { "target not attached" }`; missing flag keeps
+  v0.1 behaviour (routes to `claude:default`).
+- **A2A `contextId → TargetId` routing.** `startA2AServer` accepts
+  a `contextRoutes: Record<string, string>` map; the daemon reads
+  it from `A2A_BRIDGE_CONTEXT_ROUTES` (a JSON object env var).
+  Unmapped contexts fall back to `claude:default` instead of
+  minting their own Room. Configuration is validated at startup —
+  a malformed TargetId is a fail-fast error, not a 5xx at request
+  time.
+- **Outbound reply targeting.** CC's `reply` tool schema grows an
+  optional `target` field. Present → the daemon forwards the reply
+  to that TargetId's Room instead of the inbound turn's
+  originator. Absent → today's behaviour. Unknown targets, bad
+  shapes, and self-loops all surface descriptive errors.
+- **Attach conflict policy.** A second CC attaching to an
+  already-held TargetId is **rejected** with an error naming the
+  incumbent (`target claude:proj-a already attached — plugin conn
+  #1, attached 3m ago`). Rerun with `a2a-bridge claude --force`
+  (or `A2A_BRIDGE_FORCE_ATTACH=1`) to kick the old attach; the
+  evicted session receives a `claude_connect_replaced` frame that
+  surfaces as a CC-visible notification before disconnect.
+- **`a2a-bridge daemon targets`.** New inspection subcommand.
+  Prints a plain-text table of every TargetId the daemon tracks,
+  with attach state, the WS connection id, and uptime since
+  attach. Powered by a new `list_targets` control-plane RPC.
+
+### Changed
+
+- **Per-target inbound gateway.** The ACP turn handler resolves
+  each turn's target to its own `DaemonClaudeCodeGateway` instance
+  (minted lazily by `RoomRouter.getOrCreateByTarget`). Cross-CC
+  delivery isolation: inbound text for `claude:ws-a` lands only on
+  CC-A's socket, and CC-A's reply can only close CC-A's in-flight
+  turn. Regression covered by the
+  [cross-target integration test](./src/cli/multi-target.test.ts).
+- **`claude_to_codex` intercept is sender-target-aware.** The
+  daemon picks the sender's target's Room gateway when deciding
+  whether a reply closes an inbound turn, so a reply from CC-A
+  cannot accidentally complete CC-B's turn.
+- **Plugin disabled-state recovery** now forwards the CC's
+  TargetId on the recovery attach (was silently dropping to
+  `claude:default` before the fix).
+
+### Fixed — from the v0.2.0 pre-release smoke pass
+
+- `a2a-bridge daemon targets` no longer advertises a phantom
+  `claude:default` row when every CC attach was under an explicit
+  TargetId. The legacy-singleton fallback only surfaces when no
+  per-target entry already covers that connection.
+- `a2a-bridge acp` now advertises `agentCapabilities.loadSession:
+  true` and implements `session/load` as a stateless no-op.
+  OpenClaw acpx's "persistent session" mode previously tried to
+  resume a prior session id across subprocess restarts and blew
+  up on `agent does not support session/load`; the adopt-as-new
+  implementation keeps acpx happy without introducing cross-
+  restart session state we don't actually own.
+
+### Deferred to v0.3
+
+- **Codex peer-id routing** (`a2a-bridge codex --id <id>`). Codex
+  is a daemon-internal adapter, not a control-plane attach, so
+  multi-instancing requires a per-id peer registry + port
+  allocation + handler routing refactor. Out of scope for v0.2;
+  codex stays `codex:default` (single instance). Tracked in the
+  deferred P10.9 entry of `TASKS.md`.
+- **Hot-reload of `contextRoutes`.** The A2A inbound reads the
+  map at startup; config changes require a daemon restart.
+- **Dynamic target discovery.** ACP clients still register each
+  target statically (OpenClaw `acpx`, Zed `agent_servers`, etc.).
+
+### Control-plane wire additions (for embedders)
+
+- `claude_connect` grows `{ target?: string; force?: boolean }`.
+- New server → plugin frames:
+  - `claude_connect_rejected { target, reason }`
+  - `claude_connect_replaced { target }`
+- `acp_turn_start` grows `{ target?: string }`.
+- `claude_to_codex` grows `{ target?: string }`.
+- New RPC pair: `list_targets { requestId }` → `targets_response
+  { requestId, targets: TargetEntry[] }`.
+
+All additions are optional on the wire — v0.1 plugins / subprocesses
+continue to work against a v0.2 daemon (and vice versa).
+
 ## [0.1.0] — 2026-04-14
 
 First broadly usable release. Turns a2a-bridge from a Codex-only

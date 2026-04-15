@@ -32,7 +32,11 @@ export const PLUGIN_SERVER_INFO = {
   version: pkg.version,
 } as const;
 
-export type ReplySender = (msg: BridgeMessage, requireReply?: boolean) => Promise<{ success: boolean; error?: string }>;
+export type ReplySender = (
+  msg: BridgeMessage,
+  requireReply?: boolean,
+  target?: string,
+) => Promise<{ success: boolean; error?: string }>;
 export type DeliveryMode = "push" | "pull" | "auto";
 
 export const CLAUDE_INSTRUCTIONS = [
@@ -235,7 +239,7 @@ export class ClaudeAdapter extends EventEmitter {
         {
           name: "reply",
           description:
-            "Send a message back to Codex. Your reply will be injected into the Codex session as a new user turn.",
+            "Send a message back to the connected agent. Your reply is routed to the originator of the inbound turn by default; pass `target` to send it to a different attached agent instead.",
           inputSchema: {
             type: "object" as const,
             properties: {
@@ -245,11 +249,15 @@ export class ClaudeAdapter extends EventEmitter {
               },
               text: {
                 type: "string",
-                description: "The message to send to Codex.",
+                description: "The message to send.",
               },
               require_reply: {
                 type: "boolean",
-                description: "When true, Codex is required to send a reply. All Codex messages from this turn will be forwarded immediately (bypassing STATUS buffering). Use this when you need a direct answer from Codex.",
+                description: "When true, the receiving agent is required to send a reply; all messages from its turn will be forwarded immediately (bypassing STATUS buffering). Use when you need a direct answer.",
+              },
+              target: {
+                type: "string",
+                description: "Optional `kind:id` TargetId (e.g. `claude:project-b`, `codex:default`) to override the default routing. Use this to hand a reply off to a different attached agent instead of the one that sent the inbound turn. Omit to route back to the inbound turn's originator (default).",
               },
             },
             required: ["text"],
@@ -296,6 +304,10 @@ export class ClaudeAdapter extends EventEmitter {
     }
 
     const requireReply = args?.require_reply === true;
+    // P10.8 — optional target routing. Pass-through to the daemon;
+    // validation of the `kind:id` shape and attach state happens on
+    // the daemon side so we don't duplicate parseTarget here.
+    const targetArg = typeof args?.target === "string" ? (args.target as string) : undefined;
 
     const bridgeMsg: BridgeMessage = {
       id: (args?.chat_id as string) ?? `reply_${Date.now()}`,
@@ -312,7 +324,7 @@ export class ClaudeAdapter extends EventEmitter {
       };
     }
 
-    const result = await this.replySender(bridgeMsg, requireReply);
+    const result = await this.replySender(bridgeMsg, requireReply, targetArg);
     if (!result.success) {
       this.log(`Reply delivery failed: ${result.error}`);
       return {
@@ -323,7 +335,7 @@ export class ClaudeAdapter extends EventEmitter {
 
     // Include pending message hint
     const pending = this.pendingMessages.length;
-    let responseText = "Reply sent to Codex.";
+    let responseText = targetArg ? `Reply sent to ${targetArg}.` : "Reply sent to Codex.";
     if (pending > 0) {
       responseText += ` Note: ${pending} unread Codex message${pending > 1 ? "s" : ""} already waiting \u2014 call get_messages to read them.`;
     }

@@ -17,12 +17,14 @@ import type { Connection } from "@transport/listener";
 import { WebSocketListener } from "@transport/websocket";
 import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "@transport/control-protocol";
 import type { BridgeMessage } from "@messages/types";
+import { parseTarget, type TargetId } from "@shared/target-id";
 import { DaemonClaudeCodeGateway } from "@daemon/inbound/daemon-claude-code-gateway";
 import { Room } from "@daemon/rooms/room";
 import { RoomRouter } from "@daemon/rooms/room-router";
 import { DEFAULT_ROOM_ID } from "@daemon/rooms/room-id";
 import { SqliteTaskLog } from "@daemon/tasks/task-log";
 import {
+  parseContextRoutes,
   startA2AServer,
   type A2aServerHandle,
 } from "@daemon/inbound/a2a-http/server";
@@ -62,10 +64,25 @@ const daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_POR
 
 let controlListener: WebSocketListener | null = null;
 let a2aInboundServer: A2aServerHandle | null = null;
+// P10.3 — Map<TargetId, Connection> of currently attached Claude Code
+// instances. v0.1 single-CC behaviour is the special case where the
+// only key is "claude:default". `attachedClaude` (singular) is kept
+// as a back-compat pointer to "the most-recently attached CC" so the
+// existing emitToClaude / broadcast paths keep working unchanged
+// until P10.4 / P10.7 wire per-target routing through the gateway.
+const attachedClaudeByTarget = new Map<string, Connection>();
+const attachedAtByTarget = new Map<string, number>();
 let attachedClaude: Connection | null = null;
 const controlClientMeta = new WeakMap<Connection, ControlClientMeta>();
+const claudeConnTarget = new WeakMap<Connection, string>();
 let nextControlClientId = 0;
 
+// v0.1 default gateway — used by `defaultRoom` (room id `"default"`)
+// for backward-compat A2A HTTP turns (no contextRoutes, no explicit
+// target). Delivers via `emitToClaude` which hits the singleton
+// `attachedClaude`. Per-target rooms get their own gateway below
+// via the RoomRouter factory, so each target routes to its own
+// attached CC instead of the singleton (P10.10).
 const inboundGateway = new DaemonClaudeCodeGateway({
   sendToClaude: (text) => {
     emitToClaude(systemMessage("a2a_inbound", text, "acp"));
@@ -73,10 +90,27 @@ const inboundGateway = new DaemonClaudeCodeGateway({
   log: (msg) => log(`[A2aGateway] ${msg}`),
 });
 
-// Daemon-side handler for ACP turn relay (P8.2). Handles acp_turn_start /
-// acp_turn_cancel messages from `a2a-bridge acp` subprocesses.
-const acpTurnHandler = new AcpTurnHandler(inboundGateway, (msg) =>
-  log(`[AcpTurnHandler] ${msg}`),
+// Daemon-side handler for ACP turn relay (P8.2 / P10.10).
+// Takes a `gatewayForTarget` function instead of a fixed gateway
+// so each inbound ACP turn resolves its own per-room gateway (keyed
+// by TargetId) and inbound text routes only to that target's CC.
+const acpTurnHandler = new AcpTurnHandler(
+  async (target) => {
+    const room = await inboundRoomRouter.getOrCreateByTarget(target as TargetId);
+    return room.gateway;
+  },
+  (msg) => log(`[AcpTurnHandler] ${msg}`),
+  {
+    // P10.4 — only accept turns whose target has an attached CC
+    // connection. Bare claude:default falls back to the legacy
+    // "any attached CC" check so v0.1 single-attach setups keep
+    // working when the subprocess doesn't send a target.
+    isTargetAttached: (target) => {
+      if (attachedClaudeByTarget.has(target)) return true;
+      if (target === "claude:default" && attachedClaude !== null) return true;
+      return false;
+    },
+  },
 );
 
 // One daemon-wide task log; every Room tracks through this shared store
@@ -96,8 +130,19 @@ const defaultRoom = new Room({
 });
 const codex = defaultRoom.getPeer("codex") as CodexAdapter;
 const attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
+// P10.10 — each non-default Room gets its own gateway whose
+// `sendToClaude` routes to the Room's TargetId via
+// `emitToClaudeTarget`, so concurrent ACP turns for different
+// targets deliver only to their own attached CC.
 const inboundRoomRouter = new RoomRouter(
-  (id) => new Room({ id, gateway: inboundGateway, registry: sharedTaskStore }),
+  (id) => {
+    const roomGateway = new DaemonClaudeCodeGateway({
+      sendToClaude: (text) =>
+        emitToClaudeTarget(id as string, systemMessage("a2a_inbound", text, "acp")),
+      log: (msg) => log(`[A2aGateway:${id}] ${msg}`),
+    });
+    return new Room({ id, gateway: roomGateway, registry: sharedTaskStore });
+  },
 );
 inboundRoomRouter.adopt(defaultRoom);
 let nextSystemMessageId = 0;
@@ -334,7 +379,7 @@ function handleControlMessage(conn: Connection, raw: string) {
 
   switch (message.type) {
     case "claude_connect":
-      attachClaude(conn);
+      attachClaude(conn, message.target, message.force === true);
       return;
     case "claude_disconnect":
       detachClaude(conn, "frontend requested disconnect");
@@ -343,7 +388,7 @@ function handleControlMessage(conn: Connection, raw: string) {
       sendStatus(conn);
       return;
     case "acp_turn_start":
-      acpTurnHandler.handleTurnStart(conn, message);
+      void acpTurnHandler.handleTurnStart(conn, message);
       return;
     case "acp_turn_cancel":
       acpTurnHandler.handleTurnCancel(conn, message);
@@ -380,6 +425,15 @@ function handleControlMessage(conn: Connection, raw: string) {
     case "acp_permission_response":
       acpTurnHandler.handlePermissionResponse(conn, message);
       return;
+    case "list_targets": {
+      const entries = listTargetEntries();
+      sendProtocolMessage(conn, {
+        type: "targets_response",
+        requestId: message.requestId,
+        targets: entries,
+      });
+      return;
+    }
     case "claude_to_codex": {
       if (message.message.source !== "claude") {
         sendProtocolMessage(conn, {
@@ -391,10 +445,94 @@ function handleControlMessage(conn: Connection, raw: string) {
         return;
       }
 
-      // If an A2A inbound turn is in flight, the reply belongs to it,
-      // not to Codex. Delivers the chunk + completes the turn.
-      if (inboundGateway.interceptReply(message.message.content)) {
-        log(`Claude reply consumed by inbound A2A turn (${message.message.content.length} chars)`);
+      // P10.8 — optional `target` on the reply frame overrides default
+      // routing. `claude:*` targets deliver to that attached CC via
+      // `sendBridgeMessage`; `codex:default` falls through to today's
+      // injection path; anything else is a routing error surfaced back
+      // to the calling CC.
+      if (message.target !== undefined) {
+        const parsed = parseTarget(message.target);
+        if (!parsed.ok) {
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: false,
+            error: `Invalid target "${message.target}": ${parsed.error}`,
+          });
+          return;
+        }
+        const targetStr = parsed.target as unknown as string;
+        if (parsed.parts.kind === "claude") {
+          // Deliver directly to the named CC attach. Surface `claude:default`
+          // via the legacy singleton when no explicit entry exists so v0.1
+          // setups still round-trip a reply.
+          const destConn =
+            attachedClaudeByTarget.get(targetStr) ??
+            (targetStr === "claude:default" ? attachedClaude : null);
+          if (!destConn) {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} is not attached`,
+            });
+            return;
+          }
+          if (destConn === conn) {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} resolves to the sender — replies cannot loop back to self`,
+            });
+            return;
+          }
+          sendBridgeMessage(destConn, message.message);
+          clearAttentionWindow();
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: true,
+          });
+          return;
+        }
+        if (parsed.parts.kind === "codex") {
+          // Codex peer id routing lands in P10.9 — today's daemon only
+          // hosts one Codex adapter, so only `codex:default` is valid.
+          if (parsed.parts.id !== "default") {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} not recognized (only codex:default is supported until P10.9)`,
+            });
+            return;
+          }
+          // Fall through to the existing codex injection path below.
+        } else {
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: false,
+            error: `Unsupported target kind "${parsed.parts.kind}"`,
+          });
+          return;
+        }
+      }
+
+      // If an A2A / ACP inbound turn is in flight for this CC's
+      // target, the reply belongs to it (not Codex). P10.10: pick
+      // the sender's per-target Room gateway so a reply from CC-A
+      // can't accidentally complete CC-B's in-flight turn.
+      const senderTarget = claudeConnTarget.get(conn) ?? "claude:default";
+      const senderRoom = inboundRoomRouter.getByTarget(senderTarget as TargetId);
+      const senderGateway =
+        (senderRoom?.gateway as DaemonClaudeCodeGateway | undefined) ?? inboundGateway;
+      if (senderGateway.interceptReply(message.message.content)) {
+        log(
+          `Claude reply consumed by inbound A2A/ACP turn on ${senderTarget} ` +
+            `(${message.message.content.length} chars)`,
+        );
         clearAttentionWindow();
         sendProtocolMessage(conn, {
           type: "claude_to_codex_result",
@@ -448,10 +586,71 @@ function handleControlMessage(conn: Connection, raw: string) {
   }
 }
 
-function attachClaude(conn: Connection) {
-  if (attachedClaude && attachedClaude !== conn) {
-    attachedClaude.close();
+function attachClaude(conn: Connection, target?: string, force: boolean = false) {
+  // P10.3 — accept an optional `kind:id` target so multiple CC
+  // instances can attach to the same daemon. v0.1 frames omit the
+  // target field; default it to the canonical `claude:default`.
+  // Target validation lives in the parser (P10.1); reuse it so we
+  // never let a malformed string into our maps.
+  let resolvedTarget = "claude:default";
+  if (target) {
+    const parsed = parseTarget(target);
+    if (!parsed.ok) {
+      log(`Rejecting claude_connect with invalid target "${target}": ${parsed.error}`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target,
+        reason: `invalid target: ${parsed.error}`,
+      });
+      return;
+    }
+    if (parsed.parts.kind !== "claude") {
+      log(`Rejecting claude_connect with non-claude target "${target}"`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target,
+        reason: `non-claude target rejected on claude_connect`,
+      });
+      return;
+    }
+    resolvedTarget = parsed.target as unknown as string;
   }
+
+  // P10.6 — conflict policy. If a different connection already owns
+  // this target, either reject the new attach (default) or kick the
+  // old one (force=true). The existing `attachedClaudeByTarget`
+  // entry is the single source of truth.
+  const existing = attachedClaudeByTarget.get(resolvedTarget);
+  if (existing && existing !== conn) {
+    if (!force) {
+      const existingMeta = controlClientMeta.get(existing);
+      const attachedAt = attachedAtByTarget.get(resolvedTarget);
+      const ageMs = attachedAt !== undefined ? Date.now() - attachedAt : null;
+      const ageHint = ageMs !== null ? `, attached ${formatAttachAge(ageMs)}` : "";
+      const connHint = existingMeta ? `plugin conn #${existingMeta.clientId}${ageHint}` : "unknown";
+      const reason =
+        `target ${resolvedTarget} already attached (${connHint}). ` +
+        `Re-run with --force to take over, or use a different workspace id.`;
+      log(`Rejecting claude_connect for ${resolvedTarget} — ${connHint}`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target: resolvedTarget,
+        reason,
+      });
+      return;
+    }
+    log(`Force-replacing existing attachment for ${resolvedTarget}`);
+    // Tell the old attach it was kicked *before* closing its socket so
+    // the plugin can push a notification to its CC session.
+    sendProtocolMessage(existing, {
+      type: "claude_connect_replaced",
+      target: resolvedTarget,
+    });
+    existing.close();
+  }
+  attachedClaudeByTarget.set(resolvedTarget, conn);
+  attachedAtByTarget.set(resolvedTarget, Date.now());
+  claudeConnTarget.set(conn, resolvedTarget);
 
   const meta = controlClientMeta.get(conn);
 
@@ -459,7 +658,7 @@ function attachClaude(conn: Connection) {
   attachedClaude = conn;
   if (meta) meta.attached = true;
   cancelIdleShutdown();
-  log(`Claude frontend attached (#${meta?.clientId ?? "?"})`);
+  log(`Claude frontend attached (#${meta?.clientId ?? "?"}) → ${resolvedTarget}`);
 
   statusBuffer.flush("claude reconnected");
   sendStatus(conn);
@@ -486,10 +685,26 @@ function attachClaude(conn: Connection) {
 }
 
 function detachClaude(conn: Connection, reason: string) {
+  // Drop this conn from the per-target map regardless of whether it
+  // is the global "attachedClaude" pointer — multi-target attaches
+  // need cleanup either way.
+  const target = claudeConnTarget.get(conn);
+  if (target && attachedClaudeByTarget.get(target) === conn) {
+    attachedClaudeByTarget.delete(target);
+    attachedAtByTarget.delete(target);
+  }
+  claudeConnTarget.delete(conn);
+
   if (attachedClaude !== conn) return;
 
   const meta = controlClientMeta.get(conn);
-  attachedClaude = null;
+  // Promote any other currently-attached CC to the global pointer so
+  // emitToClaude / broadcast still has a destination. When nothing is
+  // left, clear it. The next iteration order preserves "most recently
+  // inserted survives".
+  let nextAttached: Connection | null = null;
+  for (const c of attachedClaudeByTarget.values()) nextAttached = c;
+  attachedClaude = nextAttached;
   if (meta) meta.attached = false;
   log(`Claude frontend detached (#${meta?.clientId ?? "?"}, ${reason})`);
 
@@ -600,6 +815,27 @@ function scheduleClaudeDisconnectNotification(clientId: number) {
   }, CLAUDE_DISCONNECT_GRACE_MS);
 }
 
+/**
+ * P10.10 — target-aware delivery. Picks the Connection registered for
+ * `target` in `attachedClaudeByTarget`; for `claude:default` we also
+ * accept the legacy `attachedClaude` singleton so v0.1 setups that
+ * didn't send a target field still receive inbound traffic. When no
+ * CC is attached for the target, the message is dropped with a log —
+ * callers (ACP turn handler) already gate on `isTargetAttached`, and
+ * broadcast-style buffering across unrelated targets would leak data.
+ */
+function emitToClaudeTarget(target: string, message: BridgeMessage) {
+  const dest =
+    attachedClaudeByTarget.get(target) ??
+    (target === "claude:default" ? attachedClaude : null);
+  if (dest && dest.isOpen) {
+    if (trySendBridgeMessage(dest, message)) return;
+    log(`Send to ${target} failed — dropping message (buffering not per-target yet)`);
+    return;
+  }
+  log(`No CC attached for ${target} — dropping inbound message`);
+}
+
 function emitToClaude(message: BridgeMessage) {
   if (attachedClaude && attachedClaude.isOpen) {
     if (trySendBridgeMessage(attachedClaude, message)) return;
@@ -691,6 +927,60 @@ function shouldNotifyCodexClaudeOnline() {
   return !claudeOnlineNoticeSent || claudeOfflineNoticeShown;
 }
 
+/**
+ * Render a conflict-reject attach age like `2h ago` / `3m ago` / `9s ago`
+ * for the human-readable `claude_connect_rejected.reason` string.
+ */
+function formatAttachAge(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+}
+
+function listTargetEntries() {
+  // P10.5 — snapshot every TargetId the daemon currently tracks.
+  // Today's daemon only knows about Claude attachments via
+  // attachedClaudeByTarget; future Codex / Hermes peer adapters
+  // will register their own targets through the same registry.
+  const entries: import("@transport/control-protocol").TargetEntry[] = [];
+  for (const [target, conn] of attachedClaudeByTarget.entries()) {
+    const meta = controlClientMeta.get(conn);
+    entries.push({
+      target,
+      attached: true,
+      ...(meta ? { clientId: meta.clientId } : {}),
+      ...(attachedAtByTarget.has(target) ? { attachedAt: attachedAtByTarget.get(target)! } : {}),
+    });
+  }
+  // Surface the legacy `attachedClaude` singleton as `claude:default`
+  // ONLY when no per-target attach already covers it. Without this
+  // check we'd print a phantom `claude:default` row whenever any v0.2
+  // attach lands (the singleton always tracks the most-recent attach,
+  // so it aliases an already-listed per-target conn).
+  if (attachedClaude && !attachedClaudeByTarget.has("claude:default")) {
+    let alreadyListed = false;
+    for (const conn of attachedClaudeByTarget.values()) {
+      if (conn === attachedClaude) {
+        alreadyListed = true;
+        break;
+      }
+    }
+    if (!alreadyListed) {
+      const meta = controlClientMeta.get(attachedClaude);
+      entries.push({
+        target: "claude:default",
+        attached: true,
+        ...(meta ? { clientId: meta.clientId } : {}),
+      });
+    }
+  }
+  return entries;
+}
+
 function systemMessage(idPrefix: string, content: string, source: BridgeMessage["source"] = "codex"): BridgeMessage {
   return {
     id: `${idPrefix}_${++nextSystemMessageId}`,
@@ -775,6 +1065,11 @@ async function bootInbound() {
         roomRouter: inboundRoomRouter,
         executorFactory: (gateway: import("@daemon/inbound/a2a-http/claude-code-gateway").ClaudeCodeGateway) =>
           createClaudeCodeExecutor({ gateway }),
+        // P10.7 — operator-supplied contextId → TargetId map. Format:
+        // `A2A_BRIDGE_CONTEXT_ROUTES='{"ctx-alice":"claude:alice"}'`.
+        // Malformed JSON is logged and the map is dropped so a typo
+        // degrades to v0.1 routing rather than bringing A2A down.
+        ...(parseContextRoutes(process.env.A2A_BRIDGE_CONTEXT_ROUTES, log) ?? {}),
       };
 
   try {

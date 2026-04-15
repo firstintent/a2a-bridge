@@ -198,4 +198,62 @@ describe("RoomRouter", () => {
     expect(disposed.sort()).toEqual(["a", "b"] as RoomId[]);
     await expect(router.getOrCreate("c" as RoomId)).rejects.toThrow(/disposeAll/);
   });
+
+  // ------------------------------------------------------------------
+  // P10.3 — getOrCreateByTarget / getByTarget
+  // ------------------------------------------------------------------
+
+  test("getOrCreateByTarget mints a Room keyed by the TargetId string", async () => {
+    const { factory, calls } = defaultFactory();
+    const router = new RoomRouter(factory);
+
+    const room = await router.getOrCreateByTarget(
+      "claude:project-a" as unknown as import("@shared/target-id").TargetId,
+    );
+    expect(room.id).toBe("claude:project-a" as RoomId);
+    expect(calls).toEqual(["claude:project-a"] as RoomId[]);
+
+    // Same target → same Room (no factory re-call).
+    const again = await router.getOrCreateByTarget(
+      "claude:project-a" as unknown as import("@shared/target-id").TargetId,
+    );
+    expect(again).toBe(room);
+    expect(calls).toEqual(["claude:project-a"] as RoomId[]);
+  });
+
+  test("getByTarget returns existing Room without minting", async () => {
+    const { factory } = defaultFactory();
+    const router = new RoomRouter(factory);
+
+    expect(
+      router.getByTarget(
+        "claude:default" as unknown as import("@shared/target-id").TargetId,
+      ),
+    ).toBeUndefined();
+
+    await router.getOrCreateByTarget(
+      "claude:default" as unknown as import("@shared/target-id").TargetId,
+    );
+    const found = router.getByTarget(
+      "claude:default" as unknown as import("@shared/target-id").TargetId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.id).toBe("claude:default" as RoomId);
+  });
+
+  test("different targets get separate Rooms", async () => {
+    const { factory, calls } = defaultFactory();
+    const router = new RoomRouter(factory);
+
+    const a = await router.getOrCreateByTarget(
+      "claude:proj-a" as unknown as import("@shared/target-id").TargetId,
+    );
+    const b = await router.getOrCreateByTarget(
+      "claude:proj-b" as unknown as import("@shared/target-id").TargetId,
+    );
+
+    expect(a).not.toBe(b);
+    expect(router.size).toBe(2);
+    expect(calls.sort()).toEqual(["claude:proj-a", "claude:proj-b"] as RoomId[]);
+  });
 });

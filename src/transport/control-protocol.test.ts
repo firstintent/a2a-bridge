@@ -29,6 +29,100 @@ function roundtripServer(msg: ControlServerMessage): ControlServerMessage {
 // Client → Daemon frames
 // ---------------------------------------------------------------------------
 
+describe("P10.2 control-plane: claude_connect carries optional target", () => {
+  test("claude_connect with target round-trips", () => {
+    const msg: ControlClientMessage = {
+      type: "claude_connect",
+      target: "claude:project-a",
+    };
+    const restored = roundtripClient(msg);
+    expect(restored).toEqual(msg);
+    if (restored.type === "claude_connect") {
+      expect(restored.target).toBe("claude:project-a");
+    }
+  });
+
+  test("claude_connect without target round-trips (v0.1 backward compat)", () => {
+    const msg: ControlClientMessage = { type: "claude_connect" };
+    const restored = roundtripClient(msg);
+    expect(restored).toEqual(msg);
+    if (restored.type === "claude_connect") {
+      expect(restored.target).toBeUndefined();
+    }
+  });
+});
+
+describe("P10.8 control-plane: claude_to_codex carries optional target", () => {
+  test("claude_to_codex with target round-trips", () => {
+    const msg: ControlClientMessage = {
+      type: "claude_to_codex",
+      requestId: "r42",
+      message: {
+        id: "m1",
+        source: "claude",
+        content: "hand-off",
+        timestamp: 1_700_000_000_000,
+      },
+      target: "claude:project-b",
+    };
+    const restored = roundtripClient(msg);
+    expect(restored).toEqual(msg);
+    if (restored.type === "claude_to_codex") {
+      expect(restored.target).toBe("claude:project-b");
+    }
+  });
+
+  test("claude_to_codex without target round-trips (v0.1 backward compat)", () => {
+    const msg: ControlClientMessage = {
+      type: "claude_to_codex",
+      requestId: "r42",
+      message: {
+        id: "m1",
+        source: "claude",
+        content: "hand-off",
+        timestamp: 1_700_000_000_000,
+      },
+    };
+    const restored = roundtripClient(msg);
+    expect(restored).toEqual(msg);
+    if (restored.type === "claude_to_codex") {
+      expect(restored.target).toBeUndefined();
+    }
+  });
+});
+
+describe("P10.6 control-plane: claude_connect force + conflict frames", () => {
+  test("claude_connect with force=true round-trips", () => {
+    const msg: ControlClientMessage = {
+      type: "claude_connect",
+      target: "claude:ws-a",
+      force: true,
+    };
+    const restored = roundtripClient(msg);
+    expect(restored).toEqual(msg);
+    if (restored.type === "claude_connect") {
+      expect(restored.force).toBe(true);
+    }
+  });
+
+  test("claude_connect_rejected (daemon → plugin) round-trips", () => {
+    const msg: ControlServerMessage = {
+      type: "claude_connect_rejected",
+      target: "claude:ws-a",
+      reason: "target already attached (plugin conn #1)",
+    };
+    expect(roundtripServer(msg)).toEqual(msg);
+  });
+
+  test("claude_connect_replaced (daemon → plugin) round-trips", () => {
+    const msg: ControlServerMessage = {
+      type: "claude_connect_replaced",
+      target: "claude:ws-a",
+    };
+    expect(roundtripServer(msg)).toEqual(msg);
+  });
+});
+
 describe("P8.1 control-plane: ControlClientMessage ACP variants", () => {
   test("acp_turn_start round-trips with required fields", () => {
     const msg: ControlClientMessage = {

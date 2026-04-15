@@ -1529,6 +1529,47 @@ class WebSocketListener extends EventEmitter2 {
   }
 }
 
+// src/shared/target-id.ts
+var DEFAULT_INSTANCE_ID = "default";
+var VALID_SEGMENT = /^[a-z0-9_-]+$/;
+function parseTarget(input) {
+  if (typeof input !== "string" || input.length === 0) {
+    return { ok: false, error: "Target specifier must be a non-empty string" };
+  }
+  const parts = input.split(":");
+  if (parts.length > 2) {
+    return {
+      ok: false,
+      error: `Target "${input}" has multiple ':' separators; expected "kind" or "kind:id"`
+    };
+  }
+  const kind = parts[0] ?? "";
+  const id = parts.length === 2 ? parts[1] ?? "" : DEFAULT_INSTANCE_ID;
+  if (kind.length === 0) {
+    return { ok: false, error: `Target "${input}" has an empty kind` };
+  }
+  if (!VALID_SEGMENT.test(kind)) {
+    return {
+      ok: false,
+      error: `Target kind "${kind}" contains characters outside [a-z0-9_-]`
+    };
+  }
+  if (id.length === 0) {
+    return { ok: false, error: `Target "${input}" has an empty id` };
+  }
+  if (!VALID_SEGMENT.test(id)) {
+    return {
+      ok: false,
+      error: `Target id "${id}" contains characters outside [a-z0-9_-]`
+    };
+  }
+  return {
+    ok: true,
+    target: `${kind}:${id}`,
+    parts: { kind, id }
+  };
+}
+
 // src/runtime-daemon/inbound/daemon-claude-code-gateway.ts
 import { EventEmitter as EventEmitter3 } from "events";
 
@@ -1674,6 +1715,12 @@ class RoomRouter {
   }
   get(id) {
     return this.rooms.get(id);
+  }
+  async getOrCreateByTarget(target) {
+    return this.getOrCreate(target);
+  }
+  getByTarget(target) {
+    return this.rooms.get(target);
   }
   adopt(room) {
     this.ensureLive();
@@ -2276,6 +2323,7 @@ function extractTaskId2(params) {
 }
 
 // src/runtime-daemon/inbound/a2a-http/server.ts
+var A2A_FALLBACK_TARGET = "claude:default";
 async function startA2AServer(config) {
   const host = config.host ?? "127.0.0.1";
   const log = config.logger ?? createLogger({ tag: "A2aHttpServer", filePath: config.logFilePath });
@@ -2287,6 +2335,19 @@ async function startA2AServer(config) {
   const executorFactory = config.executorFactory;
   if (roomRouter && !executorFactory) {
     throw new Error("startA2AServer: roomRouter requires executorFactory so each per-room gateway can drive its own message/stream executor");
+  }
+  const contextRoutes = config.contextRoutes;
+  const hasRoutes = contextRoutes !== undefined && Object.keys(contextRoutes).length > 0;
+  if (hasRoutes && !roomRouter) {
+    throw new Error("startA2AServer: contextRoutes requires roomRouter \u2014 multi-target routing needs a Room registry to dispatch into");
+  }
+  if (contextRoutes) {
+    for (const [ctxId, target] of Object.entries(contextRoutes)) {
+      const parsed = parseTarget(target);
+      if (!parsed.ok) {
+        throw new Error(`startA2AServer: contextRoutes[${JSON.stringify(ctxId)}] = "${target}" is not a valid TargetId (${parsed.error})`);
+      }
+    }
   }
   const handlers = {
     "tasks/get": createTasksGetHandler(registry),
@@ -2333,11 +2394,20 @@ async function startA2AServer(config) {
           let requestExecutor = defaultExecutor;
           let resolvedRoomId;
           if (roomRouter && executorFactory) {
-            resolvedRoomId = deriveRoomId({
-              contextId: params.message.contextId
-            });
-            const room = await roomRouter.getOrCreate(resolvedRoomId);
-            requestExecutor = executorFactory(room.gateway);
+            if (hasRoutes && contextRoutes) {
+              const ctxId = params.message.contextId;
+              const targetStr = ctxId !== undefined && contextRoutes[ctxId] || A2A_FALLBACK_TARGET;
+              const target = targetStr;
+              const room = await roomRouter.getOrCreateByTarget(target);
+              resolvedRoomId = targetStr;
+              requestExecutor = executorFactory(room.gateway);
+            } else {
+              resolvedRoomId = deriveRoomId({
+                contextId: params.message.contextId
+              });
+              const room = await roomRouter.getOrCreate(resolvedRoomId);
+              requestExecutor = executorFactory(room.gateway);
+            }
           }
           return handleMessageStream({
             rpcId: normalizeId2(rpcId),
@@ -2366,6 +2436,32 @@ async function startA2AServer(config) {
       server.stop(true);
     }
   };
+}
+function parseContextRoutes(raw, log) {
+  if (!raw || raw.trim().length === 0)
+    return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    log?.(`A2A_BRIDGE_CONTEXT_ROUTES ignored \u2014 not valid JSON: ${err.message}`);
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    log?.(`A2A_BRIDGE_CONTEXT_ROUTES ignored \u2014 expected a JSON object`);
+    return null;
+  }
+  const out = {};
+  for (const [k, v] of Object.entries(parsed)) {
+    if (typeof v !== "string") {
+      log?.(`A2A_BRIDGE_CONTEXT_ROUTES[${JSON.stringify(k)}] ignored \u2014 value is not a string`);
+      continue;
+    }
+    out[k] = v;
+  }
+  if (Object.keys(out).length === 0)
+    return null;
+  return { contextRoutes: out };
 }
 function extractPath(url) {
   try {
@@ -2403,15 +2499,17 @@ function jsonRpcResponse(resp) {
 var DEFAULT_PERMISSION_TIMEOUT_MS = 5 * 60 * 1000;
 
 class AcpTurnHandler {
-  gateway;
+  gatewayForTarget;
   activeTurns = new Map;
   pendingPermissions = new Map;
   log;
   permissionTimeoutMs;
-  constructor(gateway, log, opts) {
-    this.gateway = gateway;
+  isTargetAttached;
+  constructor(gatewayForTarget, log, opts) {
+    this.gatewayForTarget = gatewayForTarget;
     this.log = log ?? (() => {});
     this.permissionTimeoutMs = opts?.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS;
+    this.isTargetAttached = opts?.isTargetAttached;
   }
   routePermissionRequest(req) {
     const [conn, active] = this.activeTurns.entries().next().value ?? [undefined, undefined];
@@ -2455,12 +2553,32 @@ class AcpTurnHandler {
     this.log(`Permission ${msg.requestId} resolved: ${msg.outcome}`);
     pending.resolve(msg.outcome);
   }
-  handleTurnStart(conn, msg) {
+  async handleTurnStart(conn, msg) {
+    const target = msg.target ?? "claude:default";
+    if (this.isTargetAttached && !this.isTargetAttached(target)) {
+      this.log(`Rejecting acp_turn_start ${msg.turnId} \u2014 target ${target} not attached`);
+      this.send(conn, {
+        type: "acp_turn_error",
+        turnId: msg.turnId,
+        message: `target ${target} not attached`
+      });
+      return;
+    }
+    const gateway = await this.gatewayForTarget(target);
+    if (!gateway) {
+      this.log(`Rejecting acp_turn_start ${msg.turnId} \u2014 no gateway for ${target}`);
+      this.send(conn, {
+        type: "acp_turn_error",
+        turnId: msg.turnId,
+        message: `no gateway for target ${target}`
+      });
+      return;
+    }
     this.settleTurn(conn, `superseded by ${msg.turnId}`);
-    const turn = this.gateway.startTurn(msg.userText);
+    const turn = gateway.startTurn(msg.userText);
     const settled = { value: false };
     this.activeTurns.set(conn, { turnId: msg.turnId, turn, settled });
-    this.log(`ACP turn started (turnId=${msg.turnId}, ${msg.userText.length} chars)`);
+    this.log(`ACP turn started (turnId=${msg.turnId}, ${msg.userText.length} chars, target=${target})`);
     turn.on("chunk", (text) => {
       if (settled.value)
         return;
@@ -2553,16 +2671,30 @@ var A2A_INBOUND_PUBLIC_CARD = process.env.A2A_BRIDGE_PUBLIC_AGENT_CARD !== "fals
 var daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT, log });
 var controlListener = null;
 var a2aInboundServer = null;
+var attachedClaudeByTarget = new Map;
+var attachedAtByTarget = new Map;
 var attachedClaude = null;
 var controlClientMeta = new WeakMap;
+var claudeConnTarget = new WeakMap;
 var nextControlClientId = 0;
 var inboundGateway = new DaemonClaudeCodeGateway({
   sendToClaude: (text) => {
-    emitToClaude(systemMessage("a2a_inbound", text));
+    emitToClaude(systemMessage("a2a_inbound", text, "acp"));
   },
   log: (msg) => log(`[A2aGateway] ${msg}`)
 });
-var acpTurnHandler = new AcpTurnHandler(inboundGateway, (msg) => log(`[AcpTurnHandler] ${msg}`));
+var acpTurnHandler = new AcpTurnHandler(async (target) => {
+  const room = await inboundRoomRouter.getOrCreateByTarget(target);
+  return room.gateway;
+}, (msg) => log(`[AcpTurnHandler] ${msg}`), {
+  isTargetAttached: (target) => {
+    if (attachedClaudeByTarget.has(target))
+      return true;
+    if (target === "claude:default" && attachedClaude !== null)
+      return true;
+    return false;
+  }
+});
 var sharedTaskStore = SqliteTaskLog.open(stateDir.taskLogFile);
 var defaultRoom = new Room({
   id: DEFAULT_ROOM_ID,
@@ -2572,7 +2704,13 @@ var defaultRoom = new Room({
 });
 var codex = defaultRoom.getPeer("codex");
 var attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
-var inboundRoomRouter = new RoomRouter((id) => new Room({ id, gateway: inboundGateway, registry: sharedTaskStore }));
+var inboundRoomRouter = new RoomRouter((id) => {
+  const roomGateway = new DaemonClaudeCodeGateway({
+    sendToClaude: (text) => emitToClaudeTarget(id, systemMessage("a2a_inbound", text, "acp")),
+    log: (msg) => log(`[A2aGateway:${id}] ${msg}`)
+  });
+  return new Room({ id, gateway: roomGateway, registry: sharedTaskStore });
+});
 inboundRoomRouter.adopt(defaultRoom);
 var nextSystemMessageId = 0;
 var codexBootstrapped = false;
@@ -2741,7 +2879,7 @@ function handleControlMessage(conn, raw) {
   }
   switch (message.type) {
     case "claude_connect":
-      attachClaude(conn);
+      attachClaude(conn, message.target, message.force === true);
       return;
     case "claude_disconnect":
       detachClaude(conn, "frontend requested disconnect");
@@ -2781,6 +2919,15 @@ function handleControlMessage(conn, raw) {
     case "acp_permission_response":
       acpTurnHandler.handlePermissionResponse(conn, message);
       return;
+    case "list_targets": {
+      const entries = listTargetEntries();
+      sendProtocolMessage(conn, {
+        type: "targets_response",
+        requestId: message.requestId,
+        targets: entries
+      });
+      return;
+    }
     case "claude_to_codex": {
       if (message.message.source !== "claude") {
         sendProtocolMessage(conn, {
@@ -2791,8 +2938,72 @@ function handleControlMessage(conn, raw) {
         });
         return;
       }
-      if (inboundGateway.interceptReply(message.message.content)) {
-        log(`Claude reply consumed by inbound A2A turn (${message.message.content.length} chars)`);
+      if (message.target !== undefined) {
+        const parsed = parseTarget(message.target);
+        if (!parsed.ok) {
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: false,
+            error: `Invalid target "${message.target}": ${parsed.error}`
+          });
+          return;
+        }
+        const targetStr = parsed.target;
+        if (parsed.parts.kind === "claude") {
+          const destConn = attachedClaudeByTarget.get(targetStr) ?? (targetStr === "claude:default" ? attachedClaude : null);
+          if (!destConn) {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} is not attached`
+            });
+            return;
+          }
+          if (destConn === conn) {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} resolves to the sender \u2014 replies cannot loop back to self`
+            });
+            return;
+          }
+          sendBridgeMessage(destConn, message.message);
+          clearAttentionWindow();
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: true
+          });
+          return;
+        }
+        if (parsed.parts.kind === "codex") {
+          if (parsed.parts.id !== "default") {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} not recognized (only codex:default is supported until P10.9)`
+            });
+            return;
+          }
+        } else {
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: false,
+            error: `Unsupported target kind "${parsed.parts.kind}"`
+          });
+          return;
+        }
+      }
+      const senderTarget = claudeConnTarget.get(conn) ?? "claude:default";
+      const senderRoom = inboundRoomRouter.getByTarget(senderTarget);
+      const senderGateway = senderRoom?.gateway ?? inboundGateway;
+      if (senderGateway.interceptReply(message.message.content)) {
+        log(`Claude reply consumed by inbound A2A/ACP turn on ${senderTarget} ` + `(${message.message.content.length} chars)`);
         clearAttentionWindow();
         sendProtocolMessage(conn, {
           type: "claude_to_codex_result",
@@ -2843,17 +3054,64 @@ function handleControlMessage(conn, raw) {
     }
   }
 }
-function attachClaude(conn) {
-  if (attachedClaude && attachedClaude !== conn) {
-    attachedClaude.close();
+function attachClaude(conn, target, force = false) {
+  let resolvedTarget = "claude:default";
+  if (target) {
+    const parsed = parseTarget(target);
+    if (!parsed.ok) {
+      log(`Rejecting claude_connect with invalid target "${target}": ${parsed.error}`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target,
+        reason: `invalid target: ${parsed.error}`
+      });
+      return;
+    }
+    if (parsed.parts.kind !== "claude") {
+      log(`Rejecting claude_connect with non-claude target "${target}"`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target,
+        reason: `non-claude target rejected on claude_connect`
+      });
+      return;
+    }
+    resolvedTarget = parsed.target;
   }
+  const existing = attachedClaudeByTarget.get(resolvedTarget);
+  if (existing && existing !== conn) {
+    if (!force) {
+      const existingMeta = controlClientMeta.get(existing);
+      const attachedAt = attachedAtByTarget.get(resolvedTarget);
+      const ageMs = attachedAt !== undefined ? Date.now() - attachedAt : null;
+      const ageHint = ageMs !== null ? `, attached ${formatAttachAge(ageMs)}` : "";
+      const connHint = existingMeta ? `plugin conn #${existingMeta.clientId}${ageHint}` : "unknown";
+      const reason = `target ${resolvedTarget} already attached (${connHint}). ` + `Re-run with --force to take over, or use a different workspace id.`;
+      log(`Rejecting claude_connect for ${resolvedTarget} \u2014 ${connHint}`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target: resolvedTarget,
+        reason
+      });
+      return;
+    }
+    log(`Force-replacing existing attachment for ${resolvedTarget}`);
+    sendProtocolMessage(existing, {
+      type: "claude_connect_replaced",
+      target: resolvedTarget
+    });
+    existing.close();
+  }
+  attachedClaudeByTarget.set(resolvedTarget, conn);
+  attachedAtByTarget.set(resolvedTarget, Date.now());
+  claudeConnTarget.set(conn, resolvedTarget);
   const meta = controlClientMeta.get(conn);
   clearPendingClaudeDisconnect("Claude frontend attached");
   attachedClaude = conn;
   if (meta)
     meta.attached = true;
   cancelIdleShutdown();
-  log(`Claude frontend attached (#${meta?.clientId ?? "?"})`);
+  log(`Claude frontend attached (#${meta?.clientId ?? "?"}) \u2192 ${resolvedTarget}`);
   statusBuffer.flush("claude reconnected");
   sendStatus(conn);
   const now = Date.now();
@@ -2873,10 +3131,19 @@ function attachClaude(conn) {
   }
 }
 function detachClaude(conn, reason) {
+  const target = claudeConnTarget.get(conn);
+  if (target && attachedClaudeByTarget.get(target) === conn) {
+    attachedClaudeByTarget.delete(target);
+    attachedAtByTarget.delete(target);
+  }
+  claudeConnTarget.delete(conn);
   if (attachedClaude !== conn)
     return;
   const meta = controlClientMeta.get(conn);
-  attachedClaude = null;
+  let nextAttached = null;
+  for (const c of attachedClaudeByTarget.values())
+    nextAttached = c;
+  attachedClaude = nextAttached;
   if (meta)
     meta.attached = false;
   log(`Claude frontend detached (#${meta?.clientId ?? "?"}, ${reason})`);
@@ -2964,6 +3231,16 @@ function scheduleClaudeDisconnectNotification(clientId) {
     log(`Claude disconnect persisted past grace window (client #${clientId})`);
   }, CLAUDE_DISCONNECT_GRACE_MS);
 }
+function emitToClaudeTarget(target, message) {
+  const dest = attachedClaudeByTarget.get(target) ?? (target === "claude:default" ? attachedClaude : null);
+  if (dest && dest.isOpen) {
+    if (trySendBridgeMessage(dest, message))
+      return;
+    log(`Send to ${target} failed \u2014 dropping message (buffering not per-target yet)`);
+    return;
+  }
+  log(`No CC attached for ${target} \u2014 dropping inbound message`);
+}
 function emitToClaude(message) {
   if (attachedClaude && attachedClaude.isOpen) {
     if (trySendBridgeMessage(attachedClaude, message))
@@ -3043,10 +3320,52 @@ function notifyCodexClaudeOnline() {
 function shouldNotifyCodexClaudeOnline() {
   return !claudeOnlineNoticeSent || claudeOfflineNoticeShown;
 }
-function systemMessage(idPrefix, content) {
+function formatAttachAge(ms) {
+  if (!Number.isFinite(ms) || ms < 0)
+    return "just now";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60)
+    return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60)
+    return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+}
+function listTargetEntries() {
+  const entries = [];
+  for (const [target, conn] of attachedClaudeByTarget.entries()) {
+    const meta = controlClientMeta.get(conn);
+    entries.push({
+      target,
+      attached: true,
+      ...meta ? { clientId: meta.clientId } : {},
+      ...attachedAtByTarget.has(target) ? { attachedAt: attachedAtByTarget.get(target) } : {}
+    });
+  }
+  if (attachedClaude && !attachedClaudeByTarget.has("claude:default")) {
+    let alreadyListed = false;
+    for (const conn of attachedClaudeByTarget.values()) {
+      if (conn === attachedClaude) {
+        alreadyListed = true;
+        break;
+      }
+    }
+    if (!alreadyListed) {
+      const meta = controlClientMeta.get(attachedClaude);
+      entries.push({
+        target: "claude:default",
+        attached: true,
+        ...meta ? { clientId: meta.clientId } : {}
+      });
+    }
+  }
+  return entries;
+}
+function systemMessage(idPrefix, content, source = "codex") {
   return {
     id: `${idPrefix}_${++nextSystemMessageId}`,
-    source: "codex",
+    source,
     content,
     timestamp: Date.now()
   };
@@ -3096,7 +3415,8 @@ async function bootInbound() {
   const echoMode = process.env.A2A_BRIDGE_INBOUND_ECHO === "1";
   const routedConfig = echoMode ? { messageStreamExecutor: createEchoExecutor() } : {
     roomRouter: inboundRoomRouter,
-    executorFactory: (gateway) => createClaudeCodeExecutor({ gateway })
+    executorFactory: (gateway) => createClaudeCodeExecutor({ gateway }),
+    ...parseContextRoutes(process.env.A2A_BRIDGE_CONTEXT_ROUTES, log) ?? {}
   };
   try {
     a2aInboundServer = await startA2AServer({
