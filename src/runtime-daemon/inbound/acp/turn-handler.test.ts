@@ -442,3 +442,93 @@ describe("AcpTurnHandler — permission bridging (P8.2a)", () => {
     ]);
   });
 });
+
+describe("AcpTurnHandler — target routing (P10.4)", () => {
+  test("turn is forwarded when target's CC is attached", () => {
+    const gw = new StubGateway();
+    const conn = new FakeConnection();
+    const attached = new Set(["claude:project-a"]);
+    const handler = new AcpTurnHandler(gw, undefined, {
+      isTargetAttached: (t) => attached.has(t),
+    });
+
+    handler.handleTurnStart(conn, {
+      type: "acp_turn_start",
+      turnId: "t-ok",
+      sessionId: "s",
+      userText: "hi",
+      target: "claude:project-a",
+    });
+
+    expect(gw.turns).toHaveLength(1);
+    gw.lastTurn.emit("chunk", "ok");
+    gw.lastTurn.emit("complete");
+    expect(conn.sent).toEqual([
+      { type: "acp_turn_chunk", turnId: "t-ok", text: "ok" },
+      { type: "acp_turn_complete", turnId: "t-ok" },
+    ]);
+  });
+
+  test("turn is rejected with acp_turn_error when target is unattached", () => {
+    const gw = new StubGateway();
+    const conn = new FakeConnection();
+    const attached = new Set(["claude:project-a"]);
+    const handler = new AcpTurnHandler(gw, undefined, {
+      isTargetAttached: (t) => attached.has(t),
+    });
+
+    handler.handleTurnStart(conn, {
+      type: "acp_turn_start",
+      turnId: "t-ghost",
+      sessionId: "s",
+      userText: "hi",
+      target: "claude:does-not-exist",
+    });
+
+    // Gateway was never asked to start a turn.
+    expect(gw.turns).toHaveLength(0);
+    // Subprocess got an explicit error frame.
+    expect(conn.sent).toEqual([
+      {
+        type: "acp_turn_error",
+        turnId: "t-ghost",
+        message: "target claude:does-not-exist not attached",
+      },
+    ]);
+  });
+
+  test("missing target field defaults to claude:default", () => {
+    const gw = new StubGateway();
+    const conn = new FakeConnection();
+    const attached = new Set(["claude:default"]);
+    const handler = new AcpTurnHandler(gw, undefined, {
+      isTargetAttached: (t) => attached.has(t),
+    });
+
+    handler.handleTurnStart(conn, {
+      type: "acp_turn_start",
+      turnId: "t-default",
+      sessionId: "s",
+      userText: "hi",
+      // No target — should resolve to claude:default and succeed.
+    });
+
+    expect(gw.turns).toHaveLength(1);
+  });
+
+  test("no isTargetAttached predicate → every target accepted (v0.1 compat)", () => {
+    const gw = new StubGateway();
+    const conn = new FakeConnection();
+    const handler = new AcpTurnHandler(gw); // no opts
+
+    handler.handleTurnStart(conn, {
+      type: "acp_turn_start",
+      turnId: "t-legacy",
+      sessionId: "s",
+      userText: "hi",
+      target: "claude:anything",
+    });
+
+    expect(gw.turns).toHaveLength(1);
+  });
+});

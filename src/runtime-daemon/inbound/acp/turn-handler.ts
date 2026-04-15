@@ -48,19 +48,33 @@ interface PendingPermission {
  */
 const DEFAULT_PERMISSION_TIMEOUT_MS = 5 * 60 * 1_000;
 
+export interface AcpTurnHandlerOpts {
+  permissionTimeoutMs?: number;
+  /**
+   * Optional predicate (P10.4): given a TargetId from acp_turn_start,
+   * return true iff a Claude Code instance is currently attached for
+   * that target. Returning false short-circuits the turn with an
+   * `acp_turn_error` instead of forwarding to the singleton gateway.
+   * When omitted, every target is considered attached (v0.1 behaviour).
+   */
+  isTargetAttached?: (target: string) => boolean;
+}
+
 export class AcpTurnHandler {
   private readonly activeTurns = new Map<Connection, ActiveTurn>();
   private readonly pendingPermissions = new Map<string, PendingPermission>();
   private readonly log: (msg: string) => void;
   private readonly permissionTimeoutMs: number;
+  private readonly isTargetAttached?: (target: string) => boolean;
 
   constructor(
     private readonly gateway: ClaudeCodeGateway,
     log?: (msg: string) => void,
-    opts?: { permissionTimeoutMs?: number },
+    opts?: AcpTurnHandlerOpts,
   ) {
     this.log = log ?? (() => {});
     this.permissionTimeoutMs = opts?.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS;
+    this.isTargetAttached = opts?.isTargetAttached;
   }
 
   // ---------------------------------------------------------------------------
@@ -140,6 +154,20 @@ export class AcpTurnHandler {
     conn: Connection,
     msg: Extract<ControlClientMessage, { type: "acp_turn_start" }>,
   ): void {
+    // P10.4 — verify the requested TargetId has an attached CC before
+    // we reach into the gateway. Falls back to claude:default when the
+    // subprocess didn't send a target (v0.1 wire compatibility).
+    const target = msg.target ?? "claude:default";
+    if (this.isTargetAttached && !this.isTargetAttached(target)) {
+      this.log(`Rejecting acp_turn_start ${msg.turnId} — target ${target} not attached`);
+      this.send(conn, {
+        type: "acp_turn_error",
+        turnId: msg.turnId,
+        message: `target ${target} not attached`,
+      });
+      return;
+    }
+
     // Settle + cancel any existing turn for this connection before starting a new one.
     this.settleTurn(conn, `superseded by ${msg.turnId}`);
 

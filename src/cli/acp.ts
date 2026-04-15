@@ -22,6 +22,7 @@ import { AcpInboundService } from "@daemon/inbound/acp";
 import { DaemonProxyGateway } from "@daemon/inbound/acp/daemon-proxy-gateway";
 import type { ClaudeCodeGateway } from "@daemon/inbound/a2a-http/claude-code-gateway";
 import type { AcpStdioPair } from "@daemon/inbound/acp/connection";
+import { parseTarget } from "@shared/target-id";
 import {
   DaemonUnreachableError,
   renderFriendlyError,
@@ -34,6 +35,13 @@ export interface RunAcpOptions {
   ensureDaemon?: boolean;
   /** Override the daemon control-plane WebSocket URL. */
   controlWsUrl?: string;
+  /**
+   * TargetId (`kind:id` form) selecting which daemon Room handles
+   * every turn this subprocess sends. Validated via parseTarget.
+   * When omitted, frames go without a target field and the daemon
+   * defaults to `claude:default` (v0.1 backward compat).
+   */
+  target?: string;
   /**
    * Test-only escape hatch: when provided, skips the daemon entirely
    * and uses this gateway directly.  Production callers never set this.
@@ -51,6 +59,16 @@ export async function runAcp(
   // --url flag overrides the control WS URL (takes precedence over env)
   if (parsed.url) {
     options = { ...options, controlWsUrl: parsed.url };
+  }
+
+  // --target validates and overrides the daemon Room selector.
+  if (parsed.target) {
+    const r = parseTarget(parsed.target);
+    if (!r.ok) {
+      console.error(`Invalid --target "${parsed.target}": ${r.error}`);
+      process.exit(1);
+    }
+    options = { ...options, target: r.target as string };
   }
 
   // One-shot prompt mode: a2a-bridge acp -p "hello" / --prompt "hello"
@@ -73,9 +91,11 @@ export async function runAcp(
 function parseAcpArgs(args: string[]): {
   prompt?: string;
   url?: string;
+  target?: string;
 } {
   let prompt: string | undefined;
   let url: string | undefined;
+  let target: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -85,10 +105,14 @@ function parseAcpArgs(args: string[]): {
       url = args[++i];
     } else if (arg?.startsWith("--url=")) {
       url = arg.slice(6);
+    } else if ((arg === "--target" || arg === "-t") && i + 1 < args.length) {
+      target = args[++i];
+    } else if (arg?.startsWith("--target=")) {
+      target = arg.slice(9);
     }
   }
 
-  return { prompt, url };
+  return { prompt, url, target };
 }
 
 /**
@@ -155,6 +179,7 @@ async function resolveGateway(options: RunAcpOptions): Promise<ClaudeCodeGateway
   const gateway = new DaemonProxyGateway({
     url: controlWsUrl,
     log: (msg) => console.error(`[a2a-bridge acp] ${msg}`),
+    ...(options.target ? { target: options.target } : {}),
   });
   try {
     await gateway.connect();

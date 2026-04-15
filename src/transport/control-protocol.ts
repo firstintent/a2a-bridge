@@ -61,7 +61,9 @@ export type ControlClientMessage =
   | { type: "claude_to_codex"; requestId: string; message: BridgeMessage; requireReply?: boolean }
   | { type: "status" }
   // ACP turn relay — sent by the `a2a-bridge acp` subprocess to the daemon.
-  | { type: "acp_turn_start"; turnId: string; sessionId: string; userText: string; meta?: AcpTurnMeta }
+  // `target` (P10.4) selects which TargetId Room handles the turn.
+  // Optional for v0.1 backward compat; daemon defaults to `claude:default`.
+  | { type: "acp_turn_start"; turnId: string; sessionId: string; userText: string; meta?: AcpTurnMeta; target?: string }
   | { type: "acp_turn_cancel"; turnId: string }
   // Plugin → daemon: CC asked for a permission verdict; daemon decides where
   // to forward it based on the currently-active inbound turn.

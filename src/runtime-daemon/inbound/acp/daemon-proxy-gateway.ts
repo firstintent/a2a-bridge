@@ -52,6 +52,13 @@ export interface DaemonProxyGatewayOptions {
    * and CC silently drops non-identifier keys.
    */
   meta?: AcpTurnMeta;
+  /**
+   * TargetId (P10.4) — `kind:id` form selecting which daemon Room
+   * handles every turn from this subprocess. When omitted, frames
+   * are sent without a target and the daemon defaults to
+   * `claude:default` (v0.1 backward compat).
+   */
+  target?: string;
   /** How long to wait for the daemon WS to open before failing. */
   connectTimeoutMs?: number;
   /** Optional logger; defaults to no-op. */
@@ -74,6 +81,7 @@ export class DaemonProxyGateway
   private readonly log: (msg: string) => void;
   private readonly sessionId: string;
   private readonly meta: AcpTurnMeta | undefined;
+  private readonly target: string | undefined;
   private readonly connectTimeoutMs: number;
 
   constructor(private readonly opts: DaemonProxyGatewayOptions) {
@@ -82,6 +90,7 @@ export class DaemonProxyGateway
     this.sessionId = opts.sessionId ?? "acp-default";
     this.meta = opts.meta;
     if (this.meta) assertIdentifierSafeKeys(this.meta);
+    this.target = opts.target;
     this.connectTimeoutMs = opts.connectTimeoutMs ?? 10_000;
   }
 
@@ -213,6 +222,7 @@ export class DaemonProxyGateway
       sessionId: this.sessionId,
       userText,
       ...(this.meta ? { meta: this.meta } : {}),
+      ...(this.target ? { target: this.target } : {}),
     };
     this.log(`startTurn ${turnId} (${userText.length} chars)`);
     try {

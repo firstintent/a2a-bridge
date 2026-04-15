@@ -84,8 +84,20 @@ const inboundGateway = new DaemonClaudeCodeGateway({
 
 // Daemon-side handler for ACP turn relay (P8.2). Handles acp_turn_start /
 // acp_turn_cancel messages from `a2a-bridge acp` subprocesses.
-const acpTurnHandler = new AcpTurnHandler(inboundGateway, (msg) =>
-  log(`[AcpTurnHandler] ${msg}`),
+const acpTurnHandler = new AcpTurnHandler(
+  inboundGateway,
+  (msg) => log(`[AcpTurnHandler] ${msg}`),
+  {
+    // P10.4 — only accept turns whose target has an attached CC
+    // connection. Bare claude:default falls back to the legacy
+    // "any attached CC" check so v0.1 single-attach setups keep
+    // working when the subprocess doesn't send a target.
+    isTargetAttached: (target) => {
+      if (attachedClaudeByTarget.has(target)) return true;
+      if (target === "claude:default" && attachedClaude !== null) return true;
+      return false;
+    },
+  },
 );
 
 // One daemon-wide task log; every Room tracks through this shared store
