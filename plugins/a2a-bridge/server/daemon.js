@@ -2499,14 +2499,14 @@ function jsonRpcResponse(resp) {
 var DEFAULT_PERMISSION_TIMEOUT_MS = 5 * 60 * 1000;
 
 class AcpTurnHandler {
-  gateway;
+  gatewayForTarget;
   activeTurns = new Map;
   pendingPermissions = new Map;
   log;
   permissionTimeoutMs;
   isTargetAttached;
-  constructor(gateway, log, opts) {
-    this.gateway = gateway;
+  constructor(gatewayForTarget, log, opts) {
+    this.gatewayForTarget = gatewayForTarget;
     this.log = log ?? (() => {});
     this.permissionTimeoutMs = opts?.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS;
     this.isTargetAttached = opts?.isTargetAttached;
@@ -2553,7 +2553,7 @@ class AcpTurnHandler {
     this.log(`Permission ${msg.requestId} resolved: ${msg.outcome}`);
     pending.resolve(msg.outcome);
   }
-  handleTurnStart(conn, msg) {
+  async handleTurnStart(conn, msg) {
     const target = msg.target ?? "claude:default";
     if (this.isTargetAttached && !this.isTargetAttached(target)) {
       this.log(`Rejecting acp_turn_start ${msg.turnId} \u2014 target ${target} not attached`);
@@ -2564,11 +2564,21 @@ class AcpTurnHandler {
       });
       return;
     }
+    const gateway = await this.gatewayForTarget(target);
+    if (!gateway) {
+      this.log(`Rejecting acp_turn_start ${msg.turnId} \u2014 no gateway for ${target}`);
+      this.send(conn, {
+        type: "acp_turn_error",
+        turnId: msg.turnId,
+        message: `no gateway for target ${target}`
+      });
+      return;
+    }
     this.settleTurn(conn, `superseded by ${msg.turnId}`);
-    const turn = this.gateway.startTurn(msg.userText);
+    const turn = gateway.startTurn(msg.userText);
     const settled = { value: false };
     this.activeTurns.set(conn, { turnId: msg.turnId, turn, settled });
-    this.log(`ACP turn started (turnId=${msg.turnId}, ${msg.userText.length} chars)`);
+    this.log(`ACP turn started (turnId=${msg.turnId}, ${msg.userText.length} chars, target=${target})`);
     turn.on("chunk", (text) => {
       if (settled.value)
         return;
@@ -2673,7 +2683,10 @@ var inboundGateway = new DaemonClaudeCodeGateway({
   },
   log: (msg) => log(`[A2aGateway] ${msg}`)
 });
-var acpTurnHandler = new AcpTurnHandler(inboundGateway, (msg) => log(`[AcpTurnHandler] ${msg}`), {
+var acpTurnHandler = new AcpTurnHandler(async (target) => {
+  const room = await inboundRoomRouter.getOrCreateByTarget(target);
+  return room.gateway;
+}, (msg) => log(`[AcpTurnHandler] ${msg}`), {
   isTargetAttached: (target) => {
     if (attachedClaudeByTarget.has(target))
       return true;
@@ -2691,7 +2704,13 @@ var defaultRoom = new Room({
 });
 var codex = defaultRoom.getPeer("codex");
 var attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
-var inboundRoomRouter = new RoomRouter((id) => new Room({ id, gateway: inboundGateway, registry: sharedTaskStore }));
+var inboundRoomRouter = new RoomRouter((id) => {
+  const roomGateway = new DaemonClaudeCodeGateway({
+    sendToClaude: (text) => emitToClaudeTarget(id, systemMessage("a2a_inbound", text, "acp")),
+    log: (msg) => log(`[A2aGateway:${id}] ${msg}`)
+  });
+  return new Room({ id, gateway: roomGateway, registry: sharedTaskStore });
+});
 inboundRoomRouter.adopt(defaultRoom);
 var nextSystemMessageId = 0;
 var codexBootstrapped = false;
@@ -2980,8 +2999,11 @@ function handleControlMessage(conn, raw) {
           return;
         }
       }
-      if (inboundGateway.interceptReply(message.message.content)) {
-        log(`Claude reply consumed by inbound A2A turn (${message.message.content.length} chars)`);
+      const senderTarget = claudeConnTarget.get(conn) ?? "claude:default";
+      const senderRoom = inboundRoomRouter.getByTarget(senderTarget);
+      const senderGateway = senderRoom?.gateway ?? inboundGateway;
+      if (senderGateway.interceptReply(message.message.content)) {
+        log(`Claude reply consumed by inbound A2A/ACP turn on ${senderTarget} ` + `(${message.message.content.length} chars)`);
         clearAttentionWindow();
         sendProtocolMessage(conn, {
           type: "claude_to_codex_result",
@@ -3208,6 +3230,16 @@ function scheduleClaudeDisconnectNotification(clientId) {
     claudeOfflineNoticeShown = true;
     log(`Claude disconnect persisted past grace window (client #${clientId})`);
   }, CLAUDE_DISCONNECT_GRACE_MS);
+}
+function emitToClaudeTarget(target, message) {
+  const dest = attachedClaudeByTarget.get(target) ?? (target === "claude:default" ? attachedClaude : null);
+  if (dest && dest.isOpen) {
+    if (trySendBridgeMessage(dest, message))
+      return;
+    log(`Send to ${target} failed \u2014 dropping message (buffering not per-target yet)`);
+    return;
+  }
+  log(`No CC attached for ${target} \u2014 dropping inbound message`);
 }
 function emitToClaude(message) {
   if (attachedClaude && attachedClaude.isOpen) {

@@ -17,7 +17,7 @@ import type { Connection } from "@transport/listener";
 import { WebSocketListener } from "@transport/websocket";
 import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "@transport/control-protocol";
 import type { BridgeMessage } from "@messages/types";
-import { parseTarget } from "@shared/target-id";
+import { parseTarget, type TargetId } from "@shared/target-id";
 import { DaemonClaudeCodeGateway } from "@daemon/inbound/daemon-claude-code-gateway";
 import { Room } from "@daemon/rooms/room";
 import { RoomRouter } from "@daemon/rooms/room-router";
@@ -77,6 +77,12 @@ const controlClientMeta = new WeakMap<Connection, ControlClientMeta>();
 const claudeConnTarget = new WeakMap<Connection, string>();
 let nextControlClientId = 0;
 
+// v0.1 default gateway — used by `defaultRoom` (room id `"default"`)
+// for backward-compat A2A HTTP turns (no contextRoutes, no explicit
+// target). Delivers via `emitToClaude` which hits the singleton
+// `attachedClaude`. Per-target rooms get their own gateway below
+// via the RoomRouter factory, so each target routes to its own
+// attached CC instead of the singleton (P10.10).
 const inboundGateway = new DaemonClaudeCodeGateway({
   sendToClaude: (text) => {
     emitToClaude(systemMessage("a2a_inbound", text, "acp"));
@@ -84,10 +90,15 @@ const inboundGateway = new DaemonClaudeCodeGateway({
   log: (msg) => log(`[A2aGateway] ${msg}`),
 });
 
-// Daemon-side handler for ACP turn relay (P8.2). Handles acp_turn_start /
-// acp_turn_cancel messages from `a2a-bridge acp` subprocesses.
+// Daemon-side handler for ACP turn relay (P8.2 / P10.10).
+// Takes a `gatewayForTarget` function instead of a fixed gateway
+// so each inbound ACP turn resolves its own per-room gateway (keyed
+// by TargetId) and inbound text routes only to that target's CC.
 const acpTurnHandler = new AcpTurnHandler(
-  inboundGateway,
+  async (target) => {
+    const room = await inboundRoomRouter.getOrCreateByTarget(target as TargetId);
+    return room.gateway;
+  },
   (msg) => log(`[AcpTurnHandler] ${msg}`),
   {
     // P10.4 — only accept turns whose target has an attached CC
@@ -119,8 +130,19 @@ const defaultRoom = new Room({
 });
 const codex = defaultRoom.getPeer("codex") as CodexAdapter;
 const attachCmd = `codex --enable tui_app_server --remote ${codex.proxyUrl}`;
+// P10.10 — each non-default Room gets its own gateway whose
+// `sendToClaude` routes to the Room's TargetId via
+// `emitToClaudeTarget`, so concurrent ACP turns for different
+// targets deliver only to their own attached CC.
 const inboundRoomRouter = new RoomRouter(
-  (id) => new Room({ id, gateway: inboundGateway, registry: sharedTaskStore }),
+  (id) => {
+    const roomGateway = new DaemonClaudeCodeGateway({
+      sendToClaude: (text) =>
+        emitToClaudeTarget(id as string, systemMessage("a2a_inbound", text, "acp")),
+      log: (msg) => log(`[A2aGateway:${id}] ${msg}`),
+    });
+    return new Room({ id, gateway: roomGateway, registry: sharedTaskStore });
+  },
 );
 inboundRoomRouter.adopt(defaultRoom);
 let nextSystemMessageId = 0;
@@ -366,7 +388,7 @@ function handleControlMessage(conn: Connection, raw: string) {
       sendStatus(conn);
       return;
     case "acp_turn_start":
-      acpTurnHandler.handleTurnStart(conn, message);
+      void acpTurnHandler.handleTurnStart(conn, message);
       return;
     case "acp_turn_cancel":
       acpTurnHandler.handleTurnCancel(conn, message);
@@ -498,10 +520,19 @@ function handleControlMessage(conn: Connection, raw: string) {
         }
       }
 
-      // If an A2A inbound turn is in flight, the reply belongs to it,
-      // not to Codex. Delivers the chunk + completes the turn.
-      if (inboundGateway.interceptReply(message.message.content)) {
-        log(`Claude reply consumed by inbound A2A turn (${message.message.content.length} chars)`);
+      // If an A2A / ACP inbound turn is in flight for this CC's
+      // target, the reply belongs to it (not Codex). P10.10: pick
+      // the sender's per-target Room gateway so a reply from CC-A
+      // can't accidentally complete CC-B's in-flight turn.
+      const senderTarget = claudeConnTarget.get(conn) ?? "claude:default";
+      const senderRoom = inboundRoomRouter.getByTarget(senderTarget as TargetId);
+      const senderGateway =
+        (senderRoom?.gateway as DaemonClaudeCodeGateway | undefined) ?? inboundGateway;
+      if (senderGateway.interceptReply(message.message.content)) {
+        log(
+          `Claude reply consumed by inbound A2A/ACP turn on ${senderTarget} ` +
+            `(${message.message.content.length} chars)`,
+        );
         clearAttentionWindow();
         sendProtocolMessage(conn, {
           type: "claude_to_codex_result",
@@ -782,6 +813,27 @@ function scheduleClaudeDisconnectNotification(clientId: number) {
     claudeOfflineNoticeShown = true;
     log(`Claude disconnect persisted past grace window (client #${clientId})`);
   }, CLAUDE_DISCONNECT_GRACE_MS);
+}
+
+/**
+ * P10.10 — target-aware delivery. Picks the Connection registered for
+ * `target` in `attachedClaudeByTarget`; for `claude:default` we also
+ * accept the legacy `attachedClaude` singleton so v0.1 setups that
+ * didn't send a target field still receive inbound traffic. When no
+ * CC is attached for the target, the message is dropped with a log —
+ * callers (ACP turn handler) already gate on `isTargetAttached`, and
+ * broadcast-style buffering across unrelated targets would leak data.
+ */
+function emitToClaudeTarget(target: string, message: BridgeMessage) {
+  const dest =
+    attachedClaudeByTarget.get(target) ??
+    (target === "claude:default" ? attachedClaude : null);
+  if (dest && dest.isOpen) {
+    if (trySendBridgeMessage(dest, message)) return;
+    log(`Send to ${target} failed — dropping message (buffering not per-target yet)`);
+    return;
+  }
+  log(`No CC attached for ${target} — dropping inbound message`);
 }
 
 function emitToClaude(message: BridgeMessage) {

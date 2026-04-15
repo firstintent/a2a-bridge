@@ -59,13 +59,13 @@ class FakeConnection extends EventEmitter implements Connection {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("AcpTurnHandler — happy path", () => {
-  test("acp_turn_start forwards text to gateway and relays chunk+complete frames", () => {
+describe("AcpTurnHandler — happy path", async () => {
+  test("acp_turn_start forwards text to gateway and relays chunk+complete frames", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t1",
       sessionId: "s1",
@@ -86,12 +86,12 @@ describe("AcpTurnHandler — happy path", () => {
     ]);
   });
 
-  test("gateway error produces an acp_turn_error frame", () => {
+  test("gateway error produces an acp_turn_error frame", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t2",
       sessionId: "s1",
@@ -106,13 +106,13 @@ describe("AcpTurnHandler — happy path", () => {
   });
 });
 
-describe("AcpTurnHandler — cancel", () => {
-  test("acp_turn_cancel calls turn.cancel() and suppresses subsequent events", () => {
+describe("AcpTurnHandler — cancel", async () => {
+  test("acp_turn_cancel calls turn.cancel() and suppresses subsequent events", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t3",
       sessionId: "s1",
@@ -131,10 +131,10 @@ describe("AcpTurnHandler — cancel", () => {
     expect(conn.sent).toEqual([]);
   });
 
-  test("cancel for an unknown turnId is a no-op", () => {
+  test("cancel for an unknown turnId is a no-op", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
     // No active turn for this connection
     expect(() =>
@@ -142,12 +142,12 @@ describe("AcpTurnHandler — cancel", () => {
     ).not.toThrow();
   });
 
-  test("cancel with wrong turnId on same connection is a no-op", () => {
+  test("cancel with wrong turnId on same connection is a no-op", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t4",
       sessionId: "s1",
@@ -169,13 +169,13 @@ describe("AcpTurnHandler — cancel", () => {
   });
 });
 
-describe("AcpTurnHandler — supersede + connection close", () => {
-  test("a second acp_turn_start on the same connection cancels the previous turn", () => {
+describe("AcpTurnHandler — supersede + connection close", async () => {
+  test("a second acp_turn_start on the same connection cancels the previous turn", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t5",
       sessionId: "s1",
@@ -183,7 +183,7 @@ describe("AcpTurnHandler — supersede + connection close", () => {
     });
     const first = gw.turns[0]!;
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t6",
       sessionId: "s1",
@@ -206,12 +206,12 @@ describe("AcpTurnHandler — supersede + connection close", () => {
     ]);
   });
 
-  test("onConnectionClose cancels an in-flight turn", () => {
+  test("onConnectionClose cancels an in-flight turn", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t7",
       sessionId: "s1",
@@ -228,19 +228,19 @@ describe("AcpTurnHandler — supersede + connection close", () => {
     expect(conn.sent).toEqual([]);
   });
 
-  test("onConnectionClose with no active turn is a no-op", () => {
+  test("onConnectionClose with no active turn is a no-op", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
     expect(() => handler.onConnectionClose(conn)).not.toThrow();
   });
 });
 
-describe("AcpTurnHandler — permission bridging (P8.2a)", () => {
+describe("AcpTurnHandler — permission bridging (P8.2a)", async () => {
   test("routePermissionRequest auto-denies when no ACP turn is active", async () => {
     const gw = new StubGateway();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
     const outcome = await handler.routePermissionRequest({
       requestId: "p1",
@@ -254,9 +254,9 @@ describe("AcpTurnHandler — permission bridging (P8.2a)", () => {
   test("routePermissionRequest sends acp_permission_request to the active connection", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t10",
       sessionId: "s1",
@@ -296,9 +296,9 @@ describe("AcpTurnHandler — permission bridging (P8.2a)", () => {
     const gw = new StubGateway();
     const owner = new FakeConnection();
     const other = new FakeConnection();
-    const handler = new AcpTurnHandler(gw, undefined, { permissionTimeoutMs: 50 });
+    const handler = new AcpTurnHandler(() => gw, undefined, { permissionTimeoutMs: 50 });
 
-    handler.handleTurnStart(owner, {
+    await handler.handleTurnStart(owner, {
       type: "acp_turn_start",
       turnId: "t11",
       sessionId: "s1",
@@ -326,9 +326,9 @@ describe("AcpTurnHandler — permission bridging (P8.2a)", () => {
   test("onConnectionClose auto-denies pending permissions from that connection", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw, undefined, { permissionTimeoutMs: 60_000 });
+    const handler = new AcpTurnHandler(() => gw, undefined, { permissionTimeoutMs: 60_000 });
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t12",
       sessionId: "s1",
@@ -350,9 +350,9 @@ describe("AcpTurnHandler — permission bridging (P8.2a)", () => {
   test("permission request times out and auto-denies when no answer arrives", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw, undefined, { permissionTimeoutMs: 20 });
+    const handler = new AcpTurnHandler(() => gw, undefined, { permissionTimeoutMs: 20 });
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t13",
       sessionId: "s1",
@@ -368,10 +368,10 @@ describe("AcpTurnHandler — permission bridging (P8.2a)", () => {
     expect(outcome).toBe("deny");
   });
 
-  test("unknown permission response is silently dropped", () => {
+  test("unknown permission response is silently dropped", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
     expect(() =>
       handler.handlePermissionResponse(conn, {
@@ -390,10 +390,10 @@ describe("AcpTurnHandler — permission bridging (P8.2a)", () => {
     // reply is forwarded back before the turn completes.
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw);
+    const handler = new AcpTurnHandler(() => gw);
 
     // 1. ACP subprocess opens a turn.
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "turn-e2e",
       sessionId: "sess-e2e",
@@ -443,16 +443,16 @@ describe("AcpTurnHandler — permission bridging (P8.2a)", () => {
   });
 });
 
-describe("AcpTurnHandler — target routing (P10.4)", () => {
-  test("turn is forwarded when target's CC is attached", () => {
+describe("AcpTurnHandler — target routing (P10.4)", async () => {
+  test("turn is forwarded when target's CC is attached", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
     const attached = new Set(["claude:project-a"]);
-    const handler = new AcpTurnHandler(gw, undefined, {
+    const handler = new AcpTurnHandler(() => gw, undefined, {
       isTargetAttached: (t) => attached.has(t),
     });
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t-ok",
       sessionId: "s",
@@ -469,15 +469,15 @@ describe("AcpTurnHandler — target routing (P10.4)", () => {
     ]);
   });
 
-  test("turn is rejected with acp_turn_error when target is unattached", () => {
+  test("turn is rejected with acp_turn_error when target is unattached", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
     const attached = new Set(["claude:project-a"]);
-    const handler = new AcpTurnHandler(gw, undefined, {
+    const handler = new AcpTurnHandler(() => gw, undefined, {
       isTargetAttached: (t) => attached.has(t),
     });
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t-ghost",
       sessionId: "s",
@@ -497,15 +497,15 @@ describe("AcpTurnHandler — target routing (P10.4)", () => {
     ]);
   });
 
-  test("missing target field defaults to claude:default", () => {
+  test("missing target field defaults to claude:default", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
     const attached = new Set(["claude:default"]);
-    const handler = new AcpTurnHandler(gw, undefined, {
+    const handler = new AcpTurnHandler(() => gw, undefined, {
       isTargetAttached: (t) => attached.has(t),
     });
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t-default",
       sessionId: "s",
@@ -516,12 +516,12 @@ describe("AcpTurnHandler — target routing (P10.4)", () => {
     expect(gw.turns).toHaveLength(1);
   });
 
-  test("no isTargetAttached predicate → every target accepted (v0.1 compat)", () => {
+  test("no isTargetAttached predicate → every target accepted (v0.1 compat)", async () => {
     const gw = new StubGateway();
     const conn = new FakeConnection();
-    const handler = new AcpTurnHandler(gw); // no opts
+    const handler = new AcpTurnHandler(() => gw); // no opts
 
-    handler.handleTurnStart(conn, {
+    await handler.handleTurnStart(conn, {
       type: "acp_turn_start",
       turnId: "t-legacy",
       sessionId: "s",
