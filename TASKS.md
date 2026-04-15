@@ -555,7 +555,7 @@ once that phase lands.
   special case where every inbound request resolves to
   `claude:default`.
 
-- [ ] **P10.4 — `a2a-bridge acp --target` flag.**
+- [x] **P10.4 — `a2a-bridge acp --target` flag.**
   Acceptance: `src/cli/acp.ts` parses `--target kind:id` via
   `parseTarget`. `AcpTurnHandler` on the daemon side gets the
   target field on every `acp_turn_start` and looks up the Room;
