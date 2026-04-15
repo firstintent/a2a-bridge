@@ -562,7 +562,7 @@ once that phase lands.
   unresolvable target → `acp_turn_error { message: "target not
   attached" }`. Unit test covers happy path + missing-target path.
 
-- [ ] **P10.5 — `a2a-bridge daemon targets` subcommand.**
+- [x] **P10.5 — `a2a-bridge daemon targets` subcommand.**
   Acceptance: new subcommand prints a table of registered targets
   with attach state, pid, and uptime. Reads from the daemon's
   rooms map via a new control-plane `list_targets` RPC. Unit test
