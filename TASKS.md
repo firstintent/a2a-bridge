@@ -604,7 +604,7 @@ once that phase lands.
   test asserts two Codex instances with distinct ids don't
   cross-talk.
 
-- [/] **P10.10 — Cross-target integration test.**
+- [x] **P10.10 — Cross-target integration test.**
   Acceptance: new test in `src/cli/multi-target.test.ts` boots a
   daemon, attaches two stub CCs as `claude:a` and `claude:b`,
   drives two concurrent ACP subprocesses with distinct `--target`
