@@ -116,7 +116,25 @@ describe("AcpInboundService handshake (P5.3)", () => {
     expect(resp.protocolVersion).toBe(PROTOCOL_VERSION);
     expect(resp.agentInfo?.name).toBe("a2a-bridge");
     expect(resp.agentCapabilities).toBeDefined();
-    expect(resp.agentCapabilities?.loadSession).toBe(false);
+    // P10-follow-up: loadSession is advertised so OpenClaw acpx's
+    // persistent-session mode can respawn us and reuse its sessionId.
+    // Implementation is a stateless no-op that adopts the supplied id.
+    expect(resp.agentCapabilities?.loadSession).toBe(true);
+  });
+
+  test("loadSession accepts an existing session id as a stateless no-op", async () => {
+    const { service, client } = buildInMemoryPair();
+    await client.initialize({
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: {},
+    });
+    const before = service.sessionCount();
+    await client.loadSession({
+      sessionId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      cwd: "/tmp/p10-loadsession",
+      mcpServers: [],
+    });
+    expect(service.sessionCount()).toBe(before + 1);
   });
 
   test("initialize advertises the live package.json version (P8.7)", async () => {

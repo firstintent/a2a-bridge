@@ -17,6 +17,8 @@ import {
   type ContentBlock,
   type InitializeRequest,
   type InitializeResponse,
+  type LoadSessionRequest,
+  type LoadSessionResponse,
   type NewSessionRequest,
   type NewSessionResponse,
   type PromptRequest,
@@ -132,10 +134,14 @@ export class AcpInboundService implements IInboundService {
         return {
           protocolVersion: negotiated,
           agentInfo: { name: pkg.name.split("/").pop() ?? "a2a-bridge", version: pkg.version },
-          // Minimum capabilities — no tool-calling or resume surfaces
-          // advertised until later tasks fill them in.
+          // `loadSession: true` so ACP clients in "persistent session"
+          // mode (OpenClaw acpx, Zed's restartable agents) can resume a
+          // prior sessionId after their subprocess restarts. Our impl
+          // is stateless across subprocess lifetimes — every turn runs
+          // fresh through the daemon's gateway — so `loadSession`
+          // effectively adopts the supplied sessionId as a new session.
           agentCapabilities: {
-            loadSession: false,
+            loadSession: true,
             promptCapabilities: { image: false, audio: false, embeddedContext: false },
           },
         };
@@ -144,6 +150,16 @@ export class AcpInboundService implements IInboundService {
         const sessionId = self.makeSessionId();
         self.activeSessions.set(sessionId, { cwd: params.cwd });
         return { sessionId };
+      },
+      async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
+        // Our ACP server is stateless across subprocess lifetimes — each
+        // turn is driven fresh through the daemon's gateway, so there's
+        // no historical state to "restore". Treat `session/load` as a
+        // lightweight "adopt this sessionId" so clients that persist
+        // sessionIds across subprocess restarts (OpenClaw acpx's
+        // persistent-session mode) don't blow up when acpx respawns us.
+        self.activeSessions.set(params.sessionId, { cwd: params.cwd });
+        return {};
       },
       async authenticate(_: AuthenticateRequest): Promise<AuthenticateResponse> {
         throw NOT_IMPLEMENTED("authenticate");
