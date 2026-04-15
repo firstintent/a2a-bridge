@@ -590,14 +590,21 @@ once that phase lands.
   originator (today's behaviour). Unit test covers forward + omit
   + unknown-target-error paths.
 
-- [ ] **P10.9 — `a2a-bridge codex --id <id>` peer id flag.**
-  Acceptance: the Codex peer process registers under
+- [~] **P10.9 — `a2a-bridge codex --id <id>` peer id flag. (deferred to v0.3)**
+  Deferred by maintainer 2026-04-15: unlike claude attach (plugin WS
+  → control plane), codex is a daemon-internal adapter with module-
+  level singletons (`CodexAdapter`, `TuiConnectionState`, proxy port
+  pair, `codexBootstrapped`, `replyRequired`). Multi-instance codex
+  needs a per-id peer registry + port allocation + handler routing
+  refactor — out of scope for v0.2. v0.2 ships with multi-claude
+  routing only; codex stays `codex:default` (single instance).
+  Original acceptance: the Codex peer process registers under
   `codex:<id>` (default `codex:default`). Multiple Codex adapters
-  can run concurrently on one daemon, each in their own Room.
-  Unit test asserts two Codex instances with distinct ids don't
+  can run concurrently on one daemon, each in their own Room. Unit
+  test asserts two Codex instances with distinct ids don't
   cross-talk.
 
-- [ ] **P10.10 — Cross-target integration test.**
+- [/] **P10.10 — Cross-target integration test.**
   Acceptance: new test in `src/cli/multi-target.test.ts` boots a
   daemon, attaches two stub CCs as `claude:a` and `claude:b`,
   drives two concurrent ACP subprocesses with distinct `--target`
