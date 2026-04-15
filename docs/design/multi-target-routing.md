@@ -1,12 +1,16 @@
 # Multi-target routing
 
-Status: **v0.2 design (approved, not yet implemented)**
+Status: **implemented in v0.2.0** (multi-claude axis). Codex peer-id
+routing (`a2a-bridge codex --id <id>`) is deferred to v0.3 — it needs
+a daemon-internal refactor (per-id peer adapter registry + port
+allocation) that did not fit the v0.2 minimum-diff window. v0.2 ships
+with multi-claude routing end-to-end; codex stays `codex:default`.
 
 v0.1 daemon attaches exactly one Claude Code session and knows about
 exactly one Codex peer. v0.2 generalises this into a single daemon
 that fronts multiple agent instances — multiple Claude Code
-workspaces, multiple Codex / Hermes peers — and routes each inbound
-request to the correct target.
+workspaces, and (post-v0.3) multiple Codex / Hermes peers — and
+routes each inbound request to the correct target.
 
 ## Core model
 
@@ -239,6 +243,13 @@ permission-bridge frames — TargetId strings are `[a-z0-9_:-]+`.
 
 ## Not in scope (deferred)
 
+- **Codex multi-instance** (`a2a-bridge codex --id <id>`) — deferred
+  to v0.3. Unlike claude (which attaches via the control-plane WS
+  and was therefore straightforward to multi-instance), codex is a
+  daemon-internal adapter whose `CodexAdapter`, `TuiConnectionState`,
+  proxy port pair, and several module-level singletons would need a
+  per-id registry refactor. Tracked in the deferred P10.9 entry of
+  `TASKS.md`.
 - **Dynamic target discovery** — an ACP client asking the daemon
   "what targets do you have?" at connect time and auto-populating
   its agent registry. Would require extending acpx (OpenClaw's

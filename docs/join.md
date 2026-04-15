@@ -307,15 +307,52 @@ a2a-bridge transparently relays them.
 
 ---
 
+## Multi-workspace (v0.2, optional)
+
+If the user wants to attach **multiple Claude Code sessions** to one
+daemon (e.g. a separate CC per project), add a per-workspace env var
+on each CC side and a matching `--target` on each ACP registration.
+
+CC side, per workspace:
+
+```bash
+A2A_BRIDGE_STATE_DIR=~/.config/a2a-bridge/proj-a a2a-bridge claude
+A2A_BRIDGE_STATE_DIR=~/.config/a2a-bridge/proj-b a2a-bridge claude
+```
+
+Each attaches as `claude:proj-a` / `claude:proj-b`. Verify with:
+
+```bash
+a2a-bridge daemon targets
+```
+
+ACP side — one registration per target:
+
+```json
+{ "agents": {
+  "bridge-proj-a": { "command": "a2a-bridge", "args": ["acp", "--target", "claude:proj-a"] },
+  "bridge-proj-b": { "command": "a2a-bridge", "args": ["acp", "--target", "claude:proj-b"] }
+}}
+```
+
+If a second CC attach collides on an already-held TargetId, the
+daemon **rejects** it. Add `--force` (or `A2A_BRIDGE_FORCE_ATTACH=1`)
+on the new attach to kick the old one.
+
+Full design + OpenClaw example:
+[`docs/design/multi-target-routing.md`](./design/multi-target-routing.md).
+
 ## What this skill does not do
 
 - It does **not** configure the A2A HTTP inbound (Gemini CLI
   `remoteAgents`) — `init` prints the snippet, but adding it to
   the Gemini CLI config is the user's call.
-- It does **not** set up TLS or multi-machine daemons.  The v0.1
-  bridge assumes the CC daemon and the ACP client are on the same
-  host (unix socket / localhost WS).  Cross-host deployment lands
-  in v0.2.
+- It does **not** set up TLS.  The v0.2 bridge supports cross-host
+  deployment (bind the control plane with
+  `A2A_BRIDGE_CONTROL_HOST=0.0.0.0` and point clients at
+  `A2A_BRIDGE_CONTROL_URL=ws://<server>:4512/ws`), but terminates
+  plaintext WebSocket on the daemon side — put a TLS proxy in
+  front if the link leaves your trust boundary.
 - It does **not** run `npm publish` or submit the Claude Code
   marketplace / ACP registry packages — those are credentialed
   maintainer steps.

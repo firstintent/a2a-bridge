@@ -103,6 +103,7 @@ client config:
 |-------|----------|--------|
 | **OpenClaw** | ACP | `openclaw.json` → add `"a2a-bridge"` to `acp.allowedAgents` + register `plugins.entries.acpx.config.agents["a2a-bridge"].command = "a2a-bridge acp"`, then `/acp spawn a2a-bridge` |
 | **OpenClaw (remote)** | ACP | same + `"command": "a2a-bridge acp --url ws://<ip>:4512/ws"` |
+| **OpenClaw (multi-CC)** | ACP | one `agents` entry per target: `"bridge-proj-a": { "command": "a2a-bridge acp --target claude:proj-a" }` (see [multi-target routing](./docs/design/multi-target-routing.md)) |
 | **Hermes Agent** | ACP | Same pattern as OpenClaw |
 | **Zed** | ACP | `settings.json` → `{ "agent_servers": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }` |
 | **VS Code** | ACP | `{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }` |
@@ -119,6 +120,53 @@ a2a-bridge daemon start
 tmux new-session -d -s cc-bridge "a2a-bridge claude"
 tmux send-keys -t cc-bridge Enter
 ```
+
+### Multi-workspace routing (v0.2)
+
+One daemon can front multiple Claude Code sessions at once.  Each
+session attaches under a `kind:id` **TargetId** (e.g. `claude:proj-a`,
+`claude:proj-b`), and ACP / A2A callers pick which session they want:
+
+```bash
+# Terminal 1 — two Claude Code sessions, one daemon
+A2A_BRIDGE_STATE_DIR=~/.config/a2a-bridge/proj-a a2a-bridge claude
+A2A_BRIDGE_STATE_DIR=~/.config/a2a-bridge/proj-b a2a-bridge claude
+# → attach as claude:proj-a and claude:proj-b respectively
+
+# Terminal 3 — inspect
+a2a-bridge daemon targets
+# TARGET            ATTACHED  CLIENT  UPTIME
+# claude:proj-a     yes       3       2m
+# claude:proj-b     yes       5       1m
+```
+
+ACP callers route with `--target`:
+
+```bash
+a2a-bridge acp --target claude:proj-a -p "review this branch"
+```
+
+OpenClaw registers one `acpx` agent entry per target:
+
+```json
+{ "plugins": { "entries": { "acpx": { "config": { "agents": {
+  "bridge-proj-a": { "command": "a2a-bridge acp --target claude:proj-a" },
+  "bridge-proj-b": { "command": "a2a-bridge acp --target claude:proj-b" }
+}}}}}}
+```
+
+A2A HTTP callers route via `contextId → TargetId` config
+(`A2A_BRIDGE_CONTEXT_ROUTES` env var, see below).
+
+A second CC attaching to an already-claimed TargetId is **rejected**
+with a descriptive error. Rerun with `a2a-bridge claude --force` to
+kick the old attach and take over — the previous session gets a
+CC-visible notification that it was replaced.
+
+Full design + deployment shapes:
+[`docs/design/multi-target-routing.md`](./docs/design/multi-target-routing.md).
+v0.2 ships with the multi-claude axis; codex multi-instance lands
+in v0.3.
 
 ---
 
@@ -186,7 +234,10 @@ Common fixes: [see the env var reference below](#environment-variables).
 | `A2A_BRIDGE_CONTROL_HOST` | `127.0.0.1` | Control plane bind (`0.0.0.0` for remote) |
 | `A2A_BRIDGE_CONTROL_URL` | auto | Full WS URL for ACP subprocess |
 | `A2A_BRIDGE_ACP_ENSURE_DAEMON` | unset | Opt-in: auto-start daemon in `acp` (off by default) |
-| `A2A_BRIDGE_STATE_DIR` | `~/.local/state/a2a-bridge` | Config, logs, task DB |
+| `A2A_BRIDGE_STATE_DIR` | `~/.local/state/a2a-bridge` | Config, logs, task DB (basename also seeds the CC TargetId) |
+| `A2A_BRIDGE_WORKSPACE_ID` | (derived) | Explicit override for this CC's id (wins over `STATE_DIR` basename) |
+| `A2A_BRIDGE_FORCE_ATTACH` | unset | When `1`, `a2a-bridge claude` kicks an attached CC on the same TargetId (equivalent to `--force`) |
+| `A2A_BRIDGE_CONTEXT_ROUTES` | unset | JSON map `{"ctx-id": "claude:workspace"}` for A2A `contextId → TargetId` routing; unmapped contexts fall back to `claude:default` |
 
 ---
 
