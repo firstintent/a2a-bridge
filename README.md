@@ -101,8 +101,8 @@ client config:
 
 | Agent | Protocol | Config |
 |-------|----------|--------|
-| **OpenClaw** | ACP | `~/.acpx/config.json` → `{ "agents": { "a2a-bridge": { "command": "a2a-bridge acp" } } }` |
-| **OpenClaw (remote)** | ACP | `"command": "env A2A_BRIDGE_CONTROL_URL=ws://<ip>:4512/ws a2a-bridge acp"` |
+| **OpenClaw** | ACP | `openclaw.json` → add `"a2a-bridge"` to `acp.allowedAgents` + register `plugins.entries.acpx.config.agents["a2a-bridge"].command = "a2a-bridge acp"`, then `/acp spawn a2a-bridge` |
+| **OpenClaw (remote)** | ACP | same + `"command": "a2a-bridge acp --url ws://<ip>:4512/ws"` |
 | **Hermes Agent** | ACP | Same pattern as OpenClaw |
 | **Zed** | ACP | `settings.json` → `{ "agent_servers": { "a2a-bridge": { "command": "a2a-bridge", "args": ["acp"] } } }` |
 | **VS Code** | ACP | `{ "acp.agents": [{ "name": "a2a-bridge", "command": "a2a-bridge", "args": ["acp"] }] }` |

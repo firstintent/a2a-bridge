@@ -132,19 +132,34 @@ Expected output: `a2a-bridge v0.1.0` or later.
 The config depends on which client you are and whether the Claude
 Code daemon is on the **same machine** or a **remote server**.
 
-**Same machine** (daemon on localhost — no extra env vars needed):
+**Same machine** (daemon on localhost — no extra flags needed):
 
-- **OpenClaw (`acpx`)** — `~/.acpx/config.json`:
+- **OpenClaw** — edit `openclaw.json` (two places):
 
-  ```json
-  {
-    "agents": {
-      "a2a-bridge": {
-        "command": "a2a-bridge acp"
-      }
-    }
-  }
-  ```
+  1. Add `a2a-bridge` to `acp.allowedAgents`:
+     ```json
+     "acp": {
+       "allowedAgents": ["claude", "codex", "a2a-bridge"]
+     }
+     ```
+
+  2. Register the command under `plugins.entries.acpx.config.agents`:
+     ```json
+     "plugins": {
+       "entries": {
+         "acpx": {
+           "enabled": true,
+           "config": {
+             "agents": {
+               "a2a-bridge": { "command": "a2a-bridge acp" }
+             }
+           }
+         }
+       }
+     }
+     ```
+
+  Restart OpenClaw and use `/acp spawn a2a-bridge`.
 
 - **Zed** — `~/.config/zed/settings.json`:
 
@@ -161,20 +176,30 @@ Code daemon is on the **same machine** or a **remote server**.
 
 **Remote server** (daemon on a different machine at `<SERVER_IP>`):
 
-- **OpenClaw (`acpx`)** — env vars go inline in the command string
-  (see [OpenClaw ACP docs](https://docs.openclaw.ai/cli/acp)):
+- **OpenClaw** — same two places, with `--url` on the command
+  (see [OpenClaw ACP docs](https://docs.openclaw.ai/tools/acp-agents)):
 
   ```json
-  {
-    "agents": {
-      "a2a-bridge": {
-        "command": "env A2A_BRIDGE_CONTROL_URL=ws://<SERVER_IP>:4512/ws a2a-bridge acp"
+  "acp": {
+    "allowedAgents": ["claude", "codex", "a2a-bridge"]
+  },
+  "plugins": {
+    "entries": {
+      "acpx": {
+        "config": {
+          "agents": {
+            "a2a-bridge": {
+              "command": "a2a-bridge acp --url ws://<SERVER_IP>:4512/ws"
+            }
+          }
+        }
       }
     }
   }
   ```
 
   Replace `<SERVER_IP>` with the Claude Code machine's IP from Step 1.
+  Then `/acp spawn a2a-bridge`.
 
 - **Zed** — supports an `env` field:
 
