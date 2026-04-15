@@ -575,7 +575,7 @@ once that phase lands.
   `claude_connect_replaced` / peer-specific kick frame to the old
   attach and takes over. Unit tests for both outcomes.
 
-- [ ] **P10.7 — A2A `contextId → TargetId` routing.**
+- [x] **P10.7 — A2A `contextId → TargetId` routing.**
   Acceptance: `startA2AServer` accepts a `contextRoutes: Record<string, TargetId>`
   config map; unmapped contexts fall back to `claude:default`. A2A
   inbound handlers thread the resolved TargetId through to
