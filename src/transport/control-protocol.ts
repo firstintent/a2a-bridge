@@ -70,7 +70,10 @@ export type ControlClientMessage =
   | { type: "plugin_permission_request"; requestId: string; toolName: string; description: string; inputPreview: string }
   // ACP subprocess → daemon: the ACP client answered a previously-forwarded
   // permission request (see `acp_permission_request` below).
-  | { type: "acp_permission_response"; requestId: string; outcome: PermissionOutcome };
+  | { type: "acp_permission_response"; requestId: string; outcome: PermissionOutcome }
+  // Inspection RPC (P10.5): list every target the daemon currently
+  // tracks, used by `a2a-bridge daemon targets`.
+  | { type: "list_targets"; requestId: string };
 
 export type ControlServerMessage =
   | { type: "codex_to_claude"; message: BridgeMessage }
@@ -85,4 +88,18 @@ export type ControlServerMessage =
   | { type: "plugin_permission_response"; requestId: string; outcome: PermissionOutcome }
   // Daemon → ACP subprocess: route a CC-originated permission request to the
   // ACP client via `AgentSideConnection.requestPermission`.
-  | { type: "acp_permission_request"; requestId: string; turnId: string; toolName: string; description: string; inputPreview: string };
+  | { type: "acp_permission_request"; requestId: string; turnId: string; toolName: string; description: string; inputPreview: string }
+  // Inspection RPC response (P10.5): one entry per registered target.
+  | { type: "targets_response"; requestId: string; targets: TargetEntry[] };
+
+/** Snapshot of one TargetId Room's attach state for `daemon targets`. */
+export interface TargetEntry {
+  /** `kind:id` form. */
+  target: string;
+  /** True iff a CC / peer is currently attached for this target. */
+  attached: boolean;
+  /** Numeric attach connection id (for diagnostics); undefined when detached. */
+  clientId?: number;
+  /** ms since epoch when the current attach landed; undefined when detached. */
+  attachedAt?: number;
+}

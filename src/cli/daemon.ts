@@ -24,9 +24,14 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { DaemonLifecycle } from "@shared/daemon-lifecycle";
 import { StateDirResolver } from "@shared/state-dir";
+import type {
+  ControlClientMessage,
+  ControlServerMessage,
+  TargetEntry,
+} from "@transport/control-protocol";
 import { findPackageRoot } from "./pkg-root";
 
-export type DaemonSubcommand = "start" | "stop" | "status" | "logs";
+export type DaemonSubcommand = "start" | "stop" | "status" | "logs" | "targets";
 
 export interface LifecycleView {
   healthUrl: string;
@@ -47,6 +52,12 @@ export interface RunDaemonOptions {
   readLogTail?: (path: string, lines: number) => string | null;
   /** Override for `stop` graceful-kill window. Defaults to 3 seconds. */
   killTimeoutMs?: number;
+  /**
+   * Override for `targets` — opens a WebSocket to the control plane,
+   * sends `list_targets`, and resolves with the daemon's snapshot.
+   * Tests inject a stub so they don't have to spin a real daemon.
+   */
+  queryTargets?: (controlWsUrl: string) => Promise<TargetEntry[]>;
 }
 
 export interface RunDaemonResult {
@@ -62,13 +73,14 @@ export async function runDaemon(
   const log = options.log ?? ((m: string) => console.log(m));
   const error = options.error ?? ((m: string) => console.error(m));
 
-  if (!sub || !["start", "stop", "status", "logs"].includes(sub)) {
+  if (!sub || !["start", "stop", "status", "logs", "targets"].includes(sub)) {
     error(
-      `Usage: a2a-bridge daemon <start|stop|status|logs>\n` +
+      `Usage: a2a-bridge daemon <start|stop|status|logs|targets>\n` +
         `  daemon start    Launch the daemon (no-op if already running)\n` +
         `  daemon stop     Send SIGTERM via the pid file\n` +
         `  daemon status   Print the running daemon's pid + ports\n` +
-        `  daemon logs     Tail the state-dir log file`,
+        `  daemon logs     Tail the state-dir log file\n` +
+        `  daemon targets  List every TargetId Room the daemon tracks`,
     );
     return { exitCode: sub ? 1 : 2 };
   }
@@ -130,6 +142,24 @@ export async function runDaemon(
       return { exitCode: 0 };
     }
 
+    case "targets": {
+      const pid = lifecycle.readPid();
+      if (pid === null) {
+        log("daemon is not running (no pid file)");
+        return { exitCode: 0 };
+      }
+      const query = options.queryTargets ?? defaultQueryTargets;
+      let entries: TargetEntry[];
+      try {
+        entries = await query(lifecycle.controlWsUrl);
+      } catch (err) {
+        error(`daemon targets failed: ${err instanceof Error ? err.message : String(err)}`);
+        return { exitCode: 1 };
+      }
+      log(formatTargetsTable(entries));
+      return { exitCode: 0 };
+    }
+
     default:
       return { exitCode: 2 };
   }
@@ -182,4 +212,83 @@ function parseTailArg(args: string[]): number | null {
   const n = parseInt(raw, 10);
   if (Number.isNaN(n) || n <= 0) return null;
   return n;
+}
+
+/**
+ * Default `queryTargets` implementation: opens a WebSocket to the
+ * control plane, sends `list_targets`, awaits `targets_response`, and
+ * closes the socket.
+ */
+export async function defaultQueryTargets(controlWsUrl: string): Promise<TargetEntry[]> {
+  return new Promise<TargetEntry[]>((resolve, reject) => {
+    const requestId = `targets_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    const ws = new WebSocket(controlWsUrl);
+    let settled = false;
+    const settle = (err: Error | null, value?: TargetEntry[]) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { ws.close(); } catch {}
+      if (err) reject(err);
+      else resolve(value ?? []);
+    };
+    const timer = setTimeout(() => {
+      settle(new Error(`Timed out waiting for targets_response from ${controlWsUrl}`));
+    }, 5000);
+    ws.onopen = () => {
+      const frame: ControlClientMessage = { type: "list_targets", requestId };
+      ws.send(JSON.stringify(frame));
+    };
+    ws.onmessage = (event) => {
+      const raw = typeof event.data === "string" ? event.data : event.data.toString();
+      let msg: ControlServerMessage;
+      try {
+        msg = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      if (msg.type === "targets_response" && msg.requestId === requestId) {
+        settle(null, msg.targets);
+      }
+    };
+    ws.onerror = () => {
+      settle(new Error(`Failed to connect to daemon control plane at ${controlWsUrl}`));
+    };
+    ws.onclose = () => {
+      settle(new Error(`Daemon control plane closed before targets_response (${controlWsUrl})`));
+    };
+  });
+}
+
+/**
+ * Format a `TargetEntry[]` snapshot as a 4-column plain-text table
+ * (target, attached, client, uptime). "uptime" is wall-clock since
+ * `attachedAt`, formatted as `Xs` / `Xm` / `Xh`.
+ */
+export function formatTargetsTable(entries: TargetEntry[], now: number = Date.now()): string {
+  if (entries.length === 0) return "no targets registered";
+  const header = ["TARGET", "ATTACHED", "CLIENT", "UPTIME"] as const;
+  const rows: string[][] = [header.slice()];
+  for (const entry of entries) {
+    const attached = entry.attached ? "yes" : "no";
+    const client = entry.clientId !== undefined ? String(entry.clientId) : "-";
+    const uptime = entry.attachedAt !== undefined ? formatUptime(now - entry.attachedAt) : "-";
+    rows.push([entry.target, attached, client, uptime]);
+  }
+  const widths = header.map((_, col) =>
+    rows.reduce((w, row) => Math.max(w, row[col]!.length), 0),
+  );
+  return rows
+    .map((row) => row.map((cell, col) => cell.padEnd(widths[col]!)).join("  ").trimEnd())
+    .join("\n");
+}
+
+function formatUptime(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "-";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h`;
 }

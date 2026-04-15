@@ -13737,39 +13737,25 @@ var PLUGIN_SERVER_INFO = {
   version: package_default.version
 };
 var CLAUDE_INSTRUCTIONS = [
-  "Codex is an AI coding agent (OpenAI) running in a separate session on the same machine.",
-  "",
-  "## Message delivery",
-  "Messages from Codex may arrive in two ways depending on the connection mode:",
-  '- As <channel source="a2a-bridge" chat_id="..." user="Codex" ...> tags (push mode)',
-  "- Via the get_messages tool (pull mode)",
-  "",
-  "## Collaboration roles",
-  "Default roles in this setup:",
-  "- Claude: Reviewer, Planner, Hypothesis Challenger",
-  "- Codex: Implementer, Executor, Reproducer/Verifier",
-  "- Expect Codex to provide independent technical judgment and evidence, not passive agreement.",
-  "",
-  "## Thinking patterns (task-driven)",
-  "- Analytical/review tasks: Independent Analysis & Convergence",
-  "- Implementation tasks: Architect -> Builder -> Critic",
-  "- Debugging tasks: Hypothesis -> Experiment -> Interpretation",
-  "",
-  "## Collaboration language",
-  '- Use explicit phrases such as "My independent view is:", "I agree on:", "I disagree on:", and "Current consensus:".',
+  "a2a-bridge connects you to other AI agents (Codex, OpenClaw, Hermes, Gemini CLI, etc.).",
+  "Messages from connected agents arrive as <channel> tags. The `user` field tells you which agent sent it.",
   "",
   "## How to interact",
-  "- Use the reply tool to send messages back to Codex \u2014 pass chat_id back.",
-  "- Use the get_messages tool to check for pending messages from Codex.",
+  "- Use the reply tool to send messages back \u2014 pass chat_id back.",
+  "- Use the get_messages tool to check for pending messages.",
   "- After sending a reply, call get_messages to check for responses.",
-  "- When the user asks about Codex status or progress, call get_messages.",
   "",
   "## Turn coordination",
-  "- When you see '\u23F3 Codex is working', do NOT call the reply tool \u2014 wait for '\u2705 Codex finished'.",
-  "- After Codex finishes a turn, you have an attention window to review and respond before new messages arrive.",
-  "- If the reply tool returns a busy error, Codex is still executing \u2014 wait and try again later."
+  "- When you see '\u23F3 ... is working', do NOT call the reply tool \u2014 wait for '\u2705 ... finished'.",
+  "- If the reply tool returns a busy error, the peer agent is still executing \u2014 wait and try again later."
 ].join(`
 `);
+var SOURCE_DISPLAY_NAMES = {
+  codex: "Codex",
+  acp: "ACP agent",
+  a2a: "A2A agent",
+  system: "system"
+};
 var LOG_FILE = "/tmp/a2a-bridge.log";
 
 class ClaudeAdapter extends EventEmitter {
@@ -13834,8 +13820,9 @@ class ClaudeAdapter extends EventEmitter {
     }
   }
   async pushViaChannel(message) {
-    const msgId = `codex_msg_${this.notificationIdPrefix}_${++this.notificationSeq}`;
+    const msgId = `bridge_msg_${this.notificationIdPrefix}_${++this.notificationSeq}`;
     const ts = new Date(message.timestamp).toISOString();
+    const displayName = SOURCE_DISPLAY_NAMES[message.source] ?? message.source;
     try {
       await this.server.notification({
         method: "notifications/claude/channel",
@@ -13844,10 +13831,10 @@ class ClaudeAdapter extends EventEmitter {
           meta: {
             chat_id: this.sessionId,
             message_id: msgId,
-            user: "Codex",
-            user_id: "codex",
+            user: displayName,
+            user_id: message.source,
             ts,
-            source_type: "codex"
+            source_type: message.source
           }
         }
       });
@@ -14067,8 +14054,8 @@ class DaemonClient extends EventEmitter2 {
       };
     });
   }
-  attachClaude() {
-    this.send({ type: "claude_connect" });
+  attachClaude(target) {
+    this.send({ type: "claude_connect", ...target ? { target } : {} });
   }
   async disconnect() {
     if (!this.ws)
@@ -14606,6 +14593,82 @@ class ConfigService {
   }
 }
 
+// src/shared/workspace-id.ts
+import { basename } from "path";
+
+// src/shared/target-id.ts
+var DEFAULT_INSTANCE_ID = "default";
+var VALID_SEGMENT = /^[a-z0-9_-]+$/;
+function parseTarget(input) {
+  if (typeof input !== "string" || input.length === 0) {
+    return { ok: false, error: "Target specifier must be a non-empty string" };
+  }
+  const parts = input.split(":");
+  if (parts.length > 2) {
+    return {
+      ok: false,
+      error: `Target "${input}" has multiple ':' separators; expected "kind" or "kind:id"`
+    };
+  }
+  const kind = parts[0] ?? "";
+  const id = parts.length === 2 ? parts[1] ?? "" : DEFAULT_INSTANCE_ID;
+  if (kind.length === 0) {
+    return { ok: false, error: `Target "${input}" has an empty kind` };
+  }
+  if (!VALID_SEGMENT.test(kind)) {
+    return {
+      ok: false,
+      error: `Target kind "${kind}" contains characters outside [a-z0-9_-]`
+    };
+  }
+  if (id.length === 0) {
+    return { ok: false, error: `Target "${input}" has an empty id` };
+  }
+  if (!VALID_SEGMENT.test(id)) {
+    return {
+      ok: false,
+      error: `Target id "${id}" contains characters outside [a-z0-9_-]`
+    };
+  }
+  return {
+    ok: true,
+    target: `${kind}:${id}`,
+    parts: { kind, id }
+  };
+}
+
+// src/shared/workspace-id.ts
+function resolveWorkspaceId(opts = {}) {
+  const env = opts.env ?? process.env;
+  const override = env.A2A_BRIDGE_WORKSPACE_ID;
+  const overrideClean = override && sanitize(override);
+  if (overrideClean)
+    return overrideClean;
+  const stateDir = opts.stateDirPath ?? env.A2A_BRIDGE_STATE_DIR;
+  if (stateDir) {
+    const stateClean = sanitize(basename(stateDir));
+    if (stateClean)
+      return stateClean;
+  }
+  if (opts.conversationId) {
+    const convClean = sanitize(opts.conversationId.slice(0, 8));
+    if (convClean)
+      return convClean;
+  }
+  return DEFAULT_INSTANCE_ID;
+}
+function resolveClaudeTarget(opts = {}) {
+  const id = resolveWorkspaceId(opts);
+  const r = parseTarget(`claude:${id}`);
+  if (!r.ok) {
+    throw new Error(`resolveClaudeTarget produced invalid target: ${r.error}`);
+  }
+  return r.target;
+}
+function sanitize(value) {
+  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+}
+
 // src/runtime-plugin/bridge.ts
 var stateDir = new StateDirResolver;
 var configService = new ConfigService;
@@ -14615,6 +14678,7 @@ var daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_PORT,
 var CONTROL_WS_URL = daemonLifecycle.controlWsUrl;
 var claude = new ClaudeAdapter;
 var daemonClient = new DaemonClient(CONTROL_WS_URL);
+var CLAUDE_TARGET = resolveClaudeTarget({ stateDirPath: stateDir.dir });
 var shuttingDown = false;
 var daemonDisabled = false;
 var RECONNECT_NOTIFY_COOLDOWN_MS = 30000;
@@ -14671,9 +14735,9 @@ async function connectToDaemon(isReconnect = false) {
   try {
     await daemonLifecycle.ensureRunning();
     await daemonClient.connect();
-    daemonClient.attachClaude();
+    daemonClient.attachClaude(CLAUDE_TARGET);
     if (!isReconnect) {
-      claude.pushNotification(systemMessage("system_bridge_ready", "\u2705 A2aBridge bridge is ready. Daemon connected. Start Codex in another terminal with: a2a-bridge codex"));
+      claude.pushNotification(systemMessage("system_bridge_ready", "\u2705 A2aBridge bridge is ready. Daemon connected. ACP clients can now send prompts."));
     }
   } catch (err) {
     log(`Failed to connect to daemon: ${err.message}`);

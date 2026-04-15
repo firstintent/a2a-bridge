@@ -70,6 +70,7 @@ let a2aInboundServer: A2aServerHandle | null = null;
 // existing emitToClaude / broadcast paths keep working unchanged
 // until P10.4 / P10.7 wire per-target routing through the gateway.
 const attachedClaudeByTarget = new Map<string, Connection>();
+const attachedAtByTarget = new Map<string, number>();
 let attachedClaude: Connection | null = null;
 const controlClientMeta = new WeakMap<Connection, ControlClientMeta>();
 const claudeConnTarget = new WeakMap<Connection, string>();
@@ -401,6 +402,15 @@ function handleControlMessage(conn: Connection, raw: string) {
     case "acp_permission_response":
       acpTurnHandler.handlePermissionResponse(conn, message);
       return;
+    case "list_targets": {
+      const entries = listTargetEntries();
+      sendProtocolMessage(conn, {
+        type: "targets_response",
+        requestId: message.requestId,
+        targets: entries,
+      });
+      return;
+    }
     case "claude_to_codex": {
       if (message.message.source !== "claude") {
         sendProtocolMessage(conn, {
@@ -498,6 +508,7 @@ function attachClaude(conn: Connection, target?: string) {
     existing.close();
   }
   attachedClaudeByTarget.set(resolvedTarget, conn);
+  attachedAtByTarget.set(resolvedTarget, Date.now());
   claudeConnTarget.set(conn, resolvedTarget);
 
   const meta = controlClientMeta.get(conn);
@@ -539,6 +550,7 @@ function detachClaude(conn: Connection, reason: string) {
   const target = claudeConnTarget.get(conn);
   if (target && attachedClaudeByTarget.get(target) === conn) {
     attachedClaudeByTarget.delete(target);
+    attachedAtByTarget.delete(target);
   }
   claudeConnTarget.delete(conn);
 
@@ -751,6 +763,34 @@ function notifyCodexClaudeOnline() {
 
 function shouldNotifyCodexClaudeOnline() {
   return !claudeOnlineNoticeSent || claudeOfflineNoticeShown;
+}
+
+function listTargetEntries() {
+  // P10.5 — snapshot every TargetId the daemon currently tracks.
+  // Today's daemon only knows about Claude attachments via
+  // attachedClaudeByTarget; future Codex / Hermes peer adapters
+  // will register their own targets through the same registry.
+  const entries: import("@transport/control-protocol").TargetEntry[] = [];
+  for (const [target, conn] of attachedClaudeByTarget.entries()) {
+    const meta = controlClientMeta.get(conn);
+    entries.push({
+      target,
+      attached: true,
+      ...(meta ? { clientId: meta.clientId } : {}),
+      ...(attachedAtByTarget.has(target) ? { attachedAt: attachedAtByTarget.get(target)! } : {}),
+    });
+  }
+  // Surface the legacy attachedClaude singleton as `claude:default`
+  // when no explicit target was sent (v0.1 wire compatibility).
+  if (attachedClaude && !attachedClaudeByTarget.has("claude:default")) {
+    const meta = controlClientMeta.get(attachedClaude);
+    entries.push({
+      target: "claude:default",
+      attached: true,
+      ...(meta ? { clientId: meta.clientId } : {}),
+    });
+  }
+  return entries;
 }
 
 function systemMessage(idPrefix: string, content: string, source: BridgeMessage["source"] = "codex"): BridgeMessage {
