@@ -423,6 +423,81 @@ function handleControlMessage(conn: Connection, raw: string) {
         return;
       }
 
+      // P10.8 — optional `target` on the reply frame overrides default
+      // routing. `claude:*` targets deliver to that attached CC via
+      // `sendBridgeMessage`; `codex:default` falls through to today's
+      // injection path; anything else is a routing error surfaced back
+      // to the calling CC.
+      if (message.target !== undefined) {
+        const parsed = parseTarget(message.target);
+        if (!parsed.ok) {
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: false,
+            error: `Invalid target "${message.target}": ${parsed.error}`,
+          });
+          return;
+        }
+        const targetStr = parsed.target as unknown as string;
+        if (parsed.parts.kind === "claude") {
+          // Deliver directly to the named CC attach. Surface `claude:default`
+          // via the legacy singleton when no explicit entry exists so v0.1
+          // setups still round-trip a reply.
+          const destConn =
+            attachedClaudeByTarget.get(targetStr) ??
+            (targetStr === "claude:default" ? attachedClaude : null);
+          if (!destConn) {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} is not attached`,
+            });
+            return;
+          }
+          if (destConn === conn) {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} resolves to the sender — replies cannot loop back to self`,
+            });
+            return;
+          }
+          sendBridgeMessage(destConn, message.message);
+          clearAttentionWindow();
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: true,
+          });
+          return;
+        }
+        if (parsed.parts.kind === "codex") {
+          // Codex peer id routing lands in P10.9 — today's daemon only
+          // hosts one Codex adapter, so only `codex:default` is valid.
+          if (parsed.parts.id !== "default") {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} not recognized (only codex:default is supported until P10.9)`,
+            });
+            return;
+          }
+          // Fall through to the existing codex injection path below.
+        } else {
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: false,
+            error: `Unsupported target kind "${parsed.parts.kind}"`,
+          });
+          return;
+        }
+      }
+
       // If an A2A inbound turn is in flight, the reply belongs to it,
       // not to Codex. Delivers the chunk + completes the turn.
       if (inboundGateway.interceptReply(message.message.content)) {

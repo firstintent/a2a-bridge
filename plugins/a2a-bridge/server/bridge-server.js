@@ -13893,7 +13893,7 @@ ${formatted}`
       tools: [
         {
           name: "reply",
-          description: "Send a message back to Codex. Your reply will be injected into the Codex session as a new user turn.",
+          description: "Send a message back to the connected agent. Your reply is routed to the originator of the inbound turn by default; pass `target` to send it to a different attached agent instead.",
           inputSchema: {
             type: "object",
             properties: {
@@ -13903,11 +13903,15 @@ ${formatted}`
               },
               text: {
                 type: "string",
-                description: "The message to send to Codex."
+                description: "The message to send."
               },
               require_reply: {
                 type: "boolean",
-                description: "When true, Codex is required to send a reply. All Codex messages from this turn will be forwarded immediately (bypassing STATUS buffering). Use this when you need a direct answer from Codex."
+                description: "When true, the receiving agent is required to send a reply; all messages from its turn will be forwarded immediately (bypassing STATUS buffering). Use when you need a direct answer."
+              },
+              target: {
+                type: "string",
+                description: "Optional `kind:id` TargetId (e.g. `claude:project-b`, `codex:default`) to override the default routing. Use this to hand a reply off to a different attached agent instead of the one that sent the inbound turn. Omit to route back to the inbound turn's originator (default)."
               }
             },
             required: ["text"]
@@ -13947,6 +13951,7 @@ ${formatted}`
       };
     }
     const requireReply = args?.require_reply === true;
+    const targetArg = typeof args?.target === "string" ? args.target : undefined;
     const bridgeMsg = {
       id: args?.chat_id ?? `reply_${Date.now()}`,
       source: "claude",
@@ -13960,7 +13965,7 @@ ${formatted}`
         isError: true
       };
     }
-    const result = await this.replySender(bridgeMsg, requireReply);
+    const result = await this.replySender(bridgeMsg, requireReply, targetArg);
     if (!result.success) {
       this.log(`Reply delivery failed: ${result.error}`);
       return {
@@ -13969,7 +13974,7 @@ ${formatted}`
       };
     }
     const pending = this.pendingMessages.length;
-    let responseText = "Reply sent to Codex.";
+    let responseText = targetArg ? `Reply sent to ${targetArg}.` : "Reply sent to Codex.";
     if (pending > 0) {
       responseText += ` Note: ${pending} unread Codex message${pending > 1 ? "s" : ""} already waiting \u2014 call get_messages to read them.`;
     }
@@ -14073,7 +14078,7 @@ class DaemonClient extends EventEmitter2 {
     this.ws = null;
     this.rejectPendingReplies("Daemon connection closed");
   }
-  async sendReply(message, requireReply) {
+  async sendReply(message, requireReply, target) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return { success: false, error: "A2aBridge daemon is not connected." };
     }
@@ -14088,7 +14093,8 @@ class DaemonClient extends EventEmitter2 {
         type: "claude_to_codex",
         requestId,
         message,
-        ...requireReply ? { requireReply: true } : {}
+        ...requireReply ? { requireReply: true } : {},
+        ...target ? { target } : {}
       });
     });
   }
@@ -14701,7 +14707,7 @@ var lastDisconnectNotifyTs = 0;
 var lastReconnectNotifyTs = 0;
 var disabledRecoveryTimer = null;
 var disabledRecoveryInFlight = false;
-claude.setReplySender(async (msg, requireReply) => {
+claude.setReplySender(async (msg, requireReply, target) => {
   if (msg.source !== "claude") {
     return { success: false, error: "Invalid message source" };
   }
@@ -14711,7 +14717,7 @@ claude.setReplySender(async (msg, requireReply) => {
       error: "A2aBridge is disabled by `a2a-bridge kill`. Restart Claude Code (`a2a-bridge claude`), switch to a new conversation, or run `/resume` to reconnect."
     };
   }
-  return daemonClient.sendReply(msg, requireReply);
+  return daemonClient.sendReply(msg, requireReply, target);
 });
 daemonClient.on("codexMessage", (message) => {
   log(`Forwarding daemon \u2192 Claude (${message.content.length} chars)`);

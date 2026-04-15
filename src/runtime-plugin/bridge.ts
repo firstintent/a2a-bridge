@@ -42,7 +42,7 @@ let lastReconnectNotifyTs = 0;
 let disabledRecoveryTimer: ReturnType<typeof setInterval> | null = null;
 let disabledRecoveryInFlight = false;
 
-claude.setReplySender(async (msg: BridgeMessage, requireReply?: boolean) => {
+claude.setReplySender(async (msg: BridgeMessage, requireReply?: boolean, target?: string) => {
   if (msg.source !== "claude") {
     return { success: false, error: "Invalid message source" };
   }
@@ -54,7 +54,7 @@ claude.setReplySender(async (msg: BridgeMessage, requireReply?: boolean) => {
     };
   }
 
-  return daemonClient.sendReply(msg, requireReply);
+  return daemonClient.sendReply(msg, requireReply, target);
 });
 
 daemonClient.on("codexMessage", (message) => {

@@ -2919,6 +2919,67 @@ function handleControlMessage(conn, raw) {
         });
         return;
       }
+      if (message.target !== undefined) {
+        const parsed = parseTarget(message.target);
+        if (!parsed.ok) {
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: false,
+            error: `Invalid target "${message.target}": ${parsed.error}`
+          });
+          return;
+        }
+        const targetStr = parsed.target;
+        if (parsed.parts.kind === "claude") {
+          const destConn = attachedClaudeByTarget.get(targetStr) ?? (targetStr === "claude:default" ? attachedClaude : null);
+          if (!destConn) {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} is not attached`
+            });
+            return;
+          }
+          if (destConn === conn) {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} resolves to the sender \u2014 replies cannot loop back to self`
+            });
+            return;
+          }
+          sendBridgeMessage(destConn, message.message);
+          clearAttentionWindow();
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: true
+          });
+          return;
+        }
+        if (parsed.parts.kind === "codex") {
+          if (parsed.parts.id !== "default") {
+            sendProtocolMessage(conn, {
+              type: "claude_to_codex_result",
+              requestId: message.requestId,
+              success: false,
+              error: `target ${targetStr} not recognized (only codex:default is supported until P10.9)`
+            });
+            return;
+          }
+        } else {
+          sendProtocolMessage(conn, {
+            type: "claude_to_codex_result",
+            requestId: message.requestId,
+            success: false,
+            error: `Unsupported target kind "${parsed.parts.kind}"`
+          });
+          return;
+        }
+      }
       if (inboundGateway.interceptReply(message.message.content)) {
         log(`Claude reply consumed by inbound A2A turn (${message.message.content.length} chars)`);
         clearAttentionWindow();

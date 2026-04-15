@@ -61,7 +61,11 @@ export type ControlClientMessage =
   // new attach instead.
   | { type: "claude_connect"; target?: string; force?: boolean }
   | { type: "claude_disconnect" }
-  | { type: "claude_to_codex"; requestId: string; message: BridgeMessage; requireReply?: boolean }
+  // `target` (P10.8): optional `kind:id` TargetId that overrides the
+  // default outbound routing. Absent → today's behaviour (deliver to
+  // inbound turn originator, else Codex). Present → daemon forwards
+  // to that target's Room instead.
+  | { type: "claude_to_codex"; requestId: string; message: BridgeMessage; requireReply?: boolean; target?: string }
   | { type: "status" }
   // ACP turn relay — sent by the `a2a-bridge acp` subprocess to the daemon.
   // `target` (P10.4) selects which TargetId Room handles the turn.

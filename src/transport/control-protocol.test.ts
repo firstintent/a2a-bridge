@@ -52,6 +52,45 @@ describe("P10.2 control-plane: claude_connect carries optional target", () => {
   });
 });
 
+describe("P10.8 control-plane: claude_to_codex carries optional target", () => {
+  test("claude_to_codex with target round-trips", () => {
+    const msg: ControlClientMessage = {
+      type: "claude_to_codex",
+      requestId: "r42",
+      message: {
+        id: "m1",
+        source: "claude",
+        content: "hand-off",
+        timestamp: 1_700_000_000_000,
+      },
+      target: "claude:project-b",
+    };
+    const restored = roundtripClient(msg);
+    expect(restored).toEqual(msg);
+    if (restored.type === "claude_to_codex") {
+      expect(restored.target).toBe("claude:project-b");
+    }
+  });
+
+  test("claude_to_codex without target round-trips (v0.1 backward compat)", () => {
+    const msg: ControlClientMessage = {
+      type: "claude_to_codex",
+      requestId: "r42",
+      message: {
+        id: "m1",
+        source: "claude",
+        content: "hand-off",
+        timestamp: 1_700_000_000_000,
+      },
+    };
+    const restored = roundtripClient(msg);
+    expect(restored).toEqual(msg);
+    if (restored.type === "claude_to_codex") {
+      expect(restored.target).toBeUndefined();
+    }
+  });
+});
+
 describe("P10.6 control-plane: claude_connect force + conflict frames", () => {
   test("claude_connect with force=true round-trips", () => {
     const msg: ControlClientMessage = {

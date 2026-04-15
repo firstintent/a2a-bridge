@@ -119,7 +119,17 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
     this.rejectPendingReplies("Daemon connection closed");
   }
 
-  async sendReply(message: BridgeMessage, requireReply?: boolean): Promise<{ success: boolean; error?: string }> {
+  /**
+   * Ship a `BridgeMessage` back over the control plane as a
+   * `claude_to_codex` frame. P10.8 adds optional `target`: when set,
+   * the daemon forwards the reply to that TargetId's Room instead of
+   * the inbound turn's originator. Omitted = today's behaviour.
+   */
+  async sendReply(
+    message: BridgeMessage,
+    requireReply?: boolean,
+    target?: string,
+  ): Promise<{ success: boolean; error?: string }> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return { success: false, error: "A2aBridge daemon is not connected." };
     }
@@ -137,6 +147,7 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
         requestId,
         message,
         ...(requireReply ? { requireReply: true } : {}),
+        ...(target ? { target } : {}),
       });
     });
   }
