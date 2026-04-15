@@ -956,15 +956,27 @@ function listTargetEntries() {
       ...(attachedAtByTarget.has(target) ? { attachedAt: attachedAtByTarget.get(target)! } : {}),
     });
   }
-  // Surface the legacy attachedClaude singleton as `claude:default`
-  // when no explicit target was sent (v0.1 wire compatibility).
+  // Surface the legacy `attachedClaude` singleton as `claude:default`
+  // ONLY when no per-target attach already covers it. Without this
+  // check we'd print a phantom `claude:default` row whenever any v0.2
+  // attach lands (the singleton always tracks the most-recent attach,
+  // so it aliases an already-listed per-target conn).
   if (attachedClaude && !attachedClaudeByTarget.has("claude:default")) {
-    const meta = controlClientMeta.get(attachedClaude);
-    entries.push({
-      target: "claude:default",
-      attached: true,
-      ...(meta ? { clientId: meta.clientId } : {}),
-    });
+    let alreadyListed = false;
+    for (const conn of attachedClaudeByTarget.values()) {
+      if (conn === attachedClaude) {
+        alreadyListed = true;
+        break;
+      }
+    }
+    if (!alreadyListed) {
+      const meta = controlClientMeta.get(attachedClaude);
+      entries.push({
+        target: "claude:default",
+        attached: true,
+        ...(meta ? { clientId: meta.clientId } : {}),
+      });
+    }
   }
   return entries;
 }

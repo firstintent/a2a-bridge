@@ -3344,12 +3344,21 @@ function listTargetEntries() {
     });
   }
   if (attachedClaude && !attachedClaudeByTarget.has("claude:default")) {
-    const meta = controlClientMeta.get(attachedClaude);
-    entries.push({
-      target: "claude:default",
-      attached: true,
-      ...meta ? { clientId: meta.clientId } : {}
-    });
+    let alreadyListed = false;
+    for (const conn of attachedClaudeByTarget.values()) {
+      if (conn === attachedClaude) {
+        alreadyListed = true;
+        break;
+      }
+    }
+    if (!alreadyListed) {
+      const meta = controlClientMeta.get(attachedClaude);
+      entries.push({
+        target: "claude:default",
+        attached: true,
+        ...meta ? { clientId: meta.clientId } : {}
+      });
+    }
   }
   return entries;
 }

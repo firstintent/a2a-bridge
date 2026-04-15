@@ -22,6 +22,38 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DaemonClient } from "@plugin/daemon-client/daemon-client";
+import type { TargetEntry } from "@transport/control-protocol";
+
+/**
+ * Fire a one-shot `list_targets` RPC and return the snapshot, so the
+ * test can assert what `a2a-bridge daemon targets` would print.
+ */
+async function listTargetsRpc(controlWsUrl: string): Promise<TargetEntry[]> {
+  return new Promise<TargetEntry[]>((resolve, reject) => {
+    const requestId = `t_${Math.floor(Math.random() * 1e9)}`;
+    const ws = new WebSocket(controlWsUrl);
+    const timer = setTimeout(() => {
+      try { ws.close(); } catch {}
+      reject(new Error("timed out waiting for targets_response"));
+    }, 4000);
+    ws.onopen = () => ws.send(JSON.stringify({ type: "list_targets", requestId }));
+    ws.onmessage = (ev) => {
+      const raw = typeof ev.data === "string" ? ev.data : ev.data.toString();
+      try {
+        const m = JSON.parse(raw);
+        if (m.type === "targets_response" && m.requestId === requestId) {
+          clearTimeout(timer);
+          try { ws.close(); } catch {}
+          resolve(m.targets as TargetEntry[]);
+        }
+      } catch {}
+    };
+    ws.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("ws error"));
+    };
+  });
+}
 
 const DAEMON_SRC = fileURLToPath(
   new URL("../runtime-daemon/daemon.ts", import.meta.url),
@@ -128,6 +160,37 @@ describe("P10.6 attach conflict policy", () => {
     expect(ev.target).toBe(TARGET);
     expect(ev.reason).toMatch(/already attached/i);
     expect(firstReplacedCount).toBe(0);
+  }, 20_000);
+
+  test("daemon targets does not advertise a phantom claude:default row when all attaches are explicit targets", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "a2a-bridge-p10-6-noghost-"));
+    register(() => rmSync(stateDir, { recursive: true, force: true }));
+
+    const [controlPort, codexWsPort, codexProxyPort] = pickPorts(3);
+    await startDaemon({
+      stateDir,
+      controlPort: controlPort!,
+      codexWsPort: codexWsPort!,
+      codexProxyPort: codexProxyPort!,
+    });
+
+    const ctrlUrl = `ws://127.0.0.1:${controlPort}/ws`;
+    const a = new DaemonClient(ctrlUrl);
+    await a.connect();
+    register(() => a.disconnect());
+    a.attachClaude("claude:proj-a");
+    const b = new DaemonClient(ctrlUrl);
+    await b.connect();
+    register(() => b.disconnect());
+    b.attachClaude("claude:proj-b");
+    await new Promise((r) => setTimeout(r, 120));
+
+    // Query the daemon's `list_targets` RPC directly so we can assert
+    // the snapshot the CLI would print — no phantom `claude:default`
+    // row, just the two explicit attaches.
+    const targets = await listTargetsRpc(ctrlUrl);
+    const names = targets.map((t) => t.target).sort();
+    expect(names).toEqual(["claude:proj-a", "claude:proj-b"]);
   }, 20_000);
 
   test("second attach with force=true replaces the first", async () => {
