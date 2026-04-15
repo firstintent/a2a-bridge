@@ -611,7 +611,7 @@ once that phase lands.
   values, asserts each gets its own reply without leakage. Runs
   under `check:ci`.
 
-- [ ] **P10.11 — Documentation sweep.**
+- [x] **P10.11 — Documentation sweep.**
   Acceptance: README, `docs/join.md`, and
   `docs/guides/rooms.md` updated to use the `kind:id` form and
   explain the target model. `docs/design/multi-target-routing.md`
