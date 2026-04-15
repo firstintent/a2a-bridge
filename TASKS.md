@@ -530,7 +530,7 @@ once that phase lands.
 > daemon front multiple Claude Code workspaces and multiple peer
 > instances, selected by `--target kind:id`.
 
-- [ ] **P10.1 — TargetId type + parser.**
+- [x] **P10.1 — TargetId type + parser.**
   Acceptance: new `src/shared/target-id.ts` exports a `TargetId`
   branded string, a `parseTarget(s)` that returns `{kind, id}` or a
   parse error, and a `formatTarget({kind, id})` inverse. Reject
