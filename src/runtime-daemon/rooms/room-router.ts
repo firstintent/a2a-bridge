@@ -15,6 +15,7 @@
 
 import { Room } from "@daemon/rooms/room";
 import type { RoomId } from "@daemon/rooms/room-id";
+import type { TargetId } from "@shared/target-id";
 
 export type RoomFactory = (id: RoomId) => Room | Promise<Room>;
 
@@ -55,6 +56,21 @@ export class RoomRouter {
   /** Current Room for `id`, without creating one. */
   get(id: RoomId): Room | undefined {
     return this.rooms.get(id);
+  }
+
+  /**
+   * Convenience for the v0.2 multi-target router (P10.3): a TargetId
+   * is a `kind:id` string and is also a valid RoomId, so we just
+   * forward to `getOrCreate`. Type-clarifying alias — call sites
+   * carrying a TargetId can use this instead of casting.
+   */
+  async getOrCreateByTarget(target: TargetId): Promise<Room> {
+    return this.getOrCreate(target as unknown as RoomId);
+  }
+
+  /** TargetId-typed accessor; returns undefined when no Room exists yet. */
+  getByTarget(target: TargetId): Room | undefined {
+    return this.rooms.get(target as unknown as RoomId);
   }
 
   /**

@@ -17,6 +17,7 @@ import type { Connection } from "@transport/listener";
 import { WebSocketListener } from "@transport/websocket";
 import type { ControlClientMessage, ControlServerMessage, DaemonStatus } from "@transport/control-protocol";
 import type { BridgeMessage } from "@messages/types";
+import { parseTarget } from "@shared/target-id";
 import { DaemonClaudeCodeGateway } from "@daemon/inbound/daemon-claude-code-gateway";
 import { Room } from "@daemon/rooms/room";
 import { RoomRouter } from "@daemon/rooms/room-router";
@@ -62,8 +63,16 @@ const daemonLifecycle = new DaemonLifecycle({ stateDir, controlPort: CONTROL_POR
 
 let controlListener: WebSocketListener | null = null;
 let a2aInboundServer: A2aServerHandle | null = null;
+// P10.3 — Map<TargetId, Connection> of currently attached Claude Code
+// instances. v0.1 single-CC behaviour is the special case where the
+// only key is "claude:default". `attachedClaude` (singular) is kept
+// as a back-compat pointer to "the most-recently attached CC" so the
+// existing emitToClaude / broadcast paths keep working unchanged
+// until P10.4 / P10.7 wire per-target routing through the gateway.
+const attachedClaudeByTarget = new Map<string, Connection>();
 let attachedClaude: Connection | null = null;
 const controlClientMeta = new WeakMap<Connection, ControlClientMeta>();
+const claudeConnTarget = new WeakMap<Connection, string>();
 let nextControlClientId = 0;
 
 const inboundGateway = new DaemonClaudeCodeGateway({
@@ -334,7 +343,7 @@ function handleControlMessage(conn: Connection, raw: string) {
 
   switch (message.type) {
     case "claude_connect":
-      attachClaude(conn);
+      attachClaude(conn, message.target);
       return;
     case "claude_disconnect":
       detachClaude(conn, "frontend requested disconnect");
@@ -448,10 +457,36 @@ function handleControlMessage(conn: Connection, raw: string) {
   }
 }
 
-function attachClaude(conn: Connection) {
-  if (attachedClaude && attachedClaude !== conn) {
-    attachedClaude.close();
+function attachClaude(conn: Connection, target?: string) {
+  // P10.3 — accept an optional `kind:id` target so multiple CC
+  // instances can attach to the same daemon. v0.1 frames omit the
+  // target field; default it to the canonical `claude:default`.
+  // Target validation lives in the parser (P10.1); reuse it so we
+  // never let a malformed string into our maps.
+  let resolvedTarget = "claude:default";
+  if (target) {
+    const parsed = parseTarget(target);
+    if (!parsed.ok) {
+      log(`Rejecting claude_connect with invalid target "${target}": ${parsed.error}`);
+      return;
+    }
+    if (parsed.parts.kind !== "claude") {
+      log(`Rejecting claude_connect with non-claude target "${target}"`);
+      return;
+    }
+    resolvedTarget = parsed.target as unknown as string;
   }
+
+  // If a different connection already owns this target, kick the
+  // old one. v0.2 P10.6 will replace this last-wins behaviour with
+  // explicit reject + --force.
+  const existing = attachedClaudeByTarget.get(resolvedTarget);
+  if (existing && existing !== conn) {
+    log(`Replacing existing attachment for ${resolvedTarget}`);
+    existing.close();
+  }
+  attachedClaudeByTarget.set(resolvedTarget, conn);
+  claudeConnTarget.set(conn, resolvedTarget);
 
   const meta = controlClientMeta.get(conn);
 
@@ -459,7 +494,7 @@ function attachClaude(conn: Connection) {
   attachedClaude = conn;
   if (meta) meta.attached = true;
   cancelIdleShutdown();
-  log(`Claude frontend attached (#${meta?.clientId ?? "?"})`);
+  log(`Claude frontend attached (#${meta?.clientId ?? "?"}) → ${resolvedTarget}`);
 
   statusBuffer.flush("claude reconnected");
   sendStatus(conn);
@@ -486,10 +521,25 @@ function attachClaude(conn: Connection) {
 }
 
 function detachClaude(conn: Connection, reason: string) {
+  // Drop this conn from the per-target map regardless of whether it
+  // is the global "attachedClaude" pointer — multi-target attaches
+  // need cleanup either way.
+  const target = claudeConnTarget.get(conn);
+  if (target && attachedClaudeByTarget.get(target) === conn) {
+    attachedClaudeByTarget.delete(target);
+  }
+  claudeConnTarget.delete(conn);
+
   if (attachedClaude !== conn) return;
 
   const meta = controlClientMeta.get(conn);
-  attachedClaude = null;
+  // Promote any other currently-attached CC to the global pointer so
+  // emitToClaude / broadcast still has a destination. When nothing is
+  // left, clear it. The next iteration order preserves "most recently
+  // inserted survives".
+  let nextAttached: Connection | null = null;
+  for (const c of attachedClaudeByTarget.values()) nextAttached = c;
+  attachedClaude = nextAttached;
   if (meta) meta.attached = false;
   log(`Claude frontend detached (#${meta?.clientId ?? "?"}, ${reason})`);
 
