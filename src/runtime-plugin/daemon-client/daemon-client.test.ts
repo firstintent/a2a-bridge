@@ -228,4 +228,70 @@ describe("DaemonClient", () => {
     const msg = await received;
     expect(msg.type).toBe("claude_connect");
   });
+
+  test("attachClaude(target, true) sends force=true on the wire", async () => {
+    const received = new Promise<any>((resolve) => {
+      onServerMessage = (_ws: any, raw: any) => {
+        resolve(JSON.parse(typeof raw === "string" ? raw : raw.toString()));
+      };
+    });
+
+    await client.connect();
+    client.attachClaude("claude:ws-a", true);
+
+    const msg = await received;
+    expect(msg).toMatchObject({
+      type: "claude_connect",
+      target: "claude:ws-a",
+      force: true,
+    });
+  });
+
+  test("attachClaude() defaults to no force field (backward compat)", async () => {
+    const received = new Promise<any>((resolve) => {
+      onServerMessage = (_ws: any, raw: any) => {
+        resolve(JSON.parse(typeof raw === "string" ? raw : raw.toString()));
+      };
+    });
+
+    await client.connect();
+    client.attachClaude();
+
+    const msg = await received;
+    expect(msg.type).toBe("claude_connect");
+    expect(msg.force).toBeUndefined();
+  });
+
+  test("emits connectRejected on claude_connect_rejected", async () => {
+    await client.connect();
+
+    const seen = new Promise<{ target: string; reason: string }>((resolve) => {
+      client.on("connectRejected", (ev) => resolve(ev));
+    });
+
+    sendToClient({
+      type: "claude_connect_rejected",
+      target: "claude:ws-a",
+      reason: "target already attached",
+    });
+
+    const ev = await seen;
+    expect(ev).toEqual({ target: "claude:ws-a", reason: "target already attached" });
+  });
+
+  test("emits connectReplaced on claude_connect_replaced", async () => {
+    await client.connect();
+
+    const seen = new Promise<{ target: string }>((resolve) => {
+      client.on("connectReplaced", (ev) => resolve(ev));
+    });
+
+    sendToClient({
+      type: "claude_connect_replaced",
+      target: "claude:ws-a",
+    });
+
+    const ev = await seen;
+    expect(ev).toEqual({ target: "claude:ws-a" });
+  });
 });

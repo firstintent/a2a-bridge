@@ -6,6 +6,12 @@ interface DaemonClientEvents {
   codexMessage: [BridgeMessage];
   disconnect: [];
   status: [DaemonStatus];
+  // P10.6 — conflict outcomes on `claude_connect`.
+  // `connectRejected` fires when another CC already owns the target
+  // and the plugin didn't pass `force=true`. `connectReplaced` fires
+  // on the old attach when someone else took over with `force=true`.
+  connectRejected: [{ target: string; reason: string }];
+  connectReplaced: [{ target: string }];
 }
 
 let nextSocketId = 0;
@@ -85,9 +91,17 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
    * Pass `target` ("kind:id" form) to claim a specific Room when
    * the daemon supports multi-target routing (P10.x / v0.2). When
    * omitted, the daemon assigns `claude:default` (v0.1 behaviour).
+   *
+   * P10.6: `force=true` kicks an attached CC that already owns the
+   * target. Default (`force=false`) makes the daemon reject the
+   * attach and emit a `connectRejected` event on this client.
    */
-  attachClaude(target?: string) {
-    this.send({ type: "claude_connect", ...(target ? { target } : {}) });
+  attachClaude(target?: string, force: boolean = false) {
+    this.send({
+      type: "claude_connect",
+      ...(target ? { target } : {}),
+      ...(force ? { force: true } : {}),
+    });
   }
 
   async disconnect() {
@@ -152,6 +166,15 @@ export class DaemonClient extends EventEmitter<DaemonClientEvents> {
         }
         case "status":
           this.emit("status", message.status);
+          return;
+        case "claude_connect_rejected":
+          this.emit("connectRejected", {
+            target: message.target,
+            reason: message.reason,
+          });
+          return;
+        case "claude_connect_replaced":
+          this.emit("connectReplaced", { target: message.target });
           return;
       }
     };

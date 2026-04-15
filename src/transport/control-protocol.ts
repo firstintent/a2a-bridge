@@ -56,7 +56,10 @@ export type ControlClientMessage =
   // `target` is the `kind:id` TargetId (see shared/target-id.ts).
   // Optional for v0.1 backward compat; when omitted the daemon
   // assigns `claude:default`.
-  | { type: "claude_connect"; target?: string }
+  // `force` (P10.6): when true and the target already has an attached
+  // CC, kick the old attach; without `force` the daemon rejects the
+  // new attach instead.
+  | { type: "claude_connect"; target?: string; force?: boolean }
   | { type: "claude_disconnect" }
   | { type: "claude_to_codex"; requestId: string; message: BridgeMessage; requireReply?: boolean }
   | { type: "status" }
@@ -90,7 +93,15 @@ export type ControlServerMessage =
   // ACP client via `AgentSideConnection.requestPermission`.
   | { type: "acp_permission_request"; requestId: string; turnId: string; toolName: string; description: string; inputPreview: string }
   // Inspection RPC response (P10.5): one entry per registered target.
-  | { type: "targets_response"; requestId: string; targets: TargetEntry[] };
+  | { type: "targets_response"; requestId: string; targets: TargetEntry[] }
+  // Daemon → plugin (P10.6): the plugin's `claude_connect` lost a
+  // conflict — another CC is already attached to the same TargetId.
+  // The plugin should surface `reason` to CC and stop reconnecting.
+  | { type: "claude_connect_rejected"; target: string; reason: string }
+  // Daemon → plugin (P10.6): another `claude_connect` arrived with
+  // `force: true` and took over this TargetId. The old attach
+  // receives this frame just before the daemon closes the socket.
+  | { type: "claude_connect_replaced"; target: string };
 
 /** Snapshot of one TargetId Room's attach state for `daemon targets`. */
 export interface TargetEntry {

@@ -356,7 +356,7 @@ function handleControlMessage(conn: Connection, raw: string) {
 
   switch (message.type) {
     case "claude_connect":
-      attachClaude(conn, message.target);
+      attachClaude(conn, message.target, message.force === true);
       return;
     case "claude_disconnect":
       detachClaude(conn, "frontend requested disconnect");
@@ -479,7 +479,7 @@ function handleControlMessage(conn: Connection, raw: string) {
   }
 }
 
-function attachClaude(conn: Connection, target?: string) {
+function attachClaude(conn: Connection, target?: string, force: boolean = false) {
   // P10.3 — accept an optional `kind:id` target so multiple CC
   // instances can attach to the same daemon. v0.1 frames omit the
   // target field; default it to the canonical `claude:default`.
@@ -490,21 +490,55 @@ function attachClaude(conn: Connection, target?: string) {
     const parsed = parseTarget(target);
     if (!parsed.ok) {
       log(`Rejecting claude_connect with invalid target "${target}": ${parsed.error}`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target,
+        reason: `invalid target: ${parsed.error}`,
+      });
       return;
     }
     if (parsed.parts.kind !== "claude") {
       log(`Rejecting claude_connect with non-claude target "${target}"`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target,
+        reason: `non-claude target rejected on claude_connect`,
+      });
       return;
     }
     resolvedTarget = parsed.target as unknown as string;
   }
 
-  // If a different connection already owns this target, kick the
-  // old one. v0.2 P10.6 will replace this last-wins behaviour with
-  // explicit reject + --force.
+  // P10.6 — conflict policy. If a different connection already owns
+  // this target, either reject the new attach (default) or kick the
+  // old one (force=true). The existing `attachedClaudeByTarget`
+  // entry is the single source of truth.
   const existing = attachedClaudeByTarget.get(resolvedTarget);
   if (existing && existing !== conn) {
-    log(`Replacing existing attachment for ${resolvedTarget}`);
+    if (!force) {
+      const existingMeta = controlClientMeta.get(existing);
+      const attachedAt = attachedAtByTarget.get(resolvedTarget);
+      const ageMs = attachedAt !== undefined ? Date.now() - attachedAt : null;
+      const ageHint = ageMs !== null ? `, attached ${formatAttachAge(ageMs)}` : "";
+      const connHint = existingMeta ? `plugin conn #${existingMeta.clientId}${ageHint}` : "unknown";
+      const reason =
+        `target ${resolvedTarget} already attached (${connHint}). ` +
+        `Re-run with --force to take over, or use a different workspace id.`;
+      log(`Rejecting claude_connect for ${resolvedTarget} — ${connHint}`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target: resolvedTarget,
+        reason,
+      });
+      return;
+    }
+    log(`Force-replacing existing attachment for ${resolvedTarget}`);
+    // Tell the old attach it was kicked *before* closing its socket so
+    // the plugin can push a notification to its CC session.
+    sendProtocolMessage(existing, {
+      type: "claude_connect_replaced",
+      target: resolvedTarget,
+    });
     existing.close();
   }
   attachedClaudeByTarget.set(resolvedTarget, conn);
@@ -763,6 +797,20 @@ function notifyCodexClaudeOnline() {
 
 function shouldNotifyCodexClaudeOnline() {
   return !claudeOnlineNoticeSent || claudeOfflineNoticeShown;
+}
+
+/**
+ * Render a conflict-reject attach age like `2h ago` / `3m ago` / `9s ago`
+ * for the human-readable `claude_connect_rejected.reason` string.
+ */
+function formatAttachAge(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
 }
 
 function listTargetEntries() {

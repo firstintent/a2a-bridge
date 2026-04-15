@@ -14054,8 +14054,12 @@ class DaemonClient extends EventEmitter2 {
       };
     });
   }
-  attachClaude(target) {
-    this.send({ type: "claude_connect", ...target ? { target } : {} });
+  attachClaude(target, force = false) {
+    this.send({
+      type: "claude_connect",
+      ...target ? { target } : {},
+      ...force ? { force: true } : {}
+    });
   }
   async disconnect() {
     if (!this.ws)
@@ -14112,6 +14116,15 @@ class DaemonClient extends EventEmitter2 {
         }
         case "status":
           this.emit("status", message.status);
+          return;
+        case "claude_connect_rejected":
+          this.emit("connectRejected", {
+            target: message.target,
+            reason: message.reason
+          });
+          return;
+        case "claude_connect_replaced":
+          this.emit("connectReplaced", { target: message.target });
           return;
       }
     };
@@ -14679,6 +14692,7 @@ var CONTROL_WS_URL = daemonLifecycle.controlWsUrl;
 var claude = new ClaudeAdapter;
 var daemonClient = new DaemonClient(CONTROL_WS_URL);
 var CLAUDE_TARGET = resolveClaudeTarget({ stateDirPath: stateDir.dir });
+var FORCE_ATTACH = process.env.A2A_BRIDGE_FORCE_ATTACH === "1";
 var shuttingDown = false;
 var daemonDisabled = false;
 var RECONNECT_NOTIFY_COOLDOWN_MS = 30000;
@@ -14705,6 +14719,12 @@ daemonClient.on("codexMessage", (message) => {
 });
 daemonClient.on("status", (status) => {
   log(`Daemon status: ready=${status.bridgeReady} tui=${status.tuiConnected} thread=${status.threadId ?? "none"} queued=${status.queuedMessageCount}`);
+});
+daemonClient.on("connectRejected", ({ target, reason }) => {
+  enterDisabledState(`claude_connect rejected for ${target}: ${reason}`, `\u26D4 A2aBridge attach rejected for target ${target}. ${reason}`);
+});
+daemonClient.on("connectReplaced", ({ target }) => {
+  enterDisabledState(`claude_connect replaced on ${target} \u2014 another CC took over with --force`, `\u26D4 A2aBridge attach for ${target} was replaced by another CC (--force). This bridge is now idle.`);
 });
 daemonClient.on("disconnect", () => {
   if (shuttingDown || daemonDisabled)
@@ -14735,7 +14755,7 @@ async function connectToDaemon(isReconnect = false) {
   try {
     await daemonLifecycle.ensureRunning();
     await daemonClient.connect();
-    daemonClient.attachClaude(CLAUDE_TARGET);
+    daemonClient.attachClaude(CLAUDE_TARGET, FORCE_ATTACH);
     if (!isReconnect) {
       claude.pushNotification(systemMessage("system_bridge_ready", "\u2705 A2aBridge bridge is ready. Daemon connected. ACP clients can now send prompts."));
     }
@@ -14835,7 +14855,7 @@ async function pollDisabledRecovery() {
     log("Disabled-state recovery conditions met \u2014 attempting direct daemon reconnect");
     try {
       await daemonClient.connect();
-      daemonClient.attachClaude();
+      daemonClient.attachClaude(CLAUDE_TARGET);
       daemonDisabled = false;
       stopDisabledRecoveryPoller();
       claude.pushNotification(systemMessage("system_bridge_recovered", "\u2705 A2aBridge recovered after the killed sentinel was cleared. Daemon reconnected."));

@@ -2811,7 +2811,7 @@ function handleControlMessage(conn, raw) {
   }
   switch (message.type) {
     case "claude_connect":
-      attachClaude(conn, message.target);
+      attachClaude(conn, message.target, message.force === true);
       return;
     case "claude_disconnect":
       detachClaude(conn, "frontend requested disconnect");
@@ -2922,23 +2922,52 @@ function handleControlMessage(conn, raw) {
     }
   }
 }
-function attachClaude(conn, target) {
+function attachClaude(conn, target, force = false) {
   let resolvedTarget = "claude:default";
   if (target) {
     const parsed = parseTarget(target);
     if (!parsed.ok) {
       log(`Rejecting claude_connect with invalid target "${target}": ${parsed.error}`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target,
+        reason: `invalid target: ${parsed.error}`
+      });
       return;
     }
     if (parsed.parts.kind !== "claude") {
       log(`Rejecting claude_connect with non-claude target "${target}"`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target,
+        reason: `non-claude target rejected on claude_connect`
+      });
       return;
     }
     resolvedTarget = parsed.target;
   }
   const existing = attachedClaudeByTarget.get(resolvedTarget);
   if (existing && existing !== conn) {
-    log(`Replacing existing attachment for ${resolvedTarget}`);
+    if (!force) {
+      const existingMeta = controlClientMeta.get(existing);
+      const attachedAt = attachedAtByTarget.get(resolvedTarget);
+      const ageMs = attachedAt !== undefined ? Date.now() - attachedAt : null;
+      const ageHint = ageMs !== null ? `, attached ${formatAttachAge(ageMs)}` : "";
+      const connHint = existingMeta ? `plugin conn #${existingMeta.clientId}${ageHint}` : "unknown";
+      const reason = `target ${resolvedTarget} already attached (${connHint}). ` + `Re-run with --force to take over, or use a different workspace id.`;
+      log(`Rejecting claude_connect for ${resolvedTarget} \u2014 ${connHint}`);
+      sendProtocolMessage(conn, {
+        type: "claude_connect_rejected",
+        target: resolvedTarget,
+        reason
+      });
+      return;
+    }
+    log(`Force-replacing existing attachment for ${resolvedTarget}`);
+    sendProtocolMessage(existing, {
+      type: "claude_connect_replaced",
+      target: resolvedTarget
+    });
     existing.close();
   }
   attachedClaudeByTarget.set(resolvedTarget, conn);
@@ -3148,6 +3177,18 @@ function notifyCodexClaudeOnline() {
 }
 function shouldNotifyCodexClaudeOnline() {
   return !claudeOnlineNoticeSent || claudeOfflineNoticeShown;
+}
+function formatAttachAge(ms) {
+  if (!Number.isFinite(ms) || ms < 0)
+    return "just now";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60)
+    return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60)
+    return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
 }
 function listTargetEntries() {
   const entries = [];

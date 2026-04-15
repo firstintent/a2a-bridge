@@ -52,6 +52,38 @@ describe("P10.2 control-plane: claude_connect carries optional target", () => {
   });
 });
 
+describe("P10.6 control-plane: claude_connect force + conflict frames", () => {
+  test("claude_connect with force=true round-trips", () => {
+    const msg: ControlClientMessage = {
+      type: "claude_connect",
+      target: "claude:ws-a",
+      force: true,
+    };
+    const restored = roundtripClient(msg);
+    expect(restored).toEqual(msg);
+    if (restored.type === "claude_connect") {
+      expect(restored.force).toBe(true);
+    }
+  });
+
+  test("claude_connect_rejected (daemon → plugin) round-trips", () => {
+    const msg: ControlServerMessage = {
+      type: "claude_connect_rejected",
+      target: "claude:ws-a",
+      reason: "target already attached (plugin conn #1)",
+    };
+    expect(roundtripServer(msg)).toEqual(msg);
+  });
+
+  test("claude_connect_replaced (daemon → plugin) round-trips", () => {
+    const msg: ControlServerMessage = {
+      type: "claude_connect_replaced",
+      target: "claude:ws-a",
+    };
+    expect(roundtripServer(msg)).toEqual(msg);
+  });
+});
+
 describe("P8.1 control-plane: ControlClientMessage ACP variants", () => {
   test("acp_turn_start round-trips with required fields", () => {
     const msg: ControlClientMessage = {
