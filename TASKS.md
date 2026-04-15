@@ -547,7 +547,7 @@ once that phase lands.
   gains an optional `target: string` field; unit test asserts the
   frame round-trips.
 
-- [ ] **P10.3 — Daemon rooms map keyed by TargetId.**
+- [x] **P10.3 — Daemon rooms map keyed by TargetId.**
   Acceptance: `RoomRouter` adds `getOrCreateByTarget(TargetId)`
   alongside the existing context-id path. `daemon.ts`'s attach
   handler stores `Map<TargetId, Connection>` instead of a single
